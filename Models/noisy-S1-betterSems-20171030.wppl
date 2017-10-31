@@ -1,0 +1,19 @@
+// Feature dimensions
+var sizes = ['llll', 'lll', 'll', 'l', 'gggg', 'ggg', 'gg', 'g']  // little, big 
+var sizeDistr = Categorical({
+  ps:repeat(sizes.length, function(){return 0.1}),
+  vs:sizes})
+
+var colors = ['rrrr', 'rrr', 'rr', 'r', 'bbbb', 'bbb', 'bb', 'b'] // red, blue
+var colorDistr = Categorical({
+  ps:repeat(colors.length, function(){return 0.1}),
+  vs:colors})
+
+var shapes = ['tttt', 'ttt', 'tt', 't', 'ssss', 'sss', 'ss', 's'] // triangle, square
+var shapeDistr = Categorical({
+  ps:repeat(shapes.length, function(){return 0.1}),
+  vs:shapes})
+
+var lexicalMeaning = function(token) {
+  // Todo
+}

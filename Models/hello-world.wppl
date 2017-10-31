@@ -1,0 +1,10 @@
+var binomial = function(n, p) {
+    var a = flip(p)
+    if (n == 0) {
+        return a;
+    }
+    else {
+        return [a].concat(binomial(n-1, p));
+    }
+}
+binomial(3, 0.2)

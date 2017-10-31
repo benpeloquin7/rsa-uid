@@ -1,0 +1,127 @@
+---
+title: "rsa-uid"
+author: "Ben"
+date: "10/30/2017"
+output: html_document
+---
+
+```{r warning=FALSE, message=FALSE}
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(rwebppl)
+```
+
+# Notes
+* `baseS1`: base RSA
+* `noisySigmoidS1`: a listener may misunderstand an utterance with proability relative to the noisiness of the utterance (simple sigmoid of total noise)
+* `noisyAvgDiffS1`: a listener may misunderstand an utterance with proability relative to the noisiness of the utterance (avg noisy out of max possible)
+
+Current data observes the world `{name:'obj', size:'g', color:'r', shape:'s}` and generates utterances.
+
+```{r}
+dir_path <- "/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/"
+baseS1 <- webppl(program_file=paste0(dir_path, 'base-S1-20171030.wppl'))
+noisySigmoidS1 <- webppl(program_file=paste0(dir_path, 'noisy-sigmoid-S1-20171030.wppl'))
+noisyAvgDiffS1 <- webppl(program_file=paste0(dir_path, 'noisy-avgDiff-S1-20171030.wppl'))
+```
+
+## Helpers
+```{r}
+getInformativity <- function(utterances) {
+  lens <- sapply(strsplit(utterances, ' '), function(x) {
+    return(sapply(x, function(y) {return(nchar(y))}))
+  })
+  return(paste(as.character(lens[1, ]), as.character(lens[2, ]), as.character(lens[3, ])))
+}
+
+rateDiff_ <- function(a, b) {
+  return(abs(a - b))
+}
+
+sigmoid <- function(x) {
+  return(exp(x) / (1 + exp(x)))
+}
+
+sigmoidRateVariation <- function(infoRateStr) {
+  integerRate <- sapply(strsplit(infoRateStr, ' ')[[1]], as.integer)
+  totalRateVar <- (rateDiff_(integerRate[1], integerRate[2]) + rateDiff_(integerRate[2], integerRate[3]))
+  rateVar <- sigmoid(totalRateVar) - 0.5
+  return(rateVar)
+}
+
+avgDiffRateVariation <- function(infoRateStr) {
+  integerRate <- sapply(strsplit(infoRateStr, ' ')[[1]], as.integer)
+  totalRateVar <- (rateDiff_(integerRate[1], integerRate[2]) + rateDiff_(integerRate[2], integerRate[3]))
+  rateVar <- totalRateVar / (3 * 2 + 1)
+  return(rateVar)
+}
+
+```
+
+## Minimal preprocessing
+```{r}
+create_preprocessed_df <- function(weppl_data, model_name, rateFn=sigmoidRateVariation, rateFnName='sigmoid') {
+  df <- weppl_data
+  df$infoRate <- getInformativity(as.character(df$support))
+  df$rateVar <- sapply(df$infoRate, rateFn)
+  df$support <- factor(df$support, levels=df$support[order(df$rateVar)])
+  df$model <- model_name
+  df$rateFnName <- rateFnName
+  return(df)
+}
+df_baseS1 <- create_preprocessed_df(baseS1, 'baseS1', avgDiffRateVariation, 'avgDiff')
+df_avgDiffS1 <- create_preprocessed_df(noisyAvgDiffS1, 'avgDiffS1', avgDiffRateVariation, 'avgDiff')
+df_noisySigmoidS1 <- create_preprocessed_df(noisySigmoidS1, 'noisySigmoidS1')
+```
+
+combine data
+```{r}
+df_combined <- rbind(df_baseS1, df_noisySigmoidS1, df_avgDiffS1)
+```
+
+# Constant information rate
+
+## Noisy meaning model1: Plot variation in signal and probability of use
+```{r}
+df_combined %>%
+  group_by(model, rateVar, rateFnName) %>%
+  summarise(meanProb=mean(prob),
+            n=n()) %>%
+  ggplot(aes(x=rateVar, y=meanProb, col=model, lty=rateFnName)) +
+    geom_point(aes(size=n), alpha=0.5) +
+    geom_line() +
+    ggtitle("world -> {name:'obj', size:'g', color:'r', shape:'s'}") +
+    xlab("variation in signal rate") +
+    ylab("S1: p(u|m)") +
+    theme(axis.text.x=element_text(angle = 90, hjust = 1), 
+          plot.title = element_text(hjust = 0.5))
+```
+
+## Noisy meaning model1: Plot S1 utterance probabilities
+```{r}
+df_combined %>%
+  ggplot(aes(x=support, y=prob, fill=model)) +
+    geom_bar(stat='identity') +
+    facet_wrap(~model) +
+    theme(axis.text.x=element_text(angle = 90, hjust = 1), 
+          plot.title = element_text(hjust = 0.5)) +
+    ggtitle("world -> {name:'obj', size:'g', color:'r', shape:'s'}") +
+    xlab("S1 utterance") +
+    ylab("p(u|m)")
+```
+
+
+Introducing minimal "noise" into RSA listener probabilities gets us the *constant* part of constant rate in UID.
+
+# Not entirely redundant semantics
+```{r}
+# Todo
+```
+
+
+# Channel capacity
+```{r}
+# Todo
+```
+

@@ -1,0 +1,244 @@
+//
+//
+// Feature dimensions
+//
+//
+var sizes = ['llll', 'lll', 'll', 'l', 'gggg', 'ggg', 'gg', 'g']  // little, big 
+var sizeDistr = Categorical({
+  ps:repeat(sizes.length, function(){return 0.1}),
+  vs:sizes})
+
+var colors = ['rrrr', 'rrr', 'rr', 'r', 'bbbb', 'bbb', 'bb', 'b'] // red, blue
+var colorDistr = Categorical({
+  ps:repeat(colors.length, function(){return 0.1}),
+  vs:colors})
+
+var shapes = ['tttt', 'ttt', 'tt', 't', 'ssss', 'sss', 'ss', 's'] // triangle, square
+var shapeDistr = Categorical({
+  ps:repeat(shapes.length, function(){return 0.1}),
+  vs:shapes})
+
+var lexicalMeaning = function(token) {
+  return token[0];
+}
+
+//
+//
+// Worlds
+//
+//
+var _makeObj = function(name, size, color, shape) {
+  /* big red square (e.g. 'ggg rr s') */
+  return {name: name, size:size, color:color, shape:shape};
+}
+
+var makeObj = function(name) {
+  var size = sample(sizeDistr)
+  var color = sample(colorDistr)
+  var shape = sample(shapeDistr)
+  return _makeObj(name, size, color, shape);
+}
+
+var objPrior = function() {
+  return makeObj('obj');
+}
+
+//
+//
+// Utterances
+//
+//
+var _createUtterance = function(size, color, shape) {
+  return size + ' ' + color + ' ' + shape;
+}
+var utterancePrior = function() {
+  return _createUtterance(sample(sizeDistr), sample(colorDistr), sample(shapeDistr));
+}
+
+//
+//
+// Meaning
+//
+//
+var getMeanings = function(utterance) {
+  return map(lexicalMeaning, utterance.split(' '));
+}
+
+// Semantics helpers
+var _isFeature = function(featureName) {
+  return function(m) {return any(function(w) {return m == w;}, featureName);}
+}
+
+var isColor = _isFeature(colors)
+
+var isShape = _isFeature(shapes)
+
+var isSize = _isFeature(sizes)
+
+var _getFeatureType = function(m) {
+  return isColor(m) ? 'color' : isShape(m) ? 'shape' : 'size'
+}
+
+var getFeatureTypes = function(meanings) {
+  return map(_getFeatureType, meanings);
+}
+
+var getTruthConditions = function(obj, features, meanings) {
+  return map(function(x) {return obj[x[0]] == x[1]}, zip(features, meanings));
+}
+
+var isTrue = function(obj, features, meanings) {
+  return all(function(x) {return x}, getTruthConditions(obj, features, meanings));
+}
+
+var addTruthyNoise = function(noiseAmounts, truthConditions) {
+  var _addTruthyNoise = function(noiseAmount, truthCondition) {
+    return flip(noiseAmount) ? truthCondition : !truthCondition
+  }
+  return map(function(x) {_addTruthyNoise(x[0], x[1])}, zip(noiseAmounts, truthConditions))
+}
+
+// Noisy meaning
+var noisyMeaning = function(utterance) {
+  /*
+  Add a noisy meaning function. Noise in the sense that each words informativity is 
+  a function of its length.
+  */
+  var informativityRate = getInformativityDiff(utterance)
+  var meanings = getMeanings(utterance)
+  var featureTypes = getFeatureTypes(meanings)
+  return function(obj) {
+    var groundTruth = meaning(utterance)(obj)
+    var noisyness = sum(informativityRate)
+    var noiseProb = noisyness / (noisyness + 1)
+    return flip(noiseProb) ? !groundTruth : groundTruth
+  };
+}
+  
+var getWordInformativity = function(word) {
+  return word.length;
+}
+
+var _getInformativityDiff = function(currVal, prevVal) {
+  return Math.abs(getWordInformativity(currVal) - getWordInformativity(prevVal));
+}
+
+var getInformativityDiff = function(utterance) {
+  var arr = utterance.split(' ')
+  var getDiffs = function(index) {
+    var currVal = arr[index]
+    var prevVal = arr[index-1]
+    return prevVal ? _getInformativityDiff(currVal, prevVal) : 0;
+  }
+  return mapIndexed(getDiffs, arr)
+}
+
+// Default meaning
+var meaning = function(utterance) {
+  var meanings = getMeanings(utterance)
+  var featureTypes = getFeatureTypes(meanings)
+  return function(obj) {
+    return isTrue(obj, featureTypes, meanings);
+  };
+}
+
+var areEqual = function(obj1, obj2) {
+  return obj1.size == obj2.size && obj1.color == obj2.color && obj1.shape == obj2.shape;
+}
+
+//
+//
+// RSA
+//
+//
+
+// Base L0
+var L0 = function(utterance) {
+  Infer({ 
+    model() {
+      var m = meaning(utterance)
+      var obj = objPrior()
+      factor(m(obj) ? 0 : -Infinity)
+      return obj;
+    }
+  })
+}
+// viz.table(L0(exUtt))
+
+// Base S1
+var S1 = function(obj) {
+  Infer({
+    model() {
+      var utterance = utterancePrior()
+      var L = L0(utterance)
+      factor(areEqual(sample(L), obj) ? 0 : -Infinity)
+      return utterance;
+    }
+  })
+}
+// viz.table(S1(exObj))
+
+// Noisy L0
+var _createNoisyL0 = function(noiseFn) {
+  return function(utterance) {
+    Infer({ 
+      model() {
+        var m = meaning(utterance)
+        var obj = objPrior()
+        factor(m(obj) ? 0 : -Infinity)
+        var informativityRate = (getInformativityDiff(utterance))
+        var noiseProb = noiseFn(informativityRate)
+        return flip(noiseProb) ? objPrior : obj
+      }
+    })
+  }
+}
+
+// Noisy L0 -- sigmoid
+var _sigmoid = function(x) {
+  return Math.exp(x) / (Math.exp(x) + 1)
+}
+var sigmoid = function(informativityRate) {
+  var totalNoise = sum(informativityRate)
+  return _sigmoid(totalNoise)
+}
+var noisySigmoidL0 = _createNoisyL0(sigmoid)
+
+// Noisy L0 -- agv diff
+var MAXDIFF = 3
+var avgDiff = function(informativityRate) {
+  return sum(informativityRate) / (2 * MAXDIFF + 1)
+}
+var noisyAvgDiffL0 = _createNoisyL0(avgDiff)
+
+// Noisy Speakers
+var _createS1 = function(L0) {
+  return function(obj) {
+    Infer({
+    model() {
+      var utterance = utterancePrior()
+      var L = L0(utterance)
+      factor(areEqual(sample(L), obj) ? 0 : -Infinity)
+      return utterance;}
+    })
+  }
+}
+var noisySigmoidS1 = _createS1(noisySigmoidL0)
+var noisyAvgDiffS1 = _createS1(noisyAvgDiffL0)
+
+//
+//
+// Examples
+//
+//
+var exUtt = 'g rrr ss'
+var exMeanings = getMeanings('g rrr ss')
+var exFeats = getFeatureTypes(exMeanings)
+var exObj = {name:'obj', size:'g', color:'r', shape:'s'}
+
+//
+//
+// Run
+//
+//
+noisyAvgDiffS1(exObj)
