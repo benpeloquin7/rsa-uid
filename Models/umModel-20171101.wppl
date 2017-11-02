@@ -1,0 +1,189 @@
+// Feature dimensions
+var sizes = ['little', 'big']
+var sizeDistr = Categorical({
+  ps:repeat(sizes.length, function(){return 0.1}),
+  vs:sizes})
+
+var colors = ['red', 'blue', 'green', 'yellow']
+var colorDistr = Categorical({
+  ps:repeat(colors.length, function(){return 0.1}),
+  vs:colors})
+
+var shapes = ['triangle', 'square']
+var shapeDistr = Categorical({
+  ps:repeat(shapes.length, function(){return 0.1}),
+  vs:shapes})
+
+var _makeObj = function(name, size, color, shape) {
+  return {name: name, size:size, color:color, shape:shape};
+}
+
+var makeObj = function(name) {
+  var size = sample(sizeDistr)
+  var color = sample(colorDistr)
+  var shape = sample(shapeDistr)
+  return _makeObj(name, size, color, shape);
+}
+
+var objPrior = function() {
+  return makeObj('obj');
+}
+
+//
+//
+// Utterance prior
+//
+//
+var _createUtterance = function(size, color, shape) {
+  return size + ' ' + color + ' ' + shape;
+}
+var utterancePrior = function() {
+  return _createUtterance(sample(sizeDistr), sample(colorDistr), sample(shapeDistr));
+}
+
+var areEqual = function(obj1, obj2) {
+  return obj1.size == obj2.size && obj1.color == obj2.color && obj1.shape == obj2.shape;
+}
+
+//
+//
+// Noise model
+//
+//
+var singleDartNoiseModel = function(utterance, corruptionProb) {
+    var tokens = utterance.split(' ')
+    var numTokens = tokens.length
+    var editedTokens = flip(corruptionProb) ? remove(uniformDraw(tokens), tokens) : tokens
+    return editedTokens.join(' ');
+}
+
+// Lexical meanings
+var _isFeature = function(featureName) {
+  return function(m) {return any(function(w) {return m == w;}, featureName);}
+}
+var isColor = _isFeature(colors)
+var isShape = _isFeature(shapes)
+var isSize = _isFeature(sizes)
+var _getFeatureType = function(m) {
+  return isColor(m) ? 'color' : isShape(m) ? 'shape' : 'size'
+}
+var getFeatureTypes = function(utterance) {
+  return map(_getFeatureType, utterance.split(' '))
+}
+var lexicalMeaning = function(token) {
+  return token
+}
+var getMeanings = function(utterance) {
+  return filter(function(x) {x != 'X'}, map(lexicalMeaning, utterance.split(' ')))
+}
+var getTruthConditions = function(obj, features, meanings) {
+  return map(function(x) {return obj[x[0]] == x[1]}, zip(features, meanings));
+}
+var isTrue = function(obj, features, meanings) {
+  return all(function(x) {return x}, getTruthConditions(obj, features, meanings));
+}
+var meaning = function(utterance) {
+  var filteredUtterance = filter(function(x) {x != 'X'}, utterance.split(' ')).join(' ')
+  var meanings = getMeanings(filteredUtterance)
+  var featureTypes = getFeatureTypes(filteredUtterance)
+  return function(obj) {
+    return isTrue(obj, featureTypes, meanings);
+  };
+}
+
+// var contructObjFromUtterance = function(utterance) {
+//   var features = getFeatureTypes(utterance)
+//   var vals = getMeanings(utterance)
+//   return {features[0]:vals[0], features[1]:vals[1], features[2]:vals[2]};
+// }
+
+// Object equality
+var filterEmtpyStr = function(arr) {
+  return filter(function(x) {x != ''}, arr)
+}
+
+var getVals = function(obj) {
+  return filterEmtpyStr(map(function(key) {return key != 'name' ? obj[key] : ''}, Object.keys(obj)))
+}
+var getKeys = function(obj) {
+  return filter(function(key) {key!='name'}, Object.keys(obj))
+}
+
+var equalArrays = function(arr1, arr2) {
+  return all(function(x) {return x[0] == x[1]}, zip(arr1, arr2))
+}
+
+var equalObjects = function(obj1, obj2) {
+  var obj1Vals = getVals(obj1)
+  var obj2Vals = getVals(obj2)
+  if (obj1Vals.length != obj2Vals.length) {
+    return false;
+  }
+  // NOTE (BP): below assumes feature orders are always <size, color, shape>
+  return equalArrays(obj1Vals, obj2Vals)
+}
+
+
+
+//
+//
+// Um Model
+//
+//
+var insertUm = function(utterance, num) {
+  if (num==0) {
+    return utterance
+  }
+  var tokens = utterance.split(' ')
+  var index = sample(RandomInteger({n:tokens.length}))
+  var firstPart = tokens.slice(0, index)
+  var secondPart = tokens.slice(index, tokens.length)
+  var newUtterance = firstPart.concat(['X']).concat(secondPart).join(' ')
+  return insertUm(newUtterance, num-1)
+}
+
+var UmModel = function(utterance, numUms, insertProb) {
+  if (flip(insertProb)) {
+    return insertUm(utterance, numUms)
+  }
+  return utterance
+}
+
+
+// 
+//
+// RSA interlocutors
+//
+//
+var L0 = function(utterance) {
+  Infer({ 
+    model() {
+      var noisyUtterance = singleDartNoiseModel(utterance, 0.3)
+      var meanings = getMeanings(noisyUtterance)
+//       var m = meaning(noisyUtterance)
+      var obj = objPrior()
+      factor(equalArrays(meanings, getVals(obj)) ? 0 : -Infinity)
+      return obj;
+    }
+  })
+}
+
+var INDICES = [0, 1, 2, 3]
+var S1 = function(obj) {
+  Infer({
+    model() {
+      var originalUtterance = utterancePrior()
+      var numUms = sample(RandomInteger({n:3}))
+      var umUtterance = UmModel(originalUtterance, 1, 0.5)
+      var L = L0(umUtterance)
+      factor(equalObjects(sample(L), obj) ? 0 : -Infinity)
+      return umUtterance;
+    }
+  })
+}
+
+var exUtt = 'little red triangle'
+var exObj = {name:'obj1', size:'little', color:'red', shape:'triangle'}
+// viz.table(L0(exUtt))
+viz.table(S1(exObj))
+// getMeanings('X little red triangle')
