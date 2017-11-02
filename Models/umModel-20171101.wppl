@@ -1,3 +1,6 @@
+
+/********* Um Model *********/
+
 // Feature dimensions
 var sizes = ['little', 'big']
 var sizeDistr = Categorical({
