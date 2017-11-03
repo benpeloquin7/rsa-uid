@@ -8,9 +8,19 @@ output: html_document
 ```{r packages, warning=FALSE, message=FALSE}
 library(dplyr)
 library(ggplot2)
-library(tidyr)
 library(rwebppl)
+library(tidyr)
 ```
+
+# Running Todo
+
+* `Simulation 2` indicates that we might be able to model syntactic UID in some scenarios, perhaps meaningful disfluencies as well. Can estimate some of the hyperparameters from text? (Her Clark's um paper)
+
+# Running experiments
+
+* `Simulation 2`: Optional tokens in syntax. Adding an optional token (complementizer, perhaps disfluency (um)...) can provide a cue that the oncoming token(s) might be unexpected.
+
+* `Simulation 1`: If error rate is based on signal variance can we create a speaker who prefers uniformity?
 
 # Overview
 
@@ -23,6 +33,44 @@ On its face UID is primarily concerned with the communicative behaviors of optim
 
 #### RSA
 RSA provides a framework for formalizing both listener (understanding) and speaker (production) behavior -- as a recursive process in which listeners reason about speaker intended meanings $p_{L}(\text{meaning}|\text{utterance})$ and speakers reason about listener likely inference given some utterance $p_{S}(\text{utterance}|\text{meaning})$.
+
+Current data observes the world `{name:'obj', size:'g', color:'r', shape:'s}` and generates utterances.
+
+```{r load_webppl_models}
+dir_path <- "/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/"
+baseS1 <- webppl(program_file=paste0(dir_path, 'base-S1-20171030.wppl'))
+noisySigmoidS1 <- webppl(program_file=paste0(dir_path, 'noisy-sigmoid-S1-20171030.wppl'))
+noisyAvgDiffS1 <- webppl(program_file=paste0(dir_path, 'noisy-avgDiff-S1-20171030.wppl'))
+umModel1 <- webppl(program_file=paste0(dir_path, 'umModel-20171101.wppl'))
+```
+
+# Simulation 2: `Um Model` 
+
+`{size:'little', color:'red', shape:'triangle'}`
+
+```{r umModel1}
+df_umModel1 <- umModel1
+df_umModel1$support <- factor(df_umModel1$support, levels=df_umModel1$support[order(df_umModel1$prob, decreasing=TRUE)])
+```
+
+```{r umModel1_plot1}
+df_umModel1 %>%
+  ggplot(aes(x=support, y=prob)) +
+    geom_bar(stat='identity') +
+    ggtitle("world -> {name:'obj', size:'little', color:'red', shape:'triangle'}") +
+    xlab("S1 utterance") +
+    ylab("p(u|m)") +
+    ylim(0, 0.30) +
+    theme_bw() +
+    theme(axis.text.x=element_text(angle=90, hjust=1), 
+          plot.title=element_text(hjust=0.5, size=14))
+```
+
+Note this is a function of:
+
+* `dimension entropy` -- this is the one that's closest to UID and what I've manipulated above.
+* `noiseProb`
+* `umProb`
 
 # Simulation 1: Simulating the `constant rate` part of UID.
 
@@ -37,15 +85,6 @@ We compare three Speaker models :
 0. `baseS1`: base RSA
 0. `noisySigmoidS1`: a listener may misunderstand an utterance with probability relative to the noisiness of the utterance (simple sigmoid of total noise)
 0. `noisyAvgDiffS1`: a listener may misunderstand an utterance with probability relative to the noisiness of the utterance (avg noisy out of max possible)
-
-Current data observes the world `{name:'obj', size:'g', color:'r', shape:'s}` and generates utterances.
-
-```{r models}
-dir_path <- "/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/"
-baseS1 <- webppl(program_file=paste0(dir_path, 'base-S1-20171030.wppl'))
-noisySigmoidS1 <- webppl(program_file=paste0(dir_path, 'noisy-sigmoid-S1-20171030.wppl'))
-noisyAvgDiffS1 <- webppl(program_file=paste0(dir_path, 'noisy-avgDiff-S1-20171030.wppl'))
-```
 
 #### Helpers
 ```{r helpers}
