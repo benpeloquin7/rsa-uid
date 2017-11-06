@@ -53,17 +53,28 @@ umModel1 <- webppl(program_file=paste0(dir_path, 'umModel-20171101.wppl'))
 
 # Simulation 2: `Um Model` 
 
+## Um model `exp1`
+
+* `umProb` = 0.5
+
+* `noiseProb` = 0.5
+
+* `targetInfo` = $-log(1/length(dimension))$ (2.8)
+
+* `target` = `{size:little, color:red, shape:triangle}`
+
 ```{r run_um_model_exp}
 source('umModel20171105.R')
 
 runExperimentWithModel <- function(model) {
-  return (function(size, color, shape, umProb, noiseProb, expNum) {
+  return (function(size, color, shape, umProb, noiseProb, redInfo, expNum) {
     rData <- data.frame(
       size=size,
       color=color,
       shape=shape,
       umProb=umProb,
-      noiseProb=noiseProb
+      noiseProb=noiseProb,
+      redInfo=redInfo
     )
     df <- webppl(model, data=rData, data_var="rData")
     df$size <- size
@@ -71,20 +82,88 @@ runExperimentWithModel <- function(model) {
     df$shape <- shape
     df$umProb <- umProb
     df$noiseProb <- noiseProb
+    df$redInfo <- redInfo
     df$expNum <- expNum
     return(df)
   })
 }
 
 runUmModel <- runExperimentWithModel(model)
+```
 
+```{r run_um_exp_1}
+#colors <- c('red', 'blue', 'green', 'yellow', 'purple', 'cyan', 'black')
+# size : little
+# color : red
+# shape : triangle
+# umProb : 0.5
+# noiseProb : 0.5
+# target info : -log2(1 / length(colors))  --> 2.8
+dfUm1 <- runUmModel('little', 'red', 'triangle', 0.5, 0.5, 1, 1)
+dfUm1$support <- factor(dfUm1$support, levels=dfUm1$support[order(dfUm1$prob, decreasing=TRUE)])
+```
+
+```{r plot_um_exp1}
+#ps <- c(0.5, 1, 1, 1, 1, 1, 1, 1)
+#normedPS <- ps / sum(ps)
+dfUm1 %>%
+  mutate(plotColor=ifelse(support=='little Xred triangle', 'target', 'other')) %>%
+  ggplot(aes(x=support, y=prob, fill=plotColor)) +
+    geom_bar(stat='identity') +
+    ggtitle("world -> {name:'obj', size:'little', color:'red', shape:'triangle'}") +
+    xlab("S1 utterance") +
+    ylab("p(u|m)") +
+    theme_bw() +
+    theme(axis.text.x=element_text(angle=90, hjust=1), 
+          plot.title=element_text(hjust=0.5, size=14))
+```
+
+## Um model `exp2`
+
+* `umProb` = 0.5
+
+* `noiseProb` = 0.5
+
+* `targetInfo` = 3.89
+
+* `target` = `{size:little, color:red, shape:triangle}`
+
+```{r run_um_exp_2}
+#colors <- c('red', 'blue', 'green', 'yellow', 'purple', 'cyan', 'black')
+# size : little
+# color : red
+# shape : triangle
+# umProb : 0.5
+# noiseProb : 0.5
+# target info : -log2(1 / length(colors))  --> 2.8
+dfUm2 <- runUmModel('little', 'red', 'triangle', 0.5, 0.5, 0.25, 1)
+dfUm2$support <- factor(dfUm2$support, levels=dfUm2$support[order(dfUm2$prob, decreasing=TRUE)])
+```
+
+```{r plot_um_exp2}
+dfUm2 %>%
+  mutate(plotColor=ifelse(support=='little Xred triangle', 'target', 'other')) %>%
+  ggplot(aes(x=support, y=prob, fill=plotColor)) +
+    geom_bar(stat='identity') +
+    ggtitle("world -> {name:'obj', size:'little', color:'red', shape:'triangle'}") +
+    xlab("S1 utterance") +
+    ylab("p(u|m)") +
+    theme_bw() +
+    theme(axis.text.x=element_text(angle=90, hjust=1), 
+          plot.title=element_text(hjust=0.5, size=14))
+```
+
+
+## Um model `exp3` - varying target info
+```{r um_model_exp3_run}
 # Settings
-umProbs <- c(seq(0, 1, 0.2), seq(0, 1, 0.2))
-noiseProbs <- c(seq(0, 1, 0.2), seq(1, 0, -0.2))
-sizes <- rep('little', length(umProbs))
-shapes <- rep('triangle', length(umProbs))
-colors <- rep('red', length(umProbs))
-expNums <- 1:length(noiseProbs)
+targetInfos <- seq(1, 0.2, -0.2)
+umProbs <- rep(0.5, length(targetInfos))
+noiseProbs <- rep(0.5, length(targetInfos))
+sizes <- rep('little', length(targetInfos))
+shapes <- rep('triangle', length(targetInfos))
+colors <- rep('red', length(targetInfos))
+expNums <- 1:length(targetInfos)
 
 # Run experiments
 data <- mapply(runUmModel, 
@@ -93,93 +172,92 @@ data <- mapply(runUmModel,
                shapes, 
                umProbs, 
                noiseProbs, 
+               targetInfos,
                expNums, 
                SIMPLIFY=FALSE)
 df <- do.call(rbind, data)
 rownames(df) <- 1:nrow(df)
 ```
 
-```{r}
+```{r um_model_exp3_plot}
+focus <- c('little red triangle', 'little Xred triangle', 'Xlittle red triangle', 'little red Xtriangle')
+
+df %>% 
+  mutate(targetSurprisal=-log2(redInfo)) %>%
+  filter(support %in% focus) %>%
+  ggplot(aes(x=targetSurprisal, y=prob, col=support)) +
+    geom_point(size=2.5) +
+    geom_line(size=1.5, alpha=0.5) +
+    ylab("P(u|m)") +
+    xlab("-log2(p('red'))") +
+    ggtitle("world -> {name:'obj', size:'little', color:'red', shape:'triangle'}") +
+    theme_bw() +
+    theme(plot.title=element_text(hjust=0.5, size=14))
+```
+
+
+```{r um_model_exp4_run}
+# Settings
+umProbs <- c(seq(0, 1, 0.2), seq(0, 1, 0.2))
+noiseProbs <- c(seq(0, 1, 0.2), seq(1, 0, -0.2))
+sizes <- rep('little', length(umProbs))
+shapes <- rep('triangle', length(umProbs))
+colors <- rep('red', length(umProbs))
+targetInfos <- rep(1, length(umProbs))
+expNums <- 1:length(umProbs)
+
+# Run experiments
+data <- mapply(runUmModel, 
+               sizes, 
+               colors, 
+               shapes, 
+               umProbs, 
+               noiseProbs, 
+               targetInfos,
+               expNums, 
+               SIMPLIFY=FALSE)
+df <- do.call(rbind, data)
+rownames(df) <- 1:nrow(df)
+```
+
+```{r um_model_exp4_plot}
 focus <- c('little red triangle', 'little Xred triangle', 'Xlittle red triangle', 'little red Xtriangle')
 
 df %>% 
   filter(support %in% focus) %>%
   ggplot(aes(x=paste(umProb, noiseProb), y=prob, fill=support)) +
-    geom_bar(stat='identity', position='dodge')
-```
-
-
-## Expeirmenting with hyperparms, `noiseProb` and `umProb`
-```{r um_model_exp_plot, fig.height=6, fig.width=10, fig.align="center"}
-data.frame(rbind(data[[1]], data[[2]], data[[3]])) %>%
-  ggplot(aes(x=support, y=prob, fill=paste(umProb, noiseProb))) +
-  geom_bar(stat='identity', position='dodge') +
-  xlab("S1 utterance") +
-    ylab("p(u|m)") +
+    geom_bar(stat='identity', position='dodge') +
     theme_bw() +
     theme(axis.text.x=element_text(angle=90, hjust=1), 
           plot.title=element_text(hjust=0.5, size=14))
 ```
 
+Summary:
 
+The goal in this simulation is to reproduce syntactic UID effects. That is, given:
 
-```{r}
-shape <- c('triangle', 'square')
-shapeProbs <- c(0.5, 0.5)
-size <- c('little', 'big')
-sizeProbs <- c(0.5, 0.5)
-color <- c('red', 'blue', 'green', 'black','white','purple')
-colorProbs1 <- rep(1, length(color)) / length(color)
-colorProbs2 <- c(0.05, 0.2, 0.2, 0.2, 0.2, 0.2) / sum(c(0.05, 0.2, 0.2, 0.2, 0.2, 0.2))
+* RSA speaker S1 and listener L0
 
-surprisal <- function(x) {
-  return(-log2(x))
-}
+* utterance undergoes possible transformation through noisy model with prob `noiseProb`
+  + transformation are restricted to replacements (from particular feature dimension prior).
 
-entropy <- function(probs) {
-  return(sum(sapply(probs, function(x) {
-    return(x * surprisal(x) )
-    })))
-}
+* speaker can insert *one* semantically/syntactically vacuous item ("X") with prob `umProb`
+  + inserting such a cue probabilistically reduces the chance of error for that item
+  
+* question - where does speaker insert the cue?
+  + UID predicts that the cue should be placed before the *most* informative item.
+  
+Note: This model is parameterized by:
 
-colorEntropy1 <- entropy(colorProbs1)
-colorEntropy2 <- entropy(colorProbs2)
-sizeEntropy <- entropy(sizeProbs)
-shapeEntropy <- entropy(shapeProbs)
+* `noiseProb`: probability that given utterance will be transformed.
 
-c(colorEntropy1, colorEntropy2, sizeEntropy, shapeEntropy)
+* `umProb`: probability that a speaker will insert a cue.
 
-surprisal(0.2)
-```
+* `targetInfo` / `dimension distributions` -- specific token informativity (relative to it's distr)
 
-
-`{size:'little', color:'red', shape:'triangle'}`
-
-```{r umModel1}
-df_umModel1 <- umModel1
-df_umModel1$support <- factor(df_umModel1$support, levels=df_umModel1$support[order(df_umModel1$prob, decreasing=TRUE)])
-```
-
-```{r umModel1_plot1}
-df_umModel1 %>%
-  ggplot(aes(x=support, y=prob)) +
-    geom_bar(stat='identity') +
-    ggtitle("world -> {name:'obj', size:'little', color:'red', shape:'triangle'}") +
-    xlab("S1 utterance") +
-    ylab("p(u|m)") +
-    ylim(0, 0.30) +
-    theme_bw() +
-    theme(axis.text.x=element_text(angle=90, hjust=1), 
-          plot.title=element_text(hjust=0.5, size=14))
-```
-
-Note this is a function of:
-
-* `dimension entropy` -- this is the one that's closest to UID and what I've manipulated above.
-* `noiseProb`
-* `umProb`
 
 # Simulation 1: Simulating the `constant rate` part of UID.
+---------
 
 ### Context
 * Objects var along three dimensions `size` [big, little], `color` [red, blue] and `shape` [square, triangle].
@@ -194,6 +272,7 @@ We compare three Speaker models :
 0. `noisyAvgDiffS1`: a listener may misunderstand an utterance with probability relative to the noisiness of the utterance (avg noisy out of max possible)
 
 #### Helpers
+
 ```{r helpers}
 getInformativity <- function(utterances) {
   lens <- sapply(strsplit(utterances, ' '), function(x) {

@@ -1,4 +1,34 @@
 model <- "
+
+/************************/
+/************************ R data
+/************************/
+var getExperimentObj = function(rData) {
+  var data = rData[0]
+  var newObj = {name:data['name'], size:data['size'], color:data['color'], shape:data['shape']}
+  return newObj
+}
+
+var getExperimentUmProb = function(rData) {
+  var data = rData[0]
+  return data['umProb']
+}
+
+var getExperimentNoiseProb = function(rData) {
+  var data = rData[0]
+  return data['noiseProb']
+}
+
+var getExperimentRedInfo = function(rData) {
+  var data = rData[0]
+  return data['redInfo']
+}
+
+var expObj = getExperimentObj(rData)
+var noiseProb =  getExperimentNoiseProb(rData)
+var umProb = getExperimentUmProb(rData)
+var redInfo = getExperimentRedInfo(rData)
+
 /************************/
 /************************ Set-up
 /************************/
@@ -12,7 +42,7 @@ var colors = ['red', 'blue', 'green', 'yellow', 'purple', 'cyan', 'black']
 // var colors = ['red', 'blue']
 var colorDistr = Categorical({
 //   ps:[1, 1],
-ps:[0.5, 1, 1, 1, 1, 1, 1],
+ps:[redInfo, 1, 1, 1, 1, 1, 1],
 //   ps:repeat(colors.length, function(){return 0.1}),
 vs:colors})
 
@@ -208,7 +238,6 @@ return args
 
 var createReturnDataObj = _createFnForArbitraryArgs()
 
-
 var exUtt = 'little red triangle'
 var exObj1 = {name:'obj1', size:'little', color:'red', shape:'triangle'}
 var exObj2 = {name:'obj2', size:'little', color:'blue', shape:'square'}
@@ -218,31 +247,12 @@ var exObj4 = {name:'obj4', size:'big', color:'blue', shape:'triangle'}
 // [exObj1, JSON.stringify(map(S1, [exObj1, exObj2]))]
 // createReturnDataObj(exObj1, exObj2)
 
-var getExperimentObj = function(rData) {
-  var data = rData[0]
-  var newObj = {name:data['name'], size:data['size'], color:data['color'], shape:data['shape']}
-  return newObj
-}
-
-var getExperimentUmProb = function(rData) {
-  var data = rData[0]
-  return data['umProb']
-}
-
-var getExperimentNoiseProb = function(rData) {
-  var data = rData[0]
-  return data['noiseProb']
-}
 
 var runSpeakerExperiment = function(speakerObj, umProb, noiseProb) {
   return S1(speakerObj, umProb, noiseProb)
 }
-
-var expObj = getExperimentObj(rData)
-var noiseProb =  getExperimentNoiseProb(rData)
-var umProb = getExperimentUmProb(rData)
-
 runSpeakerExperiment(expObj, umProb, noiseProb)
+
 "
 
 
