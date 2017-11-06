@@ -8,13 +8,20 @@ output: html_document
 ```{r packages, warning=FALSE, message=FALSE}
 library(dplyr)
 library(ggplot2)
+library(jsonlite)
 library(rwebppl)
 library(tidyr)
 ```
 
 # Running Todo
 
-* `Simulation 2` indicates that we might be able to model syntactic UID in some scenarios, perhaps meaningful disfluencies as well. Can estimate some of the hyperparameters from text? (Her Clark's um paper)
+* `Simulation 2` indicates that we might be able to model syntactic UID in some scenarios, perhaps meaningful disfluencies as well. 
+
++ Can estimate some of the hyperparameters from text (`noisePorb`, `umProb`, dimension distributions?)? (Herb Clark's um paper)
+
++ Can we show that the posterior mode is related to the informativity of the utterance (so as red becomes more informative the more likely we put the cue there?) Can we show it mathematically?
+
++ More robust data pieline
 
 # Running experiments
 
@@ -45,6 +52,106 @@ umModel1 <- webppl(program_file=paste0(dir_path, 'umModel-20171101.wppl'))
 ```
 
 # Simulation 2: `Um Model` 
+
+```{r run_um_model_exp}
+source('umModel20171105.R')
+
+runExperimentWithModel <- function(model) {
+  return (function(size, color, shape, umProb, noiseProb, expNum) {
+    rData <- data.frame(
+      size=size,
+      color=color,
+      shape=shape,
+      umProb=umProb,
+      noiseProb=noiseProb
+    )
+    df <- webppl(model, data=rData, data_var="rData")
+    df$size <- size
+    df$color <- color
+    df$shape <- shape
+    df$umProb <- umProb
+    df$noiseProb <- noiseProb
+    df$expNum <- expNum
+    return(df)
+  })
+}
+
+runUmModel <- runExperimentWithModel(model)
+
+# Settings
+umProbs <- c(seq(0, 1, 0.2), seq(0, 1, 0.2))
+noiseProbs <- c(seq(0, 1, 0.2), seq(1, 0, -0.2))
+sizes <- rep('little', length(umProbs))
+shapes <- rep('triangle', length(umProbs))
+colors <- rep('red', length(umProbs))
+expNums <- 1:length(noiseProbs)
+
+# Run experiments
+data <- mapply(runUmModel, 
+               sizes, 
+               colors, 
+               shapes, 
+               umProbs, 
+               noiseProbs, 
+               expNums, 
+               SIMPLIFY=FALSE)
+df <- do.call(rbind, data)
+rownames(df) <- 1:nrow(df)
+```
+
+```{r}
+focus <- c('little red triangle', 'little Xred triangle', 'Xlittle red triangle', 'little red Xtriangle')
+
+df %>% 
+  filter(support %in% focus) %>%
+  ggplot(aes(x=paste(umProb, noiseProb), y=prob, fill=support)) +
+    geom_bar(stat='identity', position='dodge')
+```
+
+
+## Expeirmenting with hyperparms, `noiseProb` and `umProb`
+```{r um_model_exp_plot, fig.height=6, fig.width=10, fig.align="center"}
+data.frame(rbind(data[[1]], data[[2]], data[[3]])) %>%
+  ggplot(aes(x=support, y=prob, fill=paste(umProb, noiseProb))) +
+  geom_bar(stat='identity', position='dodge') +
+  xlab("S1 utterance") +
+    ylab("p(u|m)") +
+    theme_bw() +
+    theme(axis.text.x=element_text(angle=90, hjust=1), 
+          plot.title=element_text(hjust=0.5, size=14))
+```
+
+
+
+```{r}
+shape <- c('triangle', 'square')
+shapeProbs <- c(0.5, 0.5)
+size <- c('little', 'big')
+sizeProbs <- c(0.5, 0.5)
+color <- c('red', 'blue', 'green', 'black','white','purple')
+colorProbs1 <- rep(1, length(color)) / length(color)
+colorProbs2 <- c(0.05, 0.2, 0.2, 0.2, 0.2, 0.2) / sum(c(0.05, 0.2, 0.2, 0.2, 0.2, 0.2))
+
+surprisal <- function(x) {
+  return(-log2(x))
+}
+
+entropy <- function(probs) {
+  return(sum(sapply(probs, function(x) {
+    return(x * surprisal(x) )
+    })))
+}
+
+colorEntropy1 <- entropy(colorProbs1)
+colorEntropy2 <- entropy(colorProbs2)
+sizeEntropy <- entropy(sizeProbs)
+shapeEntropy <- entropy(shapeProbs)
+
+c(colorEntropy1, colorEntropy2, sizeEntropy, shapeEntropy)
+
+surprisal(0.2)
+```
+
 
 `{size:'little', color:'red', shape:'triangle'}`
 
