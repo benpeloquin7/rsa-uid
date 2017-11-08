@@ -1,4 +1,21 @@
+/*
+Todo:
+
+1. Analysis of current architecture
+2. Propose additional architectures
+
+*/
+
 var colors = ['b', 'r']
+var tokens = ['b', 'r', 'g', 'X', '']
+var tokensDistr = Categorical({
+  vs: tokens,
+  ps: repeat(function() {return 1}, tokens.length)
+})
+var tokensPrior() {
+  return sample(tokensDistr)
+}
+
 var utterances = ['b', 'r', 'g',
                   'X r', 'X b', 'X g',
                   'X', '']
@@ -27,10 +44,11 @@ var deleteToken = function(utterance) {
   return remove(uniformDraw(tokens), tokens).join(' ')
 }
 
-var deleteToken = function(utterance) {
+// Alternative 
+var replaceToken = function(utterance) {
   var tokens = utterance.split(' ')
   var index = randomInteger(tokens.length)
-  
+  tokens.slice(0, index).concat([])
   return remove(uniformDraw(tokens), tokens).join(' ')
 }
 
@@ -61,7 +79,7 @@ var meaning = function(utterance, world) {
 /*****************
 ***************** RSA
 *****************/
-var THETA = 0.5
+var THETA = 0.75
 var _createListenerN = function(SN) {
   return function(utterance) {
     Infer({
@@ -121,19 +139,21 @@ var S4 = _createSpeakerN(L3)
 var exUtt = 'X r'
 var exWorld = {color:'r'}
 
-// console.log("Speakers")
-// console.log("S1")
-// viz.table(S1(exWorld))
-// console.log("S2")
-// viz.table(S2(exWorld))
-// console.log("S3")
-// viz.table(S3(exWorld))
-// console.log("Listeners")
-// console.log("L0")
-// viz.table(L0(exUtt))
-// console.log("L1")
-// viz.table(L1(exUtt))
-// console.log("L2")
-// viz.table(L2(exUtt))
+console.log("Speakers")
+console.log("S1")
+viz.table(S1(exWorld))
+console.log("S2")
+viz.table(S2(exWorld))
+console.log("S3")
+viz.table(S3(exWorld))
+console.log("Listeners")
+console.log("L0")
+viz.table(L0(exUtt))
+console.log("L1")
+viz.table(L1(exUtt))
+console.log("L2")
+viz.table(L2(exUtt))
 // console.log("L3")
 // viz.table(L3(exUtt))
+// console.log("S4")
+// viz.table(S4(exWorld))
