@@ -1,0 +1,139 @@
+var colors = ['b', 'r']
+var utterances = ['b', 'r', 'g',
+                  'X r', 'X b', 'X g',
+                  'X', '']
+var utteranceDistr = Categorical({
+  vs: utterances,
+  ps: repeat(utterances.length, function() {return 1}) // Unif over utterances
+})
+
+var utterancePrior = function() {
+  return sample(utteranceDistr)
+}
+
+var worlds = [{color:'r'}, {color:'b'}, {color:'g'}, {color:''}]
+var worldDistr = Categorical({
+  vs: worlds,
+  ps: [0.1, 1, 1, 0.1]
+//   ps: repeat(worlds.length, function() {return 1})
+})
+
+var worldPrior = function() {
+  return sample(worldDistr)
+}
+
+var deleteToken = function(utterance) {
+  var tokens = utterance.split(' ')
+  return remove(uniformDraw(tokens), tokens).join(' ')
+}
+
+var deleteToken = function(utterance) {
+  var tokens = utterance.split(' ')
+  var index = randomInteger(tokens.length)
+  
+  return remove(uniformDraw(tokens), tokens).join(' ')
+}
+
+var noiseModel = function(utterance, theta) {
+  return flip(theta) ? deleteToken(utterance) : utterance
+}
+
+var getColorFromUtterance = function(utterance) {
+  return filter(function(x) {x != 'X'}, utterance.split(' ')).join(' ')
+}
+
+var getColorFromWorld = function(world) {
+  return world['color']
+}
+
+var equalWorlds = function(w1, w2) {
+  return w1['color'] == w2['color']
+}
+
+var meaning = function(utterance, world) {
+  /* Meaning is truth-functional. */
+  var utteranceColor = getColorFromUtterance(utterance)
+  var worldColor = getColorFromWorld(world)
+  return utteranceColor != 'X' | utteranceColor != '' ? utteranceColor == worldColor : false
+}
+
+
+/*****************
+***************** RSA
+*****************/
+var THETA = 0.5
+var _createListenerN = function(SN) {
+  return function(utterance) {
+    Infer({
+      model() {
+        var world = worldPrior()
+        var sampledUtt = sample(SN(world))
+        factor(utterance == sampledUtt ? 0 : -Infinity)
+        return world
+      }
+    })
+  }
+}
+
+var _createSpeakerN = function(LN) {
+  return function(world) {
+    Infer({
+      model() {
+        var utterance = utterancePrior()
+        var sampledWorld = sample(LN(utterance))
+        factor(equalWorlds(sampledWorld, world) ? 0 : -Infinity)
+        return utterance
+      }
+    })
+  }
+}
+
+var L0 = function(utterance) {
+  Infer({
+    model() {
+      var world = worldPrior()
+      var m = meaning(utterance, world)
+      factor(m ? 0 : -Infinity)
+      return world
+    }
+  })
+}
+
+
+var S1 = function(world) {
+    Infer({
+      model() {
+        var utterance = utterancePrior()
+        var noisyUtterance = noiseModel(utterance, THETA)
+        factor(equalWorlds(sample(L0(noisyUtterance)), world) ? 0 : -Infinity)
+        return utterance
+    }
+  })
+}
+
+var L1 = _createListenerN(S1)
+var S2 = _createSpeakerN(L1)
+var L2 = _createListenerN(S2)
+var S3 = _createSpeakerN(L2)
+var L3 = _createListenerN(S3)
+var S4 = _createSpeakerN(L3)
+
+var exUtt = 'X r'
+var exWorld = {color:'r'}
+
+// console.log("Speakers")
+// console.log("S1")
+// viz.table(S1(exWorld))
+// console.log("S2")
+// viz.table(S2(exWorld))
+// console.log("S3")
+// viz.table(S3(exWorld))
+// console.log("Listeners")
+// console.log("L0")
+// viz.table(L0(exUtt))
+// console.log("L1")
+// viz.table(L1(exUtt))
+// console.log("L2")
+// viz.table(L2(exUtt))
+// console.log("L3")
+// viz.table(L3(exUtt))
