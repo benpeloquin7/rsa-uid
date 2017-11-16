@@ -349,9 +349,10 @@ df_combined %>%
 ```
 
 ## Plot: Speaker posterior probability for all utterances
-```{r fig2, fig.height=8, fig.width=12, fig.align="center"}
+```{r fig2, fig.height=4, fig.width=6, fig.align="center"}
 df_combined %>%
   mutate(model=factor(model, levels=c('noisySigmoidS1', 'noisyAvgDiffS1', 'baseS1'))) %>%
+  filter(model %in% c('noisySigmoidS1', 'baseS1')) %>%
   ggplot(aes(x=support, y=prob, fill=model)) +
     geom_bar(stat='identity') +
     facet_wrap(~model, dir='v') +
