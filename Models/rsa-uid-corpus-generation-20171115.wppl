@@ -35,15 +35,23 @@ var worldGenerator = function() {
   worlds of (a) multiple objects and (b) objects with multiple dimensions. In the 
   single object, single object case this will look just like a single prior over a dimension.
   */
-  var colors = Categorical({vs:['r', 'b', 'g'], ps:[1, 1, 1]})
+  var colors = Categorical({
+    vs:['r', 'b', 'g'], 
+    ps:[1, 1, 1]})
   return {color: sample(colors)}
 }
 
-var THETA = 0.2
-var worldDistr = Categorical({vs:[{color:'r'}, {color:'g'}, {color:'b'}], ps:[0.1, 1, 1]})
-var utteranceDistr = Categorical({vs:['r', 'g', 'b', 'X r', 'X g', 'X b', 'X'], ps:[1, 1, 1, 0.5, 0.5, 0.5, 0.01]})
-var utterancePrior = function() {return sample(utteranceDistr)}
+var THETA = 0.75
+var worldDistr = Categorical({
+  vs:[{color:'r'}, {color:'g'}, {color:'b'}], 
+  ps:[0.1, 1, 1]
+})
 var worldPrior = function() {return sample(worldDistr)}
+var utteranceDistr = Categorical({
+  vs:['r', 'g', 'b', 'X r', 'X g', 'X b', 'X', ''], 
+  ps:[1, 1, 1, 0.5, 0.5, 0.5, 0.01, 0.001]
+})
+var utterancePrior = function() {return sample(utteranceDistr)}
 
 var decode = function(utteranceProduced, noiseModel) {
   Infer({
@@ -100,6 +108,8 @@ var buildListenerModel = function(speakerModel, worldPrior, noiseModel) {
   ----------
   speakerModel: fn, optional
     Input world, output utterance.
+  worldPrior : distr,
+    Prior distribution over objects.
   noiseModel: fn, optional
     Invert noise model to reason about intended utterance from produced.
     E.g. p(u_intended | u_produced)
@@ -146,8 +156,6 @@ var buildListenerModel = function(speakerModel, worldPrior, noiseModel) {
 call run
 */
 
-
-
 /* Noise models */
 var _removeEmptyItems = function(arr) {
   filter(function(x) {return x != ''}, arr)
@@ -189,19 +197,7 @@ var meaning = function(utterance, world) {
   return utteranceMeaning(utterance) == worldColor
 }
 
-var L0Base = function(utterance) {
-  Infer({
-    model() {
-      var world = worldPrior()
-      var utterance = utterance == '' ? utterancePrior() : utterance
-      var m = meaning(utterance, world)
-      factor(m ? 0 : -Infinity)
-      return world
-    }
-  })
-}
-
-var buildListenerBaseWithDecoder = function(noiseModel) {
+var buildListenerBase = function(noiseModel) {
   return function(utterance) {
     Infer({
       model() {
@@ -214,93 +210,128 @@ var buildListenerBaseWithDecoder = function(noiseModel) {
     })
   }
 }
-var L0Decoder = buildListenerBaseWithDecoder(deleteNoiseModel)
-var S1Base = buildSpeakerModel(L0Base, utterancePrior, vacuousNoiseModel)
-var S1Decoder = buildSpeakerModel(L0Decoder, utterancePrior, deleteNoiseModel)
-var L1Base = buildListenerModel(S1Base, worldPrior)
-var L1Decoder = buildListenerModel(S1Decoder, worldPrior, vacuousNoiseModel)
-var S2Base = buildSpeakerModel(L1Base, utterancePrior, vacuousNoiseModel)
-var S2Decoder = buildSpeakerModel(L1Decoder, utterancePrior, vacuousNoiseModel)
-var L2Base = buildListenerModel(S2Base, worldPrior)
-var L2Decoder = buildListenerModel(S2Decoder, worldPrior, deleteNoiseModel)
 
-// TODO -- explore this special agents some more
+/**************************************************
+/******************* Agents ***********************
+***************************************************/
 
-// Special speakers
-var S2DecoderRecur = buildSpeakerModel(
-  buildListenerModel(
-    buildSpeakerModel(
-      L0Decoder, utterancePrior, deleteNoiseModel), 
-    worldPrior, deleteNoiseModel), 
-  utterancePrior, deleteNoiseModel)
+// var L0Base = function(utterance) {
+//   Infer({
+//     model() {
+//       var world = worldPrior()
+//       var utterance = utterance == '' ? utterancePrior() : utterance
+//       var m = meaning(utterance, world)
+//       factor(m ? 0 : -Infinity)
+//       return world
+//     }
+//   })
+// }
 
-var S2DecoderBottom = buildSpeakerModel(
-  buildListenerModel(
-    buildSpeakerModel(
-      L0Decoder, utterancePrior, deleteNoiseModel),
-    worldPrior, vacuousNoiseModel),
-  utterancePrior, vacuousNoiseModel)
+var L0Base = buildListenerBase(vacuousNoiseModel)
+var L0Decoder = buildListenerBase(deleteNoiseModel)
+var S1VV = buildSpeakerModel(L0Base, utterancePrior, vacuousNoiseModel)
+var S1VD = buildSpeakerModel(L0Decoder, utterancePrior, vacuousNoiseModel)
+var S1DV = buildSpeakerModel(L0Base, utterancePrior, deleteNoiseModel)
+var S1DD = buildSpeakerModel(L0Decoder, utterancePrior, deleteNoiseModel)
+var L1VVV = buildListenerModel(S1VV, worldPrior, vacuousNoiseModel)
+var L1VVD = buildListenerModel(S1VD, worldPrior, vacuousNoiseModel)
+var L1VDD = buildListenerModel(S1DD, worldPrior, vacuousNoiseModel)
+var L1DDD = buildListenerModel(S1DD, worldPrior, deleteNoiseModel)
+var L1DDV = buildListenerModel(S1DV, worldPrior, deleteNoiseModel)
+var L1DVV = buildListenerModel(S1VV, worldPrior, deleteNoiseModel)
+var L1DVD = buildListenerModel(S1VD, worldPrior, deleteNoiseModel)
+var L1VDV = buildListenerModel(S1DV, worldPrior, vacuousNoiseModel)
+var S2VVVV = buildSpeakerModel(L1VVV, utterancePrior, vacuousNoiseModel)
+var S2VVVD = buildSpeakerModel(L1VVD, utterancePrior, vacuousNoiseModel)
+var S2VVDD = buildSpeakerModel(L1VDD, utterancePrior, vacuousNoiseModel)
+var S2VDDD = buildSpeakerModel(L1DDD, utterancePrior, vacuousNoiseModel)
+var S2DDDD = buildSpeakerModel(L1DDD, utterancePrior, deleteNoiseModel)
+var S2DDDV = buildSpeakerModel(L1DDV, utterancePrior, deleteNoiseModel)
+var S2DDVV = buildSpeakerModel(L1DVV, utterancePrior, deleteNoiseModel)
+var S2DVVV = buildSpeakerModel(L1VVV, utterancePrior, deleteNoiseModel) //
+var S2DVVD = buildSpeakerModel(L1VVD, utterancePrior, deleteNoiseModel)
+var S2VDDV = buildSpeakerModel(L1DDV, utterancePrior, vacuousNoiseModel)
+var S2DVDV = buildSpeakerModel(L1VDV, utterancePrior, deleteNoiseModel)
+var S2VVDV = buildSpeakerModel(L1VDV, utterancePrior, vacuousNoiseModel)
+var S2VDVV = buildSpeakerModel(L1DVV, utterancePrior, vacuousNoiseModel)
 
-// Special speakers
-var L1DecoderRecur = buildListenerModel(
-  buildSpeakerModel(
-      L0Base, utterancePrior, deleteNoiseModel),
-  worldPrior, vacuousNoiseModel)
-
-var L1DecoderBottom = buildListenerModel(
-  buildSpeakerModel(
-      L0Base, utterancePrior, vacuousNoiseModel),
-  worldPrior, vacuousNoiseModel)
-
-var d = []
+// var d = []
 // viz.table(runExperiments(worldGenerator, S1, 100, d))
 
 // console.log('L0Base')
 // viz.table(L0Base('X'))
+// viz.table(L0Base('X r'))
+// viz.table(L0Base('r'))
 // console.log('L0Decoder')
-// viz.table(L0Decoder('X')) // TODO (BP) get decoder working - see if that leads to 'X' as 'r' implicature
-// console.log('L1Base')
-// viz.table(L1Base('X'))
-// console.log('L1Decoder')
-// viz.table(L1Decoder('X'))
-// console.log('L2Base')
-// viz.table(L2Base('X'))
-// console.log('L2Decoder')
-// viz.table(L2Decoder('X'))
-
-// console.log('S1Base')
-// viz.table(S1Base({color:'r'}))
-// viz.table(S1Base({color:'b'}))
-// console.log('S1Decoder')
-// viz.table(S1Decoder({color:'r'}))
-// viz.table(S1Decoder({color:'b'}))
-// console.log('S2Base')
-// viz.table(S2Base({color:'r'}))
-// viz.table(S2Base({color:'b'}))
-// console.log('S2Decoder')
-// viz.table(S2Decoder({color:'r'}))
-// viz.table(S2Decoder({color:'b'}))
-
-// console.log('S2Base')
-// viz.table(S2Base({color:'r'}))
-// viz.table(S2Base({color:'b'}))
-// console.log('S2DecoderRecur')
-// viz.table(S2DecoderRecur({color:'r'}))
-// viz.table(S2DecoderRecur({color:'b'}))
-// console.log('S2DecoderBottom')
-// viz.table(S2DecoderBottom({color:'r'}))
-// viz.table(S2DecoderBottom({color:'b'}))
-
-console.log('L1Decoder')
-viz.table(L1Base('r'))
-viz.table(L1Base('X r'))
-viz.table(L1Base('X'))
-console.log('L1DecoderRecur')
-viz.table(L1DecoderRecur('r'))
-viz.table(L1DecoderRecur('X r'))
-viz.table(L1DecoderRecur('X'))
-console.log('L1DecoderBottom')
-viz.table(L1DecoderBottom('r'))
-viz.table(L1DecoderBottom('X r'))
-viz.table(L1DecoderBottom('X'))
+// viz.table(L0Decoder('X'))
+// viz.table(L0Decoder('X r'))
+// viz.table(L0Decoder('r'))
+// console.log('L1VVV')
+// viz.table(L1VVV('X'))
+// viz.table(L1VVV('X r'))
+// viz.table(L1VVV('r'))
+// console.log('L1VVD')
+// viz.table(L1VVD('X'))
+// viz.table(L1VVD('X r'))
+// viz.table(L1VVD('r'))
+// console.log('L1VDD')
+// viz.table(L1VDD('X'))
+// viz.table(L1VDD('X r'))
+// viz.table(L1VDD('r'))
+// console.log('L1DDD')
+// viz.table(L1DDD('X'))
+// viz.table(L1DDD('X r'))
+// viz.table(L1DDD('r'))
+console.log("Speakers")
+console.log('S1VV')
+viz.table(S1VV({color:'r'}))
+viz.table(S1VV({color:'b'}))
+console.log('S1VD')
+viz.table(S1VD({color:'r'}))
+viz.table(S1VD({color:'b'}))
+console.log('S1DV')
+viz.table(S1DV({color:'r'}))
+viz.table(S1DV({color:'b'}))
+console.log('S1DD')
+viz.table(S1DD({color:'r'}))
+viz.table(S1DD({color:'b'}))
+console.log('S2VVVV')
+viz.table(S2VVVV({color:'r'}))
+viz.table(S2VVVV({color:'b'}))
+console.log('S2VVVD')
+viz.table(S2VVVD({color:'r'}))
+viz.table(S2VVVD({color:'b'}))
+console.log('S2VVDV')
+viz.table(S2VVDV({color:'r'}))
+viz.table(S2VVDV({color:'b'}))
+console.log('S2VDVV')
+viz.table(S2VDVV({color:'r'}))
+viz.table(S2VDVV({color:'b'}))
+console.log('S2DVVV')
+viz.table(S2DVVV({color:'r'}))
+viz.table(S2DVVV({color:'b'}))
+console.log('S2VDDV')
+viz.table(S2VDDV({color:'r'}))
+viz.table(S2VDDV({color:'b'}))
+console.log('S2VVDD')
+viz.table(S2VVDD({color:'r'}))
+viz.table(S2VVDD({color:'b'}))
+console.log('S2VDDD')
+viz.table(S2VDDD({color:'r'}))
+viz.table(S2VDDD({color:'b'}))
+console.log('S2DDDD')
+viz.table(S2DDDD({color:'r'}))
+viz.table(S2DDDD({color:'b'}))
+console.log('S2DDDV')
+viz.table(S2DDDV({color:'r'}))
+viz.table(S2DDDV({color:'b'}))
+console.log('S2DDVV')
+viz.table(S2DDVV({color:'r'}))
+viz.table(S2DDVV({color:'b'}))
+console.log('S2DVVD')
+viz.table(S2DVVD({color:'r'}))
+viz.table(S2DVVD({color:'b'}))
+console.log('S2DVDV')
+viz.table(S2DVDV({color:'r'}))
+viz.table(S2DVDV({color:'b'}))
 
