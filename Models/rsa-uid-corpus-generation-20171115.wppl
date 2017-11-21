@@ -41,15 +41,15 @@ var worldGenerator = function() {
   return {color: sample(colors)}
 }
 
-var THETA = 0.90
+var THETA = 0.20
 var worldDistr = Categorical({
   vs:[{color:'r'}, {color:'g'}, {color:'b'}], 
-  ps:[0.1, 1, 1]
+  ps:[0.2, 1, 1]
 })
 var worldPrior = function() {return sample(worldDistr)}
 var utteranceDistr = Categorical({
   vs:['r', 'g', 'b', 'X r', 'X g', 'X b', 'X', ''], 
-  ps:[1, 1, 1, 0.5, 0.5, 0.5, 0.01, 0.01]
+  ps:[1, 1, 1, 0.5, 0.5, 0.5, 0.1, 0.01]
 })
 var utterancePrior = function() {return sample(utteranceDistr)}
 
@@ -299,9 +299,9 @@ var runListener = function(listenerModel, nameOut) {
 var runSpeaker = function(speakerModel, nameout) {
   console.log(nameout)
   console.log("{color:'r'}")
-  viz.table(S2DVVV({color:'r'}))
+  viz.table(speakerModel({color:'r'}))
   console.log("{color:'b'}")
-  viz.table(S2DVVV({color:'b'}))
+  viz.table(speakerModel({color:'b'}))
 }
 
 
@@ -323,97 +323,19 @@ var runSpeaker = function(speakerModel, nameout) {
 // runListener(L2DDVDV, 'L2DDVDV')
 
 // runListener(L3DDVVVVV, 'L3DDVVVVV')
-runListener(L3DDVDVDV, 'L3DDVDVDV')
-
-// console.log('Listeners')
-// console.log('L0Base')
-// viz.table(L0Base('X'))
-// viz.table(L0Base('X r'))
-// viz.table(L0Base('r'))
-// viz.table(L0Base(''))
-// console.log('L0Decoder')
-// viz.table(L0Decoder('X'))
-// viz.table(L0Decoder('X r'))
-// viz.table(L0Decoder('r'))
-// viz.table(L0Decoder(''))
-// console.log('L1VVV')
-// viz.table(L1VVV('X'))
-// viz.table(L1VVV('X r'))
-// viz.table(L1VVV('r'))
-// console.log('L1VVD')
-// viz.table(L1VVD('X'))
-// viz.table(L1VVD('X r'))
-// viz.table(L1VVD('r'))
-// console.log('L1VDD')
-// viz.table(L1VDD('X'))
-// viz.table(L1VDD('X r'))
-// viz.table(L1VDD('r'))
-// console.log('L1DDD')
-// viz.table(L1DDD('X'))
-// viz.table(L1DDD('X r'))
-// viz.table(L1DDD('r'))
-// console.log('L1DDV')
-// viz.table(L1DDV('X'))
-// viz.table(L1DDV('X r'))
-// viz.table(L1DDV('r'))
-// console.log('L1DVD')
-// viz.table(L1DVD('X'))
-// viz.table(L1DVD('X r'))
-// viz.table(L1DVD('r'))
+// runListener(L3DDVDVDV, 'L3DDVDVDV')
 
 
 // console.log("Speakers")
+runSpeaker(S1VV, 'S1VV')
+runSpeaker(S1VD, 'S1VD')
+runSpeaker(S1DV, 'S1DV')
+runSpeaker(S1DD, 'S1DD')
+runSpeaker(S2DVVV, 'S2DVVV')
+runSpeaker(S2DVDV, 'S2DVDV')
+runSpeaker(S2DDDD, 'S2DDDD')
+runSpeaker(S2VVDV, 'S2VVDV')
+runSpeaker(S2VVDD, 'S2VVDD')
+runSpeaker(S2VVVD, 'S2VVVD')
 // runSpeaker(S3DVVVVV, 'S3DVVVVV')
 // runSpeaker(S3DVDVDV, 'S3DVDVDV')
-
-// console.log('S1VV')
-// viz.table(S1VV({color:'r'}))
-// viz.table(S1VV({color:'b'}))
-// console.log('S1VD')
-// viz.table(S1VD({color:'r'}))
-// viz.table(S1VD({color:'b'}))
-// console.log('S1DV')
-// viz.table(S1DV({color:'r'}))
-// viz.table(S1DV({color:'b'}))
-// console.log('S1DD')
-// viz.table(S1DD({color:'r'}))
-// viz.table(S1DD({color:'b'}))
-// console.log('S2VVVV')
-// viz.table(S2VVVV({color:'r'}))
-// viz.table(S2VVVV({color:'b'}))
-// console.log('S2VVVD')
-// viz.table(S2VVVD({color:'r'}))
-// viz.table(S2VVVD({color:'b'}))
-// console.log('S2VVDV')
-// viz.table(S2VVDV({color:'r'}))
-// viz.table(S2VVDV({color:'b'}))
-// console.log('S2VDVV')
-// viz.table(S2VDVV({color:'r'}))
-// viz.table(S2VDVV({color:'b'}))
-// console.log('S2DVVV')
-// viz.table(S2DVVV({color:'r'}))
-// viz.table(S2DVVV({color:'b'}))
-// console.log('S2VDDV')
-// viz.table(S2VDDV({color:'r'}))
-// viz.table(S2VDDV({color:'b'}))
-// console.log('S2VVDD')
-// viz.table(S2VVDD({color:'r'}))
-// viz.table(S2VVDD({color:'b'}))
-// console.log('S2VDDD')
-// viz.table(S2VDDD({color:'r'}))
-// viz.table(S2VDDD({color:'b'}))
-// console.log('S2DDDD')
-// viz.table(S2DDDD({color:'r'}))
-// viz.table(S2DDDD({color:'b'}))
-// console.log('S2DDDV')
-// viz.table(S2DDDV({color:'r'}))
-// viz.table(S2DDDV({color:'b'}))
-// console.log('S2DDVV')
-// viz.table(S2DDVV({color:'r'}))
-// viz.table(S2DDVV({color:'b'}))
-// console.log('S2DVVD')
-// viz.table(S2DVVD({color:'r'}))
-// viz.table(S2DVVD({color:'b'}))
-// console.log('S2DVDV')
-// viz.table(S2DVDV({color:'r'}))
-// viz.table(S2DVDV({color:'b'}))
