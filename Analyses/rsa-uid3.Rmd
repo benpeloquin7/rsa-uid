@@ -6,8 +6,10 @@ output: html_document
 ---
 
 ```{r libraries message=FALSE, warning=FALSE}
+library(doParallel)
 library(dplyr)
 library(ggplot2)
+library(lme4)
 library(ngram)
 library(rwebppl)
 library(tidyr)
@@ -24,12 +26,13 @@ annotateUtterance <- function(x) {
 ```
 
 
-```{r}
+```{r webpplModel}
 modelFile <- '/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/rsa-uid-corpus-generation-20171115.wppl'
 model <- readChar(modelFile, file.info(modelFile)$size)
 ```
 
-```{r}
+# Experiment
+```{r experimentHelpers}
 runExperiment <- function(theta, n, expNum) {
   rData <- data.frame(theta=theta, n=n)
   webpplCorpus <- webppl(model, data=rData, data_var='rData')
@@ -48,8 +51,8 @@ runExperiment <- function(theta, n, expNum) {
   return(dfNgramRaw)
 }
 
-runExperiments <- function(thetas, ns, expNum) {
-  data <- mapply(runExperiment, thetas, ns, expNum, SIMPLIFY=FALSE)
+runExperiments <- function(thetas, ns, expNums) {
+  data <- mapply(runExperiment, thetas, ns, expNums, SIMPLIFY=FALSE)
   df <- do.call(rbind, data)
   rownames(df) <- 1:nrow(df)
   return(df)
@@ -57,12 +60,45 @@ runExperiments <- function(thetas, ns, expNum) {
 ```
 
 
-```{r}
-thetas <- c(seq(0.1, 0.9, 0.1))
-thetas <- rep(0.7, 9)
+```{r simulationSetUp}
+# iter=20, n=500, start=8:03, end=8:07
+n <- 1000
+iters <- 100
+#thetas <- c(seq(0.1, 0.9, 0.1))
+thetas <- rep(0.9, iters)
 expNums <- seq(length(thetas))
-ns <- rep(10, length(thetas))
+ns <- rep(n, length(thetas))
+```
+
+```{r runExperiments}
 df <- runExperiments(thetas, ns, expNums)
+```
+
+```{r plot1}
+df %>%
+  group_by(theta, expNum, first) %>%
+  mutate(first_n=sum(freq),
+         postProb=log2(freq/first_n)) %>%
+  ungroup %>%
+  group_by(theta, expNum, second) %>%
+  mutate(second_n=sum(freq),
+         likelihood=freq/second_n,
+         marked=first=='X') %>%
+  ungroup %>%
+  filter(second %in% c('r', 'g', 'b', 'y', 'p'), marked) %>%
+  select(second, postProb, likelihood) %>%
+  group_by(second) %>%
+  summarise(
+    avgPostProb=mean(postProb),
+    xmin=quantile(postProb, probs=c(0.025)),
+    xmax=quantile(postProb, probs=c(0.975)),
+    avgLikelihood=mean(likelihood),
+    ymin=quantile(likelihood, probs=c(0.025)),
+    ymax=quantile(likelihood, probs=c(0.975))) %>%
+  ggplot(aes(x=avgPostProb, y=avgLikelihood, col=as.factor(second))) +
+    geom_point() +
+    geom_errorbar(aes(ymax=ymax, ymin=ymin)) +
+    geom_errorbarh(aes(xmax=xmax, xmin=xmin))
 ```
 
 
@@ -78,57 +114,67 @@ df %>%
          marked=first=='X') %>%
   filter(second %in% c('r', 'g', 'b', 'y', 'p'), marked) %>%
   select(theta, second, marked, postProb, likelihood, expNum) %>%
-  ggplot(aes(x=postProb, y=likelihood, col=as.factor(second))) +
-    geom_point() +
-    facet_wrap(~as.factor(expNum), scales='free')
-  
+  ggplot(aes(x=postProb, y=likelihood)) +
+    geom_point(aes(col=second), alpha=0.7) +
+    geom_smooth(method='lm') 
+```
+```{r}
+df %>%
+  group_by(expNum, first) %>%
+  mutate(first_n=sum(freq),
+         postProb=log2(freq/first_n)) %>%
+  ungroup %>%
+  group_by(expNum, second) %>%
+  mutate(second_n=sum(freq),
+         likelihood=freq/second_n,
+         marked=first=='X') %>%
+  filter(second %in% c('r', 'g', 'b', 'y', 'p'), marked) %>%
+  select(theta, second, marked, postProb, likelihood, expNum) %>%
+  ggplot(aes(x=postProb, y=likelihood)) +
+    geom_point(aes(col=second), alpha=0.7) +
+    facet_wrap(~expNum) +
+    geom_smooth(method='lm')
 ```
 
+# Run in parallel
+```{r runSimulation}
+simulateAtTheta <- function(theta) {
+  n <- 500
+  iters <- 100
+  thetas <- rep(theta, iters)
+  expNums <- seq(length(thetas))
+  ns <- rep(n, length(thetas))
+  df <- runExperiments(thetas, ns, expNums)
+}
 
-```{r}
-
-dfNgramRaw %>%
-  group_by(first) %>%
-  mutate(firstSum=sum(prop)) %>%
-  ggplot(aes(x=ngrams, y=prop)) +
-    geom_bar(stat='identity') +
-    theme_bw() +
-    theme(axis.text.x=element_text(angle=90, hjust=1), 
-          plot.title=element_text(hjust=0.5, size=14))
-  
-#dfNgram1[order(dfNgram1$first), ]
-
-```
-
-```{r}
-dfNgramRaw %>%
-  ggplot(aes(x=ngrams, y=prop)) +
-    geom_bar(stat='identity')
-```
-
-
-```{r}
-dfNgram %>%
-  filter(second %in% c('r', 'g', 'b')) %>%
-  ggplot(aes(x=condProb, y=prop, col=as.factor(first))) +
-    geom_point(size=3, alpha=0.5) +
-    geom_jitter(width = 0.1) +
-    facet_wrap(~as.factor(second))
-```
-
-
-```{r}
-dfNgramTable <- dfNgram %>%
-  group_by(second, first) %>%
-  summarise(marginalFreq=sum(freq)) %>%
-  spread(second, marginalFreq)
+#df <- runExperiments(thetas, ns, expNums)
 ```
 
 ```{r}
-dfNgramTable %>% select(-first)
+no_cores <- detectCores() - 1
+registerDoParallel(cores=no_cores) 
+cl <- makeCluster(no_cores, type="FORK")
+sims <- foreach(i=c(0.1, 0.5, 0.9)) %dopar% simulateAtTheta(i)
 
+dfSims <- do.call(rbind, sims)
+```
 
-dfNgramTable %>% mutate_each_(funs(scale(.) %>% as.vector), 
-                             vars=c("b", "g", "r", "X"))
+# Analysis
+```{r}
+dfAgg <- df %>%
+  group_by(expNum, first) %>%
+  mutate(first_n=sum(freq),
+         postProb=log2(freq/first_n)) %>%
+  ungroup %>%
+  group_by(expNum, second) %>%
+  mutate(second_n=sum(freq),
+         likelihood=freq/second_n,
+         marked=first=='X') %>%
+  filter(second %in% c('r', 'g', 'b', 'y', 'p'), marked) %>%
+  select(theta, second, marked, postProb, likelihood, expNum)
+```
+
+```{r}
+summary(lmer(likelihood~postProb + (expNum|second), data=dfAgg))
 ```
 
