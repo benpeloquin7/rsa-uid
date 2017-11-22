@@ -1,6 +1,54 @@
 /**************************************************
 /******************* Scaffolding *******************
 ***************************************************/
+
+var getTheta = function(rData) {
+  var data = rData[0]
+  return data['theta']
+}
+
+var getModelName = function(rData) {
+  var data = rData[0]
+  return data['modelName']
+}
+
+var getN = function(rData) {
+  var data = rData[0]
+  return data['n']
+}
+
+var THETA = getTheta(rData)
+var N = getN(rData)
+
+var worldDistr = Categorical({
+  vs:[{color:'r'}, {color:'g'}, {color:'b'}, {color:'p'}, {color:'y'}], 
+  ps:[0.1, 0.5, 1, 1, 1]
+})
+var worldPrior = function() {return sample(worldDistr)}
+var worldGenerator = function() {
+  /* Note that this should eventually be different from `worldPrior`. Ideally we will have more "complex"
+  worlds of (a) multiple objects and (b) objects with multiple dimensions. In the 
+  single object, single object case this will look just like a single prior over a dimension.
+  */
+  return worldPrior()
+}
+
+var utteranceDistr = Categorical({
+  vs:['r', 'g', 'b', 'p', 'y', 'X r', 'X g', 'X b', 'X p', 'X y', 'X', ''], 
+  ps:[1, 1, 1, 1, 1, 0.8, 0.8, 0.8, 0.8, 0.8, 0.1, 0.01]
+})
+var utterancePrior = function() {return sample(utteranceDistr)}
+
+var utteranceMeaning = function(utterance) {
+  var lastCharIndex = utterance.length - 1
+  return utterance.includes('r') ? utterance.charAt(lastCharIndex) :
+         utterance.includes('g') ? utterance.charAt(lastCharIndex) :
+         utterance.includes('b') ? utterance.charAt(lastCharIndex) :
+         utterance.includes('p') ? utterance.charAt(lastCharIndex) :
+         utterance.includes('y') ? utterance.charAt(lastCharIndex) :
+         sample(worldDistr)['color']
+}
+
 var runExperiment = function(speaker, world) {
   return sample(speaker(world))
 }
@@ -26,32 +74,11 @@ var runExperiments = function(worldGenerator, speaker, n, data) {
   */
   var world = worldGenerator()
   var currUtt = runExperiment(speaker, world)  // really this should be a dict object with context
-  data.push(currUtt)
+  var success = utteranceMeaning(currUtt) == world['color']
+  var currData = {currUtterance:currUtt, currWorld:world['color'], isSuccess:success}
+  data.push(currData)
   return n <= 1 ? data : runExperiments(worldGenerator, speaker, n-1, data)
 }
-
-var worldGenerator = function() {
-  /* Note that this is different from worldPrior. Ideally we will have more "complex"
-  worlds of (a) multiple objects and (b) objects with multiple dimensions. In the 
-  single object, single object case this will look just like a single prior over a dimension.
-  */
-  var colors = Categorical({
-    vs:['r', 'b', 'g'], 
-    ps:[1, 1, 1]})
-  return {color: sample(colors)}
-}
-
-var THETA = 0.20
-var worldDistr = Categorical({
-  vs:[{color:'r'}, {color:'g'}, {color:'b'}], 
-  ps:[0.2, 1, 1]
-})
-var worldPrior = function() {return sample(worldDistr)}
-var utteranceDistr = Categorical({
-  vs:['r', 'g', 'b', 'X r', 'X g', 'X b', 'X', ''], 
-  ps:[1, 1, 1, 0.5, 0.5, 0.5, 0.1, 0.01]
-})
-var utterancePrior = function() {return sample(utteranceDistr)}
 
 var decode = function(utteranceProduced, noiseModel) {
   Infer({
@@ -184,13 +211,6 @@ var deleteNoiseModel = function(utterance) {
   return flip(THETA) ? deleteTransform(utterance) : utterance
 }
 
-var utteranceMeaning = function(utterance) {
-  var lastCharIndex = utterance.length - 1
-  return utterance.includes('r') ? utterance.charAt(lastCharIndex) :
-         utterance.includes('g') ? utterance.charAt(lastCharIndex) :
-         utterance.includes('b') ? utterance.charAt(lastCharIndex) :
-         sample(worldDistr)['color']
-}
 
 var meaning = function(utterance, world) {
   var worldColor = world['color']
@@ -214,18 +234,6 @@ var buildListenerBase = function(noiseModel) {
 /**************************************************
 /******************* Agents ***********************
 ***************************************************/
-
-// var L0Base = function(utterance) {
-//   Infer({
-//     model() {
-//       var world = worldPrior()
-//       var utterance = utterance == '' ? utterancePrior() : utterance
-//       var m = meaning(utterance, world)
-//       factor(m ? 0 : -Infinity)
-//       return world
-//     }
-//   })
-// }
 
 var L0Base = buildListenerBase(vacuousNoiseModel)
 var L0Decoder = buildListenerBase(deleteNoiseModel)
@@ -276,10 +284,6 @@ var S3DVDVDV = buildSpeakerModel(L2VDVDV, utterancePrior, deleteNoiseModel)
 var L3DDVVVVV = buildListenerModel(S3DVVVVV, worldPrior, deleteNoiseModel)
 var L3DDVDVDV = buildListenerModel(S3DVDVDV, worldPrior, deleteNoiseModel)
 
-
-// var d = []
-// viz.table(runExperiments(worldGenerator, S1, 100, d))
-
 var runListener = function(listenerModel, nameOut) {
   console.log(nameOut)
   console.log('X')
@@ -292,7 +296,7 @@ var runListener = function(listenerModel, nameOut) {
   viz.table(listenerModel('X b'))
   console.log('b')
   viz.table(listenerModel('b'))
-  console.log('')
+  console.log('empty utterance')
   viz.table(listenerModel(''))
 }
 
@@ -303,6 +307,10 @@ var runSpeaker = function(speakerModel, nameout) {
   console.log("{color:'b'}")
   viz.table(speakerModel({color:'b'}))
 }
+
+
+var d = []
+runExperiments(worldGenerator, S1DV, N, d)
 
 
 // runListener(L0Base, 'L0Base')
@@ -327,15 +335,15 @@ var runSpeaker = function(speakerModel, nameout) {
 
 
 // console.log("Speakers")
-runSpeaker(S1VV, 'S1VV')
-runSpeaker(S1VD, 'S1VD')
-runSpeaker(S1DV, 'S1DV')
-runSpeaker(S1DD, 'S1DD')
-runSpeaker(S2DVVV, 'S2DVVV')
-runSpeaker(S2DVDV, 'S2DVDV')
-runSpeaker(S2DDDD, 'S2DDDD')
-runSpeaker(S2VVDV, 'S2VVDV')
-runSpeaker(S2VVDD, 'S2VVDD')
-runSpeaker(S2VVVD, 'S2VVVD')
+// runSpeaker(S1VV, 'S1VV')
+// runSpeaker(S1VD, 'S1VD')
+// runSpeaker(S1DV, 'S1DV')
+// runSpeaker(S1DD, 'S1DD')
+// runSpeaker(S2DVVV, 'S2DVVV')
+// runSpeaker(S2DVDV, 'S2DVDV')
+// runSpeaker(S2DDDD, 'S2DDDD')
+// runSpeaker(S2VVDV, 'S2VVDV')
+// runSpeaker(S2VVDD, 'S2VVDD')
+// runSpeaker(S2VVVD, 'S2VVVD')
 // runSpeaker(S3DVVVVV, 'S3DVVVVV')
 // runSpeaker(S3DVDVDV, 'S3DVDVDV')

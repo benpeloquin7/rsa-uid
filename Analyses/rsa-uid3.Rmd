@@ -1,0 +1,134 @@
+---
+title: "Rsa-uid3"
+author: "Ben"
+date: "11/20/2017"
+output: html_document
+---
+
+```{r libraries message=FALSE, warning=FALSE}
+library(dplyr)
+library(ggplot2)
+library(ngram)
+library(rwebppl)
+library(tidyr)
+```
+
+```{r helpers}
+annotateUtterance <- function(x) {
+  x <- gsub(' ', '', x)
+  x <- paste0('^', x)
+  x <- paste0(x, '$')
+  return(x)
+}
+  
+```
+
+
+```{r}
+modelFile <- '/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/rsa-uid-corpus-generation-20171115.wppl'
+model <- readChar(modelFile, file.info(modelFile)$size)
+```
+
+```{r}
+runExperiment <- function(theta, n, expNum) {
+  rData <- data.frame(theta=theta, n=n)
+  webpplCorpus <- webppl(model, data=rData, data_var='rData')
+  stream <- webpplCorpus %>%
+    mutate(annotatedUtterance=annotateUtterance(currUtterance)) %>%
+    filter(isSuccess) %>%
+    select(annotatedUtterance) %>%
+    unlist %>%
+    paste(collapse='')
+  ng <- ngram(stream, n=2, sep='')  # bigram model
+  dfNgramRaw <- data.frame(get.phrasetable(ng))
+  dfNgramRaw$first <- sapply(dfNgramRaw$ngrams, function(x) {strsplit(x, '')}[[1]][1])
+  dfNgramRaw$second <- sapply(dfNgramRaw$ngrams, function(x) {strsplit(x, '')}[[1]][3])
+  dfNgramRaw$theta <- theta
+  dfNgramRaw$expNum <- expNum
+  return(dfNgramRaw)
+}
+
+runExperiments <- function(thetas, ns, expNum) {
+  data <- mapply(runExperiment, thetas, ns, expNum, SIMPLIFY=FALSE)
+  df <- do.call(rbind, data)
+  rownames(df) <- 1:nrow(df)
+  return(df)
+}
+```
+
+
+```{r}
+thetas <- c(seq(0.1, 0.9, 0.1))
+thetas <- rep(0.7, 9)
+expNums <- seq(length(thetas))
+ns <- rep(10, length(thetas))
+df <- runExperiments(thetas, ns, expNums)
+```
+
+
+```{r}
+df %>%
+  group_by(expNum, first) %>%
+  mutate(first_n=sum(freq),
+         postProb=log2(freq/first_n)) %>%
+  ungroup %>%
+  group_by(expNum, second) %>%
+  mutate(second_n=sum(freq),
+         likelihood=freq/second_n,
+         marked=first=='X') %>%
+  filter(second %in% c('r', 'g', 'b', 'y', 'p'), marked) %>%
+  select(theta, second, marked, postProb, likelihood, expNum) %>%
+  ggplot(aes(x=postProb, y=likelihood, col=as.factor(second))) +
+    geom_point() +
+    facet_wrap(~as.factor(expNum), scales='free')
+  
+```
+
+
+```{r}
+
+dfNgramRaw %>%
+  group_by(first) %>%
+  mutate(firstSum=sum(prop)) %>%
+  ggplot(aes(x=ngrams, y=prop)) +
+    geom_bar(stat='identity') +
+    theme_bw() +
+    theme(axis.text.x=element_text(angle=90, hjust=1), 
+          plot.title=element_text(hjust=0.5, size=14))
+  
+#dfNgram1[order(dfNgram1$first), ]
+
+```
+
+```{r}
+dfNgramRaw %>%
+  ggplot(aes(x=ngrams, y=prop)) +
+    geom_bar(stat='identity')
+```
+
+
+```{r}
+dfNgram %>%
+  filter(second %in% c('r', 'g', 'b')) %>%
+  ggplot(aes(x=condProb, y=prop, col=as.factor(first))) +
+    geom_point(size=3, alpha=0.5) +
+    geom_jitter(width = 0.1) +
+    facet_wrap(~as.factor(second))
+```
+
+
+```{r}
+dfNgramTable <- dfNgram %>%
+  group_by(second, first) %>%
+  summarise(marginalFreq=sum(freq)) %>%
+  spread(second, marginalFreq)
+```
+
+```{r}
+dfNgramTable %>% select(-first)
+
+
+dfNgramTable %>% mutate_each_(funs(scale(.) %>% as.vector), 
+                             vars=c("b", "g", "r", "X"))
+```
+
