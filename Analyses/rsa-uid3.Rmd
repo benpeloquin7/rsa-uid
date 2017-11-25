@@ -22,37 +22,77 @@ annotateUtterance <- function(x) {
   x <- paste0(x, '$')
   return(x)
 }
-  
+```
+
+
+```{r}
+worldDistrStr <- "
+var worldDistr = Categorical({
+  vs:[{color:'a'}, {color:'b'}, {color:'c'}, {color:'d'}, {color:'e'}], 
+  ps:[0.1, 0.2, 1, 1, 1]
+})
+"
+
+worldDistrUnifStr <- "
+var worldDistr = Categorical({
+  vs:[{color:'a'}, {color:'b'}, {color:'c'}, {color:'d'}, {color:'e'}], 
+  ps:[1, 1, 1, 1, 1]
+})
+"
 ```
 
 
 ```{r webpplModel}
 modelFile <- '/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/rsa-uid-corpus-generation-20171115.wppl'
-model <- readChar(modelFile, file.info(modelFile)$size)
+baseModel <- readChar(modelFile, file.info(modelFile)$size)
+unifSemanticsModel <- paste(worldDistrUnifStr, baseModel)
+semanticsModel <- paste(worldDistrStr, baseModel)
 ```
 
 # Experiment
 ```{r experimentHelpers}
-runExperiment <- function(theta, n, expNum) {
-  rData <- data.frame(theta=theta, n=n)
-  webpplCorpus <- webppl(model, data=rData, data_var='rData')
-  stream <- webpplCorpus %>%
-    mutate(annotatedUtterance=annotateUtterance(currUtterance)) %>%
-    filter(isSuccess) %>%
-    select(annotatedUtterance) %>%
-    unlist %>%
-    paste(collapse='')
-  ng <- ngram(stream, n=2, sep='')  # bigram model
-  dfNgramRaw <- data.frame(get.phrasetable(ng))
-  dfNgramRaw$first <- sapply(dfNgramRaw$ngrams, function(x) {strsplit(x, '')}[[1]][1])
-  dfNgramRaw$second <- sapply(dfNgramRaw$ngrams, function(x) {strsplit(x, '')}[[1]][3])
-  dfNgramRaw$theta <- theta
-  dfNgramRaw$expNum <- expNum
-  return(dfNgramRaw)
+runExperimentWithModel <- function(modelStr) {
+  return(
+    function(theta, n, expNum) {
+      # Parameters
+      # ----------
+      # theta: float
+      #   noise level.
+      # n: int
+      #   number of samples.
+      # expNum: int
+      #   experiment number
+      #
+      # Returns
+      # -------
+      # data.frame
+      #   ngram data frame
+      #
+      rData <- data.frame(theta=theta, n=n)
+      webpplCorpus <- webppl(modelStr, data=rData, data_var='rData')
+      stream <- webpplCorpus %>%
+        mutate(annotatedUtterance=annotateUtterance(currUtterance)) %>%
+        filter(isSuccess) %>%  # NOTE: filtering on sussesful utterance here -- this should be reviewed.
+        select(annotatedUtterance) %>%
+        unlist %>%
+        paste(collapse='')
+      ng <- ngram(stream, n=2, sep='')  # bigram model
+      dfNgramRaw <- data.frame(get.phrasetable(ng))
+      dfNgramRaw$first <- sapply(dfNgramRaw$ngrams, function(x) {strsplit(x, '')}[[1]][1])
+      dfNgramRaw$second <- sapply(dfNgramRaw$ngrams, function(x) {strsplit(x, '')}[[1]][3])
+      dfNgramRaw$theta <- theta
+      dfNgramRaw$expNum <- expNum
+      return(dfNgramRaw)
+    }
+  )
 }
 
-runExperiments <- function(thetas, ns, expNums) {
-  data <- mapply(runExperiment, thetas, ns, expNums, SIMPLIFY=FALSE)
+baseModelExp <- runExperimentWithModel(baseModel)
+runUnifExp <- runExperimentWithModel(unifSemanticsModel)
+runSemsExp <- runExperimentWithModel(semanticsModel)
+
+runExperiments <- function(expRunFn, thetas, ns, expNums) {
+  data <- mapply(expRunFn, thetas, ns, expNums, SIMPLIFY=FALSE)
   df <- do.call(rbind, data)
   rownames(df) <- 1:nrow(df)
   return(df)
@@ -60,34 +100,53 @@ runExperiments <- function(thetas, ns, expNums) {
 ```
 
 
-```{r simulationSetUp}
+```{r singleSimulationSetUp}
 # iter=20, n=500, start=8:03, end=8:07
-n <- 1000
-iters <- 100
+nSamples <- 500
+nExps <- 30
 #thetas <- c(seq(0.1, 0.9, 0.1))
-thetas <- rep(0.9, iters)
-expNums <- seq(length(thetas))
-ns <- rep(n, length(thetas))
+thetas <- rep(0.8, nExps)
+expNums <- seq(nExps)
+ns <- rep(nSamples, nExps)
 ```
 
-```{r runExperiments}
-df <- runExperiments(thetas, ns, expNums)
+## Run first experiment
+```{r runSingleSimulation}
+ptm1 <- proc.time()
+# Unif need probabilities
+dfUnif <- runExperiments(runUnifExp, thetas, ns, expNums) %>%
+  mutate(expType='unifSems')
+ptm2 <- proc.time()
+etm1 <- ptm2 - ptm1
+cat('runtime: ', etm1[3] / 60)
+
+# Differentiated need probs
+dfSems <- runExperiments(runSemsExp, thetas, ns, expNums) %>%
+  mutate(expType='sems')
+etm2 <- proc.time() - ptm2
+cat('runtime: ', etm2[3] / 60)
 ```
 
-```{r plot1}
-df %>%
-  group_by(theta, expNum, first) %>%
+```{r}
+dfComb <- rbind(dfUnif, dfSems)
+```
+
+
+## Plot 1
+```{r plotErrorBars1}
+dfComb %>%
+  group_by(expType, expNum, first) %>%
   mutate(first_n=sum(freq),
          postProb=log2(freq/first_n)) %>%
   ungroup %>%
-  group_by(theta, expNum, second) %>%
+  group_by(expType, expNum, second) %>%
   mutate(second_n=sum(freq),
          likelihood=freq/second_n,
          marked=first=='X') %>%
   ungroup %>%
-  filter(second %in% c('r', 'g', 'b', 'y', 'p'), marked) %>%
-  select(second, postProb, likelihood) %>%
-  group_by(second) %>%
+  filter(second %in% c('a', 'b', 'c', 'd', 'e'), marked) %>%
+  select(expType, second, postProb, likelihood) %>%
+  group_by(expType, second) %>%
   summarise(
     avgPostProb=mean(postProb),
     xmin=quantile(postProb, probs=c(0.025)),
@@ -98,49 +157,53 @@ df %>%
   ggplot(aes(x=avgPostProb, y=avgLikelihood, col=as.factor(second))) +
     geom_point() +
     geom_errorbar(aes(ymax=ymax, ymin=ymin)) +
-    geom_errorbarh(aes(xmax=xmax, xmin=xmin))
+    geom_errorbarh(aes(xmax=xmax, xmin=xmin)) +
+    facet_wrap(~expType)
 ```
 
-
-```{r}
-df %>%
-  group_by(expNum, first) %>%
+## Plot 2
+```{r plotScatter1}
+dfComb %>%
+  group_by(expType, expNum, first) %>%
   mutate(first_n=sum(freq),
          postProb=log2(freq/first_n)) %>%
   ungroup %>%
-  group_by(expNum, second) %>%
+  group_by(expType, expNum, second) %>%
   mutate(second_n=sum(freq),
          likelihood=freq/second_n,
          marked=first=='X') %>%
-  filter(second %in% c('r', 'g', 'b', 'y', 'p'), marked) %>%
-  select(theta, second, marked, postProb, likelihood, expNum) %>%
+  filter(second %in% letters[1:5], marked) %>%
+  select(expType, theta, second, marked, postProb, likelihood, expNum) %>%
   ggplot(aes(x=postProb, y=likelihood)) +
     geom_point(aes(col=second), alpha=0.7) +
-    geom_smooth(method='lm') 
+    geom_rug(aes(col=second)) +
+    facet_wrap(~expType)
 ```
-```{r}
-df %>%
-  group_by(expNum, first) %>%
+
+## Plot 3
+```{r plotFacets1}
+dfComb %>%
+  group_by(expType, expNum, first) %>%
   mutate(first_n=sum(freq),
          postProb=log2(freq/first_n)) %>%
   ungroup %>%
-  group_by(expNum, second) %>%
+  group_by(expType, expNum, second) %>%
   mutate(second_n=sum(freq),
          likelihood=freq/second_n,
          marked=first=='X') %>%
-  filter(second %in% c('r', 'g', 'b', 'y', 'p'), marked) %>%
-  select(theta, second, marked, postProb, likelihood, expNum) %>%
+  filter(second %in% letters[1:5], marked) %>%
+  select(expType, theta, second, marked, postProb, likelihood, expNum) %>%
   ggplot(aes(x=postProb, y=likelihood)) +
     geom_point(aes(col=second), alpha=0.7) +
-    facet_wrap(~expNum) +
+    facet_grid(expType~expNum) +
     geom_smooth(method='lm')
 ```
 
 # Run in parallel
-```{r runSimulation}
+```{r runSimulationsFn}
 simulateAtTheta <- function(theta) {
-  n <- 500
-  iters <- 100
+  n <- 100
+  iters <- 200
   thetas <- rep(theta, iters)
   expNums <- seq(length(thetas))
   ns <- rep(n, length(thetas))
@@ -150,17 +213,98 @@ simulateAtTheta <- function(theta) {
 #df <- runExperiments(thetas, ns, expNums)
 ```
 
-```{r}
+```{r parSimulationsSetUp}
 no_cores <- detectCores() - 1
 registerDoParallel(cores=no_cores) 
 cl <- makeCluster(no_cores, type="FORK")
-sims <- foreach(i=c(0.1, 0.5, 0.9)) %dopar% simulateAtTheta(i)
+```
 
+```{r parSimulationsRun}
+ptm <- proc.time()
+sims <- foreach(i=seq(0.2, 0.8, 0.2)) %dopar% simulateAtTheta(i)
+stopCluster(cl)
+etm <- proc.time() - ptm
+cat("runtime: ", etm[3] / 60)
+```
+
+```{r processSimulations}
 dfSims <- do.call(rbind, sims)
 ```
 
-# Analysis
 ```{r}
+dfSims %>%
+  group_by(theta, expNum, first) %>%
+  mutate(first_n=sum(freq),
+         postProb=log2(freq/first_n)) %>%
+  ungroup %>%
+  group_by(theta, expNum, second) %>%
+  mutate(second_n=sum(freq),
+         likelihood=freq/second_n,
+         marked=first=='X') %>%
+  ungroup %>%
+  filter(second %in% c('r', 'g', 'b', 'y', 'p'), marked) %>%
+  select(second, postProb, likelihood, theta) %>%
+  group_by(theta, second) %>%
+  summarise(
+    avgPostProb=mean(postProb),
+    xmin=quantile(postProb, probs=c(0.025)),
+    xmax=quantile(postProb, probs=c(0.975)),
+    avgLikelihood=mean(likelihood),
+    ymin=quantile(likelihood, probs=c(0.025)),
+    ymax=quantile(likelihood, probs=c(0.975)))
+```
+
+
+```{r plotErrorBars2}
+dfSims %>%
+  group_by(theta, expNum, first) %>%
+  mutate(first_n=sum(freq),
+         postProb=log2(freq/first_n)) %>%
+  ungroup %>%
+  group_by(theta, expNum, second) %>%
+  mutate(second_n=sum(freq),
+         likelihood=freq/second_n,
+         marked=first=='X') %>%
+  ungroup %>%
+  filter(second %in% c('r', 'g', 'b', 'y', 'p'), marked) %>%
+  select(second, postProb, likelihood, theta) %>%
+  group_by(theta, second) %>%
+  summarise(
+    avgPostProb=mean(postProb),
+    xmin=quantile(postProb, probs=c(0.025)),
+    xmax=quantile(postProb, probs=c(0.975)),
+    avgLikelihood=mean(likelihood),
+    ymin=quantile(likelihood, probs=c(0.025)),
+    ymax=quantile(likelihood, probs=c(0.975))) %>%
+  ggplot(aes(x=avgPostProb, y=avgLikelihood)) +
+    geom_point(aes(col=as.factor(second)), alpha=0.5, size=1.25) +
+    geom_errorbar(aes(ymax=ymax, ymin=ymin, col=as.factor(second))) +
+    geom_errorbarh(aes(xmax=xmax, xmin=xmin, col=as.factor(second))) +
+    geom_smooth(method='lm', se=FALSE, group=0) +
+    facet_wrap(~theta)
+```
+
+```{r plotScatter2}
+dfSims %>%
+  group_by(theta, expNum, first) %>%
+  mutate(first_n=sum(freq),
+         postProb=log2(freq/first_n)) %>%
+  ungroup %>%
+  group_by(theta, expNum, second) %>%
+  mutate(second_n=sum(freq),
+         likelihood=freq/second_n,
+         marked=first=='X') %>%
+  filter(second %in% c('r', 'g', 'b', 'y', 'p'), marked) %>%
+  select(theta, second, marked, postProb, likelihood, expNum) %>%
+  ggplot(aes(x=postProb, y=likelihood)) +
+    geom_point(aes(col=second), alpha=0.5) +
+    geom_rug(aes(col=second)) +
+    facet_wrap(~theta)
+```
+
+
+# Analysis
+```{r plotFacets2}
 dfAgg <- df %>%
   group_by(expNum, first) %>%
   mutate(first_n=sum(freq),
