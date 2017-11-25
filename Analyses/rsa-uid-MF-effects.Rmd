@@ -1,0 +1,51 @@
+---
+title: "Rsa-uid4"
+author: "Ben"
+date: "11/24/2017"
+output: html_document
+---
+
+
+
+```{r speakerListenerModelUtils}
+modelCombs <- function(prefix, items, n) {
+  affixes <- unique(combn(rep(items, n), m=n, FUN=function(x) paste(x, collapse='')))
+  sapply(affixes, function(x) paste0(prefix, x))
+}
+
+listenerModels <- c(
+  modelCombs('L0', c('D', 'V'), 1),
+  modelCombs('L1', c('D', 'V'), 3))
+
+speakerModels <- c(
+  modelCombs('S1', c('D', 'V'), 2),
+  modelCombs('S2', c('D', 'V'), 4))
+
+```
+
+
+# Preference for high semantic suprisal items
+```{r}
+buildModel <- function(baseModel, modelName, theta) {
+  completeModelStr <- paste(modelName, theta, baseModel)
+  completeModelStr
+}
+
+buildModelRunFn <- function(completeModelNameStr) {
+  return(
+    function()
+  )
+}
+
+# varying theta 
+# varying model type
+
+
+```
+
+
+```{r}
+# params to vary
+
+```
+
