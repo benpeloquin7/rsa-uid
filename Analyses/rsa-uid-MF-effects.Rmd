@@ -123,10 +123,13 @@ ggplot(aes(x=theta, y=aggProb, col=as.factor(supportType), lty=as.factor(isMarke
 ```
 
 ```{r run-experimen1-2}
-dfS2DVDV <- runExp1('S2DVDV')
-dfS2DDDD <- runExp1('S2DDDD')
-dfS2VVVV <- runExp1('S2VVVV')
-dfAgg <- rbind(dfS2DVDV, dfS2DDDD, dfS2VVVV)
+dfS1DD <- runExp1('S1DD')
+# dfS1VD <- runExp1('S1VD')
+# dfS1VV <- runExp1('S1VV')
+# dfS2DVDV <- runExp1('S2DVDV')
+# dfS2DDDD <- runExp1('S2DDDD')
+# dfS2VVVV <- runExp1('S2VVVV')
+dfAgg <- rbind(dfS1DD, dfS1VD, dfS1VV, dfS2DVDV, dfS2DDDD, dfS2VVVV)
 ```
 
 ```{r plot run-experiment1}
@@ -142,5 +145,5 @@ dfAgg %>%
   # filter(isPrimaryCompare) %>%
 ggplot(aes(x=theta, y=aggProb, col=as.factor(supportType), lty=as.factor(isMarked))) +
   geom_line() +
-  facet_grid(modelType~input)
+  facet_grid(input~modelType)
 ```
