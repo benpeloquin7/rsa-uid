@@ -309,8 +309,8 @@ var L3DDVDVDV = buildListenerModel(S3DVDVDV, worldPrior, deleteNoiseModel)
 var models = {
   'L0D': L0D,
   'L0V': L0V,
-  'S1DD': S1DV,
-  'S1DV': S1VV,
+  'S1DD': S1DD,
+  'S1DV': S1DV,
   'S1VD': S1VD,
   'S1VV': S1VV,
   'L1DDD': L1DDD,
@@ -330,13 +330,14 @@ var models = {
   'S2DVVD': S2DVVD,
   'S2VVDD': S2VVDD,
   'S2DVDV': S2DVDV,
+  'S2VDVD': S2VDVD,
   'S2DVVD': S2DVVD,
   'S2VDDV': S2VDDV,
   'S2VVVD': S2VVVD,
   'S2VVDV': S2VVDV,
   'S2VDVV': S2VDVV,
   'S2DVVV': S2DVVV,
-  'S2DVVV': S2DVVV }
+  'S2VVVV': S2VVVV }
 
 var getModel = function(modelName) {
   return models[modelName]

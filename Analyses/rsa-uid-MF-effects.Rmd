@@ -85,24 +85,62 @@ run <- function(modelName, input, needProbs, needType, theta) {
 ```
 
 
-```{r}
-
-dRuns <- mapply(run,
-                c('S1DV', 'S1DV'),
-                c('a', 'e'),
-                c(variableNeedProbs, variableNeedProbs),
-                c('variable', 'variable'),
-                c(0.2, 0.9),
-                SIMPLIFY=FALSE)
-df <- do.call(rbind, dRuns)
-rownames(df) <- 1:nrow(df)
-
-# run('S1DV', 'a', variableNeedProbs, 'variable', 0.8)
-```
-
-```{r}
-ggplot(df, aes(x=support, y=prob, col=as.factor(input))) +
-  geom_point()
+```{r experiment1-setup}
+runExp1 <- function(modelName) {
+  nRuns <- 10
+  models <- rep(modelName, nRuns*2)
+  inputs <- c(rep('a', nRuns), rep('e', nRuns))
+  needProbs <- rep(variableNeedProbs, nRuns*2)
+  needProbTypes <- rep('variable', nRuns*2)
+  thetas <- rep(seq(0.1, 0.9, length.out=nRuns), 2)
   
+  dRuns <- mapply(run, models, inputs, needProbs, needProbTypes, thetas, SIMPLIFY=FALSE)
+  df <- do.call(rbind, dRuns)
+  rownames(df) <- 1:nrow(df)
+  df
+}
 ```
 
+# Do `speakers` prefer marked utterances to unmarked as a function of need probability (`p(w_i)`)
+```{r run-experiment1}
+df <- runExp1('S1DVD')
+```
+
+```{r plot run-experiment1}
+df %>%
+  mutate(support=as.character(support),
+         isMarked=substring(support, 1, 1) == 'X',
+         isPrimaryCompare=ifelse(input=='a', support %in% c('X a', 'a'), support %in% c('X e', 'e')),
+         supportStr=ifelse(support %in% c('X a', 'a', 'X e', 'e'), support, 'other')) %>%
+  group_by(input, theta, supportStr, isMarked, isPrimaryCompare) %>%
+  summarise(aggProb=sum(prob)) %>%
+  mutate(supportType=ifelse(supportStr %in% c('X a', 'a'), 'a', ifelse(supportStr %in% c('X e', 'e'), 'e', 'other'))) %>%
+  ungroup %>%
+  # filter(isPrimaryCompare) %>%
+ggplot(aes(x=theta, y=aggProb, col=as.factor(supportType), lty=as.factor(isMarked))) +
+  geom_line() +
+  facet_wrap(~input)
+```
+
+```{r run-experimen1-2}
+dfS2DVDV <- runExp1('S2DVDV')
+dfS2DDDD <- runExp1('S2DDDD')
+dfS2VVVV <- runExp1('S2VVVV')
+dfAgg <- rbind(dfS2DVDV, dfS2DDDD, dfS2VVVV)
+```
+
+```{r plot run-experiment1}
+dfAgg %>%
+  mutate(support=as.character(support),
+         isMarked=substring(support, 1, 1) == 'X',
+         isPrimaryCompare=ifelse(input=='a', support %in% c('X a', 'a'), support %in% c('X e', 'e')),
+         supportStr=ifelse(support %in% c('X a', 'a', 'X e', 'e'), support, 'other')) %>%
+  group_by(modelType, input, theta, supportStr, isMarked, isPrimaryCompare) %>%
+  summarise(aggProb=sum(prob)) %>%
+  mutate(supportType=ifelse(supportStr %in% c('X a', 'a'), 'a', ifelse(supportStr %in% c('X e', 'e'), 'e', 'other'))) %>%
+  ungroup %>%
+  # filter(isPrimaryCompare) %>%
+ggplot(aes(x=theta, y=aggProb, col=as.factor(supportType), lty=as.factor(isMarked))) +
+  geom_line() +
+  facet_grid(modelType~input)
+```
