@@ -6,6 +6,31 @@ output: html_document
 ---
 
 
+```{r packages, warning=FALSE, message=FALSE}
+library(dplyr)
+library(ggplot2)
+library(rwebppl)
+library(tidyr)
+```
+
+
+# Questions:
+0. Do `speakers` prefer marked utterances to unmarked as a function of need probability (`p(w_i)`)
+0. Do `listener` generate an "um" implicature -- interpret an utterance "X" as the high suprisal item.
+
+Parameters
+----------
+* `model` (S1DV vs L0D vs L2DVVDV, etc.)
+* `need probabilities`
+* `input` (speakers take worlds, listeners take utterances)
+* `theta` noise level
+
+
+```{r}
+modelFile <- "/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/rsa-uid-MF-effects.wppl"
+BASE.MODEL <- readChar(modelFile, file.info(modelFile)$size)
+```
+
 
 ```{r speakerListenerModelUtils}
 modelCombs <- function(prefix, items, n) {
@@ -21,31 +46,63 @@ speakerModels <- c(
   modelCombs('S1', c('D', 'V'), 2),
   modelCombs('S2', c('D', 'V'), 4))
 
+variableNeedProbs <- "
+var worldDistr = Categorical({
+  vs:[{color:'a'}, {color:'b'}, {color:'c'}, {color:'d'}, {color:'e'}], 
+  ps:[0.1, 0.5, 1, 1, 1]
+})
+"
+
+uniformNeedProbs <- "
+var worldDistr = Categorical({
+  vs:[{color:'a'}, {color:'b'}, {color:'c'}, {color:'d'}, {color:'e'}], 
+  ps:[1, 1, 1, 1, 1]
+})
+"
 ```
 
 
 # Preference for high semantic suprisal items
 ```{r}
-buildModel <- function(baseModel, modelName, theta) {
-  completeModelStr <- paste(modelName, theta, baseModel)
+buildCompleteModel <- function(needProbs) {
+  completeModelStr <- paste(needProbs, BASE.MODEL)
   completeModelStr
 }
 
-buildModelRunFn <- function(completeModelNameStr) {
-  return(
-    function()
-  )
+run <- function(modelName, input, needProbs, needType, theta) {
+  completeModelStr <- buildCompleteModel(needProbs)
+  isSpeakerExp <- unlist(strsplit(modelName, ''))[1] == 'S'
+  isVariableNeeds <- needProbs
+  rData <- data.frame(modelName=modelName, theta=theta, input=input, isSpeakerExp=isSpeakerExp)
+  d <- webppl(completeModelStr, data=rData, data_var='rData') %>%
+    mutate(input=input,
+           theta=theta,
+           modelType=modelName,
+           isSpeaker=isSpeakerExp,
+           needType=needType)
+  d
 }
-
-# varying theta 
-# varying model type
-
-
 ```
 
 
 ```{r}
-# params to vary
 
+dRuns <- mapply(run,
+                c('S1DV', 'S1DV'),
+                c('a', 'e'),
+                c(variableNeedProbs, variableNeedProbs),
+                c('variable', 'variable'),
+                c(0.2, 0.9),
+                SIMPLIFY=FALSE)
+df <- do.call(rbind, dRuns)
+rownames(df) <- 1:nrow(df)
+
+# run('S1DV', 'a', variableNeedProbs, 'variable', 0.8)
+```
+
+```{r}
+ggplot(df, aes(x=support, y=prob, col=as.factor(input))) +
+  geom_point()
+  
 ```
 

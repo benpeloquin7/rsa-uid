@@ -1,0 +1,365 @@
+/**************************************************
+/******************* Scaffolding *******************
+***************************************************/
+
+var getModelName = function(rData) {
+  var data = rData[0]
+  return data['modelName']
+}
+
+var getInput = function(rData) {
+  var data = rData[0]
+  if (data['isSpeakerExp']==true) {
+    return {color:data['input']}
+  } else {
+    return data['input']
+  }
+}
+
+var getTheta = function(rData) {
+  var data = rData[0]
+  return data['theta']
+}
+
+
+var THETA = getTheta(rData)
+var worldPrior = function() {return sample(worldDistr)}
+var worldGenerator = function() {
+  /* Note that this should eventually be different from `worldPrior`. Ideally we will have more "complex"
+  worlds of (a) multiple objects and (b) objects with multiple dimensions. In the 
+  single object, single object case this will look just like a single prior over a dimension.
+  */
+  return worldPrior()
+}
+
+var utteranceDistr = Categorical({
+  vs:['a', 'b', 'c', 'd', 'e', 'X a', 'X b', 'X c', 'X d', 'X e', 'X', ''], 
+  ps:[ 1,   1,   1,   1,   1,   0.5,   0.5,   0.5,   0.5,   0.5,  0.1, 0.01]
+})
+var utterancePrior = function() {return sample(utteranceDistr)}
+
+var utteranceMeaning = function(utterance) {
+  var lastCharIndex = utterance.length - 1
+  return utterance.includes('a') ? utterance.charAt(lastCharIndex) :
+         utterance.includes('b') ? utterance.charAt(lastCharIndex) :
+         utterance.includes('c') ? utterance.charAt(lastCharIndex) :
+         utterance.includes('d') ? utterance.charAt(lastCharIndex) :
+         utterance.includes('e') ? utterance.charAt(lastCharIndex) :
+         sample(worldDistr)['color']
+}
+
+var runExperiment = function(speaker, world) {
+  return sample(speaker(world))
+}
+
+var runExperiments = function(worldGenerator, speaker, n, data) {
+  /*
+  Parameters
+  ----------
+  worldGenerator: fn
+    Generate a full world.
+  spekeaker: fn
+    RSA speaker function. Input worlds, output utterances.
+  n: int
+    Number of forward samples.
+  data: array
+    Data store (corpus).
+    
+  Returns
+  -------
+  array
+    Array of utterances.
+  
+  */
+  var world = worldGenerator()
+  var currUtt = runExperiment(speaker, world)  // really this should be a dict object with context
+  var success = utteranceMeaning(currUtt) == world['color']
+  var currData = {currUtterance:currUtt, currWorld:world['color'], isSuccess:success}
+  data.push(currData)
+  return n <= 1 ? data : runExperiments(worldGenerator, speaker, n-1, data)
+}
+
+var decode = function(utteranceProduced, noiseModel) {
+  Infer({
+    model() {
+      var utteranceIntended = utterancePrior()
+      var noisyUtterance = noiseModel(utteranceIntended, THETA)
+      factor(utteranceProduced == noisyUtterance ? 0 : -Infinity)
+      return utteranceIntended
+    }
+  })
+}
+
+
+var buildSpeakerModel = function(listenerModel, utterancePrior, noiseModel) {
+  /* Build generic speaker model.
+  
+  Parameters
+  ----------
+  listenerModel: fn
+    Input world, output utterance.
+  utterancePrior: fn
+    Samples from prior over utterances.
+  noiseModel: fn, optional
+    Perturb utterance.
+   
+  Returns
+  --------
+  fn
+    speaker function.
+
+  */
+
+  if (noiseModel != undefined) { 
+    return function(world) {
+      Infer({
+        model() {
+          var utterance = utterancePrior()
+          var noisyUtterance = noiseModel(utterance)
+          var L = listenerModel(noisyUtterance)
+          factor(L.score(world))
+          return utterance
+        }
+      })
+    }
+  } else {
+    return function(world) {
+      Infer({
+        model() {
+          var utterance = utterancePrior()
+          var L = listenerModel(utterance)
+          factor(L.score(world))
+          return utterance 
+        }
+      })
+    }
+  }
+}
+
+var buildListenerModel = function(speakerModel, worldPrior, noiseModel) {
+  /* Build generic listener model.
+  
+  Parameters
+  ----------
+  speakerModel: fn, optional
+    Input world, output utterance.
+  worldPrior : distr,
+    Prior distribution over objects.
+  noiseModel: fn, optional
+    Invert noise model to reason about intended utterance from produced.
+    E.g. p(u_intended | u_produced)
+   
+  Returns
+  --------
+  fn
+    Listener function.
+
+  */
+
+  if (noiseModel != undefined) {
+    return function(utterance) {
+      Infer({
+        model(){
+          var world = worldPrior()
+          var S = speakerModel(world)
+          var intendedUtterance = sample(decode(utterance, noiseModel))
+          factor(S.score(intendedUtterance))
+          return world 
+        }
+      })
+    } 
+  } else {
+    return function(utterance) {
+        Infer({
+          model(){
+            var world = worldPrior()
+            var S = speakerModel(world)
+            factor(S.score(utterance))
+            return world 
+          }
+        })
+    }
+  }
+}
+
+
+/**************************************************
+/******************* Run **************************
+***************************************************/
+
+/* To run experiment 
+0. listener model.
+  [REQUIRES] meaning fn
+  [REQUIRES world prior
+1. speaker model.
+  [listener model] 
+  [REQUIRES] utterance prior
+2. world prior.
+3. utterance prior.
+4. data hold (array)
+
+call run
+*/
+
+/* Noise models */
+var _removeEmptyItems = function(arr) {
+  filter(function(x) {return x != ''}, arr)
+}
+
+var replaceIndex = function(arr, index, replacement) {
+  return arr.slice(0, index).concat([replacement]).concat(arr.slice(index + 1, arr.length))
+}
+var transformUtterance = function(transformFn) {
+  return function(utterance) {
+      var tokens = utterance.split(' ')
+      var index = sample(RandomInteger({n:tokens.length}))
+      var replacement = transformFn(index)
+      return _removeEmptyItems(replaceIndex(tokens, index, replacement)).join(' ')
+  }  
+}
+var _deleteFn = function(s) {
+  return ''
+}
+var deleteTransform = transformUtterance(_deleteFn)
+
+var vacuousNoiseModel = function(utterance) {
+  return utterance
+}
+var deleteNoiseModel = function(utterance) {
+  return flip(THETA) ? deleteTransform(utterance) : utterance
+}
+
+
+var meaning = function(utterance, world) {
+  var worldColor = world['color']
+  return utteranceMeaning(utterance) == worldColor
+}
+
+var buildListenerBase = function(noiseModel) {
+  return function(utterance) {
+    Infer({
+      model() {
+        var world = worldPrior()
+        var intendedUtterance = sample(decode(utterance, noiseModel))
+        var m = meaning(intendedUtterance, world)
+        factor(m ? 0 : -Infinity)
+        return world
+      }
+    })
+  }
+}
+
+/**************************************************
+/******************* Agents ***********************
+***************************************************/
+
+var L0V = buildListenerBase(vacuousNoiseModel)
+var L0D = buildListenerBase(deleteNoiseModel)
+
+var S1VV = buildSpeakerModel(L0V, utterancePrior, vacuousNoiseModel)
+var S1VD = buildSpeakerModel(L0D, utterancePrior, vacuousNoiseModel)
+var S1DV = buildSpeakerModel(L0V, utterancePrior, deleteNoiseModel)
+var S1DD = buildSpeakerModel(L0D, utterancePrior, deleteNoiseModel)
+
+var L1VVV = buildListenerModel(S1VV, worldPrior, vacuousNoiseModel)
+var L1VVD = buildListenerModel(S1VD, worldPrior, vacuousNoiseModel)
+var L1VDD = buildListenerModel(S1DD, worldPrior, vacuousNoiseModel)
+var L1DDD = buildListenerModel(S1DD, worldPrior, deleteNoiseModel)
+var L1DDV = buildListenerModel(S1DV, worldPrior, deleteNoiseModel)
+var L1DVV = buildListenerModel(S1VV, worldPrior, deleteNoiseModel)
+var L1DVD = buildListenerModel(S1VD, worldPrior, deleteNoiseModel)
+var L1VDV = buildListenerModel(S1DV, worldPrior, vacuousNoiseModel)
+
+var S2VVVV = buildSpeakerModel(L1VVV, utterancePrior, vacuousNoiseModel)
+var S2VVVD = buildSpeakerModel(L1VVD, utterancePrior, vacuousNoiseModel)
+var S2VVDD = buildSpeakerModel(L1VDD, utterancePrior, vacuousNoiseModel)
+var S2VDDD = buildSpeakerModel(L1DDD, utterancePrior, vacuousNoiseModel)
+var S2DDDD = buildSpeakerModel(L1DDD, utterancePrior, deleteNoiseModel)
+var S2DDDV = buildSpeakerModel(L1DDV, utterancePrior, deleteNoiseModel)
+var S2DDVV = buildSpeakerModel(L1DVV, utterancePrior, deleteNoiseModel)
+var S2DVVV = buildSpeakerModel(L1VVV, utterancePrior, deleteNoiseModel) //
+var S2DVVD = buildSpeakerModel(L1VVD, utterancePrior, deleteNoiseModel)
+var S2VDDV = buildSpeakerModel(L1DDV, utterancePrior, vacuousNoiseModel)
+var S2DVDV = buildSpeakerModel(L1VDV, utterancePrior, deleteNoiseModel)
+var S2DVVD = buildSpeakerModel(L1VVD, utterancePrior, deleteNoiseModel)
+var S2VVDV = buildSpeakerModel(L1VDV, utterancePrior, vacuousNoiseModel)
+var S2VDVV = buildSpeakerModel(L1DVV, utterancePrior, vacuousNoiseModel)
+var S2DDVD = buildSpeakerModel(L1DVD, utterancePrior, deleteNoiseModel)
+var S2DVDD = buildSpeakerModel(L1VDD, utterancePrior, deleteNoiseModel)
+
+var L2VVVVV = buildListenerModel(S2VVVV, worldPrior, vacuousNoiseModel)
+var L2VDVDV = buildListenerModel(S2DVDV, worldPrior, deleteNoiseModel)
+var L2VDDDD = buildListenerModel(S2DDDD, worldPrior, vacuousNoiseModel)
+var L2DVVVV = buildListenerModel(S2VVVV, worldPrior, deleteNoiseModel)
+var L2VVVDD = buildListenerModel(S2VVDD, worldPrior, vacuousNoiseModel)
+var L2VVVVD = buildListenerModel(S2VVVD, worldPrior, vacuousNoiseModel)
+var L2DVVVV = buildListenerModel(S2VVVV, worldPrior, deleteNoiseModel)
+var L2DDVVV = buildListenerModel(S2DVVV, worldPrior, deleteNoiseModel) // um implicature
+var L2DDVDV = buildListenerModel(S2DVDV, worldPrior, deleteNoiseModel)
+var L2DDDVV = buildListenerModel(S2DDVV, worldPrior, deleteNoiseModel)
+var L2DDVDV = buildListenerModel(S2DVDV, worldPrior, deleteNoiseModel)
+
+var S3DVVVVV = buildSpeakerModel(L2VVVVV, utterancePrior, deleteNoiseModel)
+var S3DVDVDV = buildSpeakerModel(L2VDVDV, utterancePrior, deleteNoiseModel)
+
+var L3DDVVVVV = buildListenerModel(S3DVVVVV, worldPrior, deleteNoiseModel)
+var L3DDVDVDV = buildListenerModel(S3DVDVDV, worldPrior, deleteNoiseModel)
+
+
+var models = {
+  'L0D': L0D,
+  'L0V': L0V,
+  'S1DD': S1DV,
+  'S1DV': S1VV,
+  'S1VD': S1VD,
+  'S1VV': S1VV,
+  'L1DDD': L1DDD,
+  'L1DDV': L1DDV,
+  'L1DVD': L1DVD,
+  'L1VDD': L1VDD,
+  'L1VVD': L1VVD,
+  'L1VDV': L1VDV,
+  'L1DVV': L1DVV,
+  'L1VVV': L1VVV,
+  'S2DDDD': S2DDDD,
+  'S2DDDV': S2DDDV,
+  'S2DDVD': S2DDVD,
+  'S2DVDD': S2DVDD,
+  'S2VDDD': S2VDDD,
+  'S2DDVV': S2DDVV,
+  'S2DVVD': S2DVVD,
+  'S2VVDD': S2VVDD,
+  'S2DVDV': S2DVDV,
+  'S2DVVD': S2DVVD,
+  'S2VDDV': S2VDDV,
+  'S2VVVD': S2VVVD,
+  'S2VVDV': S2VVDV,
+  'S2VDVV': S2VDVV,
+  'S2DVVV': S2DVVV,
+  'S2DVVV': S2DVVV }
+
+var getModel = function(modelName) {
+  return models[modelName]
+}
+
+var runListener = function(listenerModel, input) {
+  return listenerModel(input)
+}
+
+var runSpeaker = function(speakerModel, input) {
+  return speakerModel(input)
+}
+
+var run = function(model, input) {
+  if (typeof input == 'string') {
+    return runListener(model, input)
+  } else {
+    return runSpeaker(model, input)
+  }
+}
+
+var modelName = getModelName(rData)
+var currModel = getModel(modelName)
+var currInput = getInput(rData)
+
+run(currModel, currInput)
