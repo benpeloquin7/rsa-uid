@@ -51,7 +51,13 @@ semanticsModel <- paste(worldDistrStr, baseModel)
 
 # Experiment
 ```{r experimentHelpers}
-runExperimentWithModel <- function(modelStr) {
+runExperimentWithModel <- function(modelStr, filterSuccesses=TRUE) {
+  annotateUtterance <- function(x) {
+    x <- gsub(' ', '', x)
+    x <- paste0('^', x)
+    x <- paste0(x, '$')
+    return(x)
+  }
   return(
     function(theta, n, expNum) {
       # Parameters
@@ -70,12 +76,20 @@ runExperimentWithModel <- function(modelStr) {
       #
       rData <- data.frame(theta=theta, n=n)
       webpplCorpus <- webppl(modelStr, data=rData, data_var='rData')
-      stream <- webpplCorpus %>%
-        mutate(annotatedUtterance=annotateUtterance(currUtterance)) %>%
-        filter(isSuccess) %>%  # NOTE: filtering on sussesful utterance here -- this should be reviewed.
-        select(annotatedUtterance) %>%
-        unlist %>%
-        paste(collapse='')
+      if (filterSuccesses) {
+        stream <- webpplCorpus %>%
+          mutate(annotatedUtterance=annotateUtterance(currUtterance)) %>%
+          filter(isSuccess) %>%  # NOTE: filtering on sussesful utterance here -- this should be reviewed.
+          select(annotatedUtterance) %>%
+          unlist %>%
+          paste(collapse='')
+      } else {
+        stream <- webpplCorpus %>%
+          mutate(annotatedUtterance=annotateUtterance(currUtterance)) %>%
+          select(annotatedUtterance) %>%
+          unlist %>%
+          paste(collapse='')
+      }
       ng <- ngram(stream, n=2, sep='')  # bigram model
       dfNgramRaw <- data.frame(get.phrasetable(ng))
       dfNgramRaw$first <- sapply(dfNgramRaw$ngrams, function(x) {strsplit(x, '')}[[1]][1])
@@ -87,9 +101,12 @@ runExperimentWithModel <- function(modelStr) {
   )
 }
 
-baseModelExp <- runExperimentWithModel(baseModel)
-runUnifExp <- runExperimentWithModel(unifSemanticsModel)
-runSemsExp <- runExperimentWithModel(semanticsModel)
+baseModelExpFilter <- runExperimentWithModel(baseModel)
+runUnifExpFilter <- runExperimentWithModel(unifSemanticsModel)
+runSemsExpFilter <- runExperimentWithModel(semanticsModel)
+baseModelExpNoFilter <- runExperimentWithModel(baseModel, FALSE)
+runUnifExpNoFilter <- runExperimentWithModel(unifSemanticsModel, FALSE)
+runSemsExpNoFilter <- runExperimentWithModel(semanticsModel, FALSE)
 
 runExperiments <- function(expRunFn, thetas, ns, expNums) {
   data <- mapply(expRunFn, thetas, ns, expNums, SIMPLIFY=FALSE)
@@ -102,7 +119,7 @@ runExperiments <- function(expRunFn, thetas, ns, expNums) {
 
 ```{r singleSimulationSetUp}
 # iter=20, n=500, start=8:03, end=8:07
-nSamples <- 500
+nSamples <- 100
 nExps <- 30
 #thetas <- c(seq(0.1, 0.9, 0.1))
 thetas <- rep(0.8, nExps)
@@ -114,25 +131,58 @@ ns <- rep(nSamples, nExps)
 ```{r runSingleSimulation}
 ptm1 <- proc.time()
 # Unif need probabilities
-dfUnif <- runExperiments(runUnifExp, thetas, ns, expNums) %>%
-  mutate(expType='unifSems')
+dfUnifFilter <- runExperiments(runUnifExpFilter, thetas, ns, expNums) %>%
+  mutate(expType='unifSemsFilter')
 ptm2 <- proc.time()
 etm1 <- ptm2 - ptm1
 cat('runtime: ', etm1[3] / 60)
 
 # Differentiated need probs
-dfSems <- runExperiments(runSemsExp, thetas, ns, expNums) %>%
-  mutate(expType='sems')
-etm2 <- proc.time() - ptm2
+dfSemsFilter <- runExperiments(runSemsExpFilter, thetas, ns, expNums) %>%
+  mutate(expType='semsFilter')
+ptm3 <- proc.time()
+etm2 <- ptm3 - ptm2
 cat('runtime: ', etm2[3] / 60)
+
+# Unif need probabilities
+dfUnifNoFilter <- runExperiments(runUnifExpNoFilter, thetas, ns, expNums) %>%
+  mutate(expType='unifSemsNoFilter')
+ptm4 <- proc.time()
+etm3 <- ptm4 - ptm3
+cat('runtime: ', etm3[3] / 60)
+
+# Differentiated need probs
+dfSemsNoFilter <- runExperiments(runSemsExpNoFilter, thetas, ns, expNums) %>%
+  mutate(expType='semsNoFilter')
+ptm5 <- proc.time()
+etm4 <- ptm5 - ptm4
+cat('runtime: ', etm4[3] / 60)
 ```
 
 ```{r}
-dfComb <- rbind(dfUnif, dfSems)
+dfComb <- rbind(dfUnifFilter, dfSemsFilter, dfUnifNoFilter, dfSemsNoFilter)
 ```
 
 
 ## Plot 1
+```{r playground}
+dfComb %>%
+  # filter(expType=='sems', expNum==1) %>%
+  group_by(expType, expNum, first) %>%
+  mutate(first_n=sum(freq),
+         postProb=log2(freq/first_n)) %>%
+  ungroup %>%
+  group_by(expType, expNum, second) %>%
+  mutate(second_n=sum(freq),
+         likelihood=freq/second_n,
+         marked=first=='X') %>%
+  ungroup %>%
+  # Gut check below
+  group_by(second) %>%
+  summarise(total=sum(likelihood))
+```
+
+
 ```{r plotErrorBars1}
 dfComb %>%
   group_by(expType, expNum, first) %>%
@@ -145,8 +195,8 @@ dfComb %>%
          marked=first=='X') %>%
   ungroup %>%
   filter(second %in% c('a', 'b', 'c', 'd', 'e'), marked) %>%
-  select(expType, second, postProb, likelihood) %>%
-  group_by(expType, second) %>%
+  select(expType, second, postProb, likelihood, marked) %>%
+  group_by(expType, second, marked) %>%
   summarise(
     avgPostProb=mean(postProb),
     xmin=quantile(postProb, probs=c(0.025)),
@@ -158,7 +208,7 @@ dfComb %>%
     geom_point() +
     geom_errorbar(aes(ymax=ymax, ymin=ymin)) +
     geom_errorbarh(aes(xmax=xmax, xmin=xmin)) +
-    facet_wrap(~expType)
+    facet_wrap(~expType, ncol=2)
 ```
 
 ## Plot 2
@@ -199,15 +249,16 @@ dfComb %>%
     geom_smooth(method='lm')
 ```
 
-# Run in parallel
+# Varying theta
 ```{r runSimulationsFn}
 simulateAtTheta <- function(theta) {
   n <- 100
-  iters <- 200
+  iters <- 30
   thetas <- rep(theta, iters)
   expNums <- seq(length(thetas))
   ns <- rep(n, length(thetas))
-  df <- runExperiments(thetas, ns, expNums)
+  df <- runExperiments(runSemsExpFilter, thetas, ns, expNums)
+  df
 }
 
 #df <- runExperiments(thetas, ns, expNums)
@@ -215,24 +266,25 @@ simulateAtTheta <- function(theta) {
 
 ```{r parSimulationsSetUp}
 no_cores <- detectCores() - 1
-registerDoParallel(cores=no_cores) 
-cl <- makeCluster(no_cores, type="FORK")
+cl <- makeCluster(no_cores, type='FORK')
+registerDoParallel(cl) 
 ```
 
 ```{r parSimulationsRun}
 ptm <- proc.time()
-sims <- foreach(i=seq(0.2, 0.8, 0.2)) %dopar% simulateAtTheta(i)
+dSims <- foreach(i=seq(0.2, 0.8, 0.2), .packages=c('dplyr', 'rwebppl'), .combine=rbind) %dopar% simulateAtTheta(i)
 stopCluster(cl)
 etm <- proc.time() - ptm
 cat("runtime: ", etm[3] / 60)
+
 ```
 
 ```{r processSimulations}
-dfSims <- do.call(rbind, sims)
+# dfSims <- do.call(rbind, sims)
 ```
 
 ```{r}
-dfSims %>%
+dSims %>%
   group_by(theta, expNum, first) %>%
   mutate(first_n=sum(freq),
          postProb=log2(freq/first_n)) %>%
@@ -242,7 +294,7 @@ dfSims %>%
          likelihood=freq/second_n,
          marked=first=='X') %>%
   ungroup %>%
-  filter(second %in% c('r', 'g', 'b', 'y', 'p'), marked) %>%
+  filter(second %in% letters[1:5], marked) %>%
   select(second, postProb, likelihood, theta) %>%
   group_by(theta, second) %>%
   summarise(
@@ -256,7 +308,7 @@ dfSims %>%
 
 
 ```{r plotErrorBars2}
-dfSims %>%
+dSims %>%
   group_by(theta, expNum, first) %>%
   mutate(first_n=sum(freq),
          postProb=log2(freq/first_n)) %>%
@@ -266,7 +318,7 @@ dfSims %>%
          likelihood=freq/second_n,
          marked=first=='X') %>%
   ungroup %>%
-  filter(second %in% c('r', 'g', 'b', 'y', 'p'), marked) %>%
+  filter(second %in% letters[1:5], marked) %>%
   select(second, postProb, likelihood, theta) %>%
   group_by(theta, second) %>%
   summarise(
@@ -285,7 +337,7 @@ dfSims %>%
 ```
 
 ```{r plotScatter2}
-dfSims %>%
+dSims %>%
   group_by(theta, expNum, first) %>%
   mutate(first_n=sum(freq),
          postProb=log2(freq/first_n)) %>%
@@ -294,7 +346,7 @@ dfSims %>%
   mutate(second_n=sum(freq),
          likelihood=freq/second_n,
          marked=first=='X') %>%
-  filter(second %in% c('r', 'g', 'b', 'y', 'p'), marked) %>%
+  filter(second %in% letters[1:5], marked) %>%
   select(theta, second, marked, postProb, likelihood, expNum) %>%
   ggplot(aes(x=postProb, y=likelihood)) +
     geom_point(aes(col=second), alpha=0.5) +
@@ -314,7 +366,7 @@ dfAgg <- df %>%
   mutate(second_n=sum(freq),
          likelihood=freq/second_n,
          marked=first=='X') %>%
-  filter(second %in% c('r', 'g', 'b', 'y', 'p'), marked) %>%
+  filter(second %in% letters[1:5], marked) %>%
   select(theta, second, marked, postProb, likelihood, expNum)
 ```
 

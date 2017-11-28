@@ -20,10 +20,10 @@ var getN = function(rData) {
 var THETA = getTheta(rData)
 var N = getN(rData)
 
-var worldDistr = Categorical({
-  vs:[{color:'r'}, {color:'g'}, {color:'b'}, {color:'p'}, {color:'y'}], 
-  ps:[0.1, 0.5, 1, 1, 1]
-})
+//var worldDistr = Categorical({
+//  vs:[{color:'a'}, {color:'b'}, {color:'c'}, {color:'d'}, {color:'e'}], 
+//  ps:[0.1, 0.2, 1, 1, 1]
+//})
 var worldPrior = function() {return sample(worldDistr)}
 var worldGenerator = function() {
   /* Note that this should eventually be different from `worldPrior`. Ideally we will have more "complex"
@@ -34,18 +34,18 @@ var worldGenerator = function() {
 }
 
 var utteranceDistr = Categorical({
-  vs:['r', 'g', 'b', 'p', 'y', 'X r', 'X g', 'X b', 'X p', 'X y', 'X', ''], 
-  ps:[1, 1, 1, 1, 1, 0.8, 0.8, 0.8, 0.8, 0.8, 0.1, 0.01]
+  vs:['a', 'b', 'c', 'd', 'e', 'X a', 'X b', 'X c', 'X d', 'X e', 'X', ''], 
+  ps:[ 1,   1,   1,   1,   1,   0.5,   0.5,   0.5,   0.5,   0.5,  0.1, 0.01]
 })
 var utterancePrior = function() {return sample(utteranceDistr)}
 
 var utteranceMeaning = function(utterance) {
   var lastCharIndex = utterance.length - 1
-  return utterance.includes('r') ? utterance.charAt(lastCharIndex) :
-         utterance.includes('g') ? utterance.charAt(lastCharIndex) :
+  return utterance.includes('a') ? utterance.charAt(lastCharIndex) :
          utterance.includes('b') ? utterance.charAt(lastCharIndex) :
-         utterance.includes('p') ? utterance.charAt(lastCharIndex) :
-         utterance.includes('y') ? utterance.charAt(lastCharIndex) :
+         utterance.includes('c') ? utterance.charAt(lastCharIndex) :
+         utterance.includes('d') ? utterance.charAt(lastCharIndex) :
+         utterance.includes('e') ? utterance.charAt(lastCharIndex) :
          sample(worldDistr)['color']
 }
 
@@ -288,9 +288,9 @@ var runListener = function(listenerModel, nameOut) {
   console.log(nameOut)
   console.log('X')
   viz.table(listenerModel('X'))
-  console.log('X r')
-  viz.table(listenerModel('X r'))
-  console.log('r')
+  console.log('X a')
+  viz.table(listenerModel('X a'))
+  console.log('a')
   viz.table(listenerModel('r'))
   console.log('X b')
   viz.table(listenerModel('X b'))
@@ -302,8 +302,8 @@ var runListener = function(listenerModel, nameOut) {
 
 var runSpeaker = function(speakerModel, nameout) {
   console.log(nameout)
-  console.log("{color:'r'}")
-  viz.table(speakerModel({color:'r'}))
+  console.log("{color:'a'}")
+  viz.table(speakerModel({color:'a'}))
   console.log("{color:'b'}")
   viz.table(speakerModel({color:'b'}))
 }
