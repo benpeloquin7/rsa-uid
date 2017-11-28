@@ -7,8 +7,10 @@ output: html_document
 
 
 ```{r packages, warning=FALSE, message=FALSE}
+library(doParallel)
 library(dplyr)
 library(ggplot2)
+library(parallel)
 library(rwebppl)
 library(tidyr)
 ```
@@ -63,7 +65,7 @@ var worldDistr = Categorical({
 
 
 # Preference for high semantic suprisal items
-```{r}
+```{r runFn}
 buildCompleteModel <- function(needProbs) {
   completeModelStr <- paste(needProbs, BASE.MODEL)
   completeModelStr
@@ -101,9 +103,11 @@ runExp1 <- function(modelName) {
 }
 ```
 
-# Do `speakers` prefer marked utterances to unmarked as a function of need probability (`p(w_i)`)
+# Question 1: Do `speakers` prefer marked utterances to unmarked as a function of need probability (`p(w_i)`)
+
+## Varying theta, holding model `S1DV` constant.
 ```{r run-experiment1}
-df <- runExp1('S1DVD')
+df <- runExp1('S1DV')
 ```
 
 ```{r plot run-experiment1}
@@ -116,24 +120,49 @@ df %>%
   summarise(aggProb=sum(prob)) %>%
   mutate(supportType=ifelse(supportStr %in% c('X a', 'a'), 'a', ifelse(supportStr %in% c('X e', 'e'), 'e', 'other'))) %>%
   ungroup %>%
-  # filter(isPrimaryCompare) %>%
 ggplot(aes(x=theta, y=aggProb, col=as.factor(supportType), lty=as.factor(isMarked))) +
   geom_line() +
-  facet_wrap(~input)
+  facet_wrap(~input) +
+  ylab("P(u|m)") +
+  theme_bw()
 ```
 
+UID predicts `P(marked version|{color: a}) >> P(marked version|{color: e})`.
+
+## Varying model
+* recursive depth
+* noise awareness (`D` noise, `V`: no noise)
+  + `S1DV` -- S1 speaker considers noise, L0 listener doesn't consider noise
+  ...
+  + `S2DVDV` -- S2 speaker considers noise, L1 doesn't, S1 consider noise, L0 doesn't
+```{r parallel-setup}
+no_cores <- detectCores() - 1
+cl <- makeCluster(no_cores)
+registerDoParallel(cl) 
+```
+
+```{r runParSims}
+models <- c('S1DD', 'S1DV', 'S1VV', 'S2DVDV', 'S2DDDD', 'S2VVVV', 'S2DVVV')
+ptm <- proc.time()
+dSims <- foreach(m=models, .combine=rbind, .packages=c('dplyr', 'rwebppl')) %dopar% runExp1(m)
+stopCluster(cl)
+etm <- proc.time() - ptm
+cat("runtime: ", etm[3] / 60)
+```
+
+
 ```{r run-experimen1-2}
-dfS1DD <- runExp1('S1DD')
-# dfS1VD <- runExp1('S1VD')
+# dfS1DD <- runExp1('S1DD')
+# dfS1DV <- runExp1('S1DV')
 # dfS1VV <- runExp1('S1VV')
 # dfS2DVDV <- runExp1('S2DVDV')
 # dfS2DDDD <- runExp1('S2DDDD')
 # dfS2VVVV <- runExp1('S2VVVV')
-dfAgg <- rbind(dfS1DD, dfS1VD, dfS1VV, dfS2DVDV, dfS2DDDD, dfS2VVVV)
+# dfAgg <- rbind(dfS1DD, dfS1VD, dfS1VV, dfS2DVDV, dfS2DDDD, dfS2VVVV)
 ```
 
-```{r plot run-experiment1}
-dfAgg %>%
+```{r plot-run-experiment2}
+dSims %>%
   mutate(support=as.character(support),
          isMarked=substring(support, 1, 1) == 'X',
          isPrimaryCompare=ifelse(input=='a', support %in% c('X a', 'a'), support %in% c('X e', 'e')),
@@ -142,8 +171,184 @@ dfAgg %>%
   summarise(aggProb=sum(prob)) %>%
   mutate(supportType=ifelse(supportStr %in% c('X a', 'a'), 'a', ifelse(supportStr %in% c('X e', 'e'), 'e', 'other'))) %>%
   ungroup %>%
-  # filter(isPrimaryCompare) %>%
 ggplot(aes(x=theta, y=aggProb, col=as.factor(supportType), lty=as.factor(isMarked))) +
   geom_line() +
-  facet_grid(input~modelType)
+  facet_grid(input~modelType) +
+  theme_bw() +
+  theme(axis.text.x=element_text(angle=90, hjust=1), 
+          plot.title=element_text(hjust=0.5, size=14))
 ```
+
+### Interim summary
+
+*Do speakers prefer marked versions as noise increases? Yes.*
+
+* At least one speaker must be aware of noise.
+* Higher-order speakers respond more quickly to noise than lower-order (propogation of noise?)
+* Including listener noise reduces posterior prob of marked version (see difference between `S1DV` and `S1DD`, `S2DDDD` and `S2DVDV`)
+
+# Question 2 Do `listener` generate an "um" implicature -- interpret an utterance "X" as the high suprisal item.
+
+```{r exp2RunFn}
+runExp2 <- function(modelName) {
+  nRuns <- 10
+  models <- rep(modelName, nRuns*4)
+  inputs <- c(rep('a', nRuns), rep('X a', nRuns), rep('e', nRuns), rep('X e', nRuns))
+  needProbs <- rep(variableNeedProbs, nRuns*4)
+  needProbTypes <- rep('variable', nRuns*4)
+  thetas <- rep(seq(0.1, 0.9, length.out=nRuns), 4)
+  
+  dRuns <- mapply(run, models, inputs, needProbs, needProbTypes, thetas, SIMPLIFY=FALSE)
+  df <- do.call(rbind, dRuns)
+  rownames(df) <- 1:nrow(df)
+  df
+}
+```
+
+```{r exp2Run}
+df2 <- runExp2('')
+```
+
+```{r exp2Plot}
+df2 %>%
+  ggplot(aes(x=theta, y=prob, col=color)) +
+    geom_line() +
+    facet_wrap(~input)
+```
+
+Listeners are more likely to make the "correct" interpretation with marked versions.
+
+### Um implicature - single model
+
+```{r exp3RunFn}
+runExp3 <- function(modelName) {
+  nRuns <- 10
+  models <- rep(modelName, nRuns)
+  inputs <- rep('X', nRuns)
+  needProbs <- rep(variableNeedProbs, nRuns)
+  needProbTypes <- rep('variable', nRuns)
+  thetas <- seq(0.1, 0.9, length.out=nRuns)
+  
+  dRuns <- mapply(run, models, inputs, needProbs, needProbTypes, thetas, SIMPLIFY=FALSE)
+  df <- do.call(rbind, dRuns)
+  rownames(df) <- 1:nrow(df)
+  df
+}
+
+```
+
+```{r exp3Run}
+df3 <- runExp3('L1VDD')
+```
+
+```{r exp3Plot}
+df3 %>%
+  ggplot(aes(x=theta, y=prob, fill=color)) +
+    geom_bar(stat='identity', position='dodge') +
+    theme_bw() +
+    ylab('P(m|u)')
+```
+
+For `L1VDD` the posterior strongly reflectsion the semantic prior over worlds.
+
+### Um implicature - varying model, varying need probs.
+
+```{r exp4Setup}
+# model <-'L2DDDVV'
+# model <-'L2DDVVV'
+model <-'L2VVVDD'
+
+variableNeedProbs10 <- "
+var worldDistr = Categorical({
+  vs:[{color:'a'}, {color:'b'}, {color:'c'}, {color:'d'}, {color:'e'}], 
+  ps:[0.1, 1, 1, 1, 1]
+})
+"
+
+variableNeedProbs50 <- "
+var worldDistr = Categorical({
+  vs:[{color:'a'}, {color:'b'}, {color:'c'}, {color:'d'}, {color:'e'}], 
+  ps:[0.50, 1, 1, 1, 1]
+})
+"
+
+variableNeedProbs85 <- "
+var worldDistr = Categorical({
+  vs:[{color:'a'}, {color:'b'}, {color:'c'}, {color:'d'}, {color:'e'}], 
+  ps:[0.85, 1, 1, 1, 1]
+})
+"
+```
+
+```{r exp4RunFn}
+runExp4 <- function(modelName) {
+  nRuns <- 10
+  combs <- 3
+  models <- rep(modelName, nRuns * combs)
+  inputs <- rep('X', nRuns * combs)
+  needProbs <- c(rep(variableNeedProbs10, nRuns), rep(variableNeedProbs50, nRuns), rep(variableNeedProbs85, nRuns))
+  needProbTypes <- c(rep('variableNeedProbs10', nRuns), rep('variableNeedProbs50', nRuns), rep('variableNeedProbs85', nRuns))
+  thetas <- rep(seq(0.1, 0.9, length.out=nRuns), combs)
+  
+  dRuns <- mapply(run, models, inputs, needProbs, needProbTypes, thetas, SIMPLIFY=FALSE)
+  df <- do.call(rbind, dRuns)
+  rownames(df) <- 1:nrow(df)
+  df
+}
+```
+
+```{r exp4Run}
+timeFn <- function(fn) {
+  return(function(x) {
+    ptm <- proc.time()
+    res <- fn(x)
+    etm <- proc.time() - ptm
+    cat("runtime: ", etm[3] / 60)  
+    res
+  })
+}
+timeRunExp4 <- timeFn(runExp4)
+df4 <- timeRunExp4(model)
+```
+
+```{r exp4Plot}
+df4 %>% 
+  ggplot(aes(x=theta, y=prob, col=color)) +
+    # geom_bar(stat='identity', position='dodge') +
+    geom_line() +
+    theme_bw() +
+    ylab('P(m|u)') +
+    facet_grid(~needType)
+```
+
+```{r exp5RunFn}
+# par setup
+no_cores <- detectCores() - 1
+cl <- makeCluster(no_cores)
+registerDoParallel(cl) 
+
+# run
+models <- c('L2DDVVV', 'L2DDDVV', 'L2VVVDD')
+ptm <- proc.time()
+dSims5 <- foreach(m=models, .combine=rbind, .packages=c('dplyr', 'rwebppl')) %dopar% runExp4(m)
+stopCluster(cl)
+etm <- proc.time() - ptm
+cat("runtime: ", etm[3] / 60)
+```
+```{r exp5Plot}
+dSims5 %>%
+  mutate(semSurprisal=ifelse(needType=='variableNeedProbs10', 'high', ifelse(needType=='variableNeedProbs50', 'medium', 'low'))) %>%
+  ggplot(aes(x=theta, y=prob, fill=color)) +
+    geom_bar(stat='identity', position='dodge') +  
+    facet_grid(semSurprisal~modelType) +
+    theme_bw()
+```
+
+### Interim summary
+
+*Do listeners make infer that 'X' refers to the high surprisal item? No.*
+
+* At high-levels of theta the posteriors converge (if the prior on the low-prob items isn't too extreme (see diff btwn `0.5` and `0.1`)).
+* But, clearly isn't clear sign of that implicature.
+* Interesting to note the importance of having higher-order noise awareness. (Compare `L2DDVVV` to `L2VVVDD`).
+* Note: problems running at higher levels of recursion (`L3`).

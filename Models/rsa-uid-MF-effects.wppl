@@ -280,6 +280,7 @@ var S2DDVV = buildSpeakerModel(L1DVV, utterancePrior, deleteNoiseModel)
 var S2DVVV = buildSpeakerModel(L1VVV, utterancePrior, deleteNoiseModel) //
 var S2DVVD = buildSpeakerModel(L1VVD, utterancePrior, deleteNoiseModel)
 var S2VDDV = buildSpeakerModel(L1DDV, utterancePrior, vacuousNoiseModel)
+var S2VDVD = buildSpeakerModel(L1DVD, utterancePrior, vacuousNoiseModel)
 var S2DVDV = buildSpeakerModel(L1VDV, utterancePrior, deleteNoiseModel)
 var S2DVVD = buildSpeakerModel(L1VVD, utterancePrior, deleteNoiseModel)
 var S2VVDV = buildSpeakerModel(L1VDV, utterancePrior, vacuousNoiseModel)
@@ -298,6 +299,19 @@ var L2DDVVV = buildListenerModel(S2DVVV, worldPrior, deleteNoiseModel) // um imp
 var L2DDVDV = buildListenerModel(S2DVDV, worldPrior, deleteNoiseModel)
 var L2DDDVV = buildListenerModel(S2DDVV, worldPrior, deleteNoiseModel)
 var L2DDVDV = buildListenerModel(S2DVDV, worldPrior, deleteNoiseModel)
+var L2DDDDD = buildListenerModel(S2DDDD, worldPrior, deleteNoiseModel)
+var L2DDDDV = buildListenerModel(S2DDDV, worldPrior, deleteNoiseModel)
+var L2DDDVD = buildListenerModel(S2DDVD, worldPrior, deleteNoiseModel)
+var L2DDVDD = buildListenerModel(S2DVDD, worldPrior, deleteNoiseModel)
+var L2DVDDD = buildListenerModel(S2VDDD, worldPrior, deleteNoiseModel)
+var L2DDVVD = buildListenerModel(S2DVVD, worldPrior, deleteNoiseModel)
+var L2DVVDD = buildListenerModel(S2VVDD, worldPrior, deleteNoiseModel)
+var L2VVDDD = buildListenerModel(S2VDDD, worldPrior, vacuousNoiseModel)
+var L2DVDDV = buildListenerModel(S2VDDV, worldPrior, deleteNoiseModel)
+var L2VDDDV = buildListenerModel(S2DDDV, worldPrior, deleteNoiseModel)
+var L2VDDVD = buildListenerModel(S2DDVD, worldPrior, vacuousNoiseModel)
+var L2VDVDD = buildListenerModel(S2DVDD, worldPrior, vacuousNoiseModel)
+var L2DVDVD = buildListenerModel(S2VDVD, worldPrior, deleteNoiseModel)
 
 var S3DVVVVV = buildSpeakerModel(L2VVVVV, utterancePrior, deleteNoiseModel)
 var S3DVDVDV = buildSpeakerModel(L2VDVDV, utterancePrior, deleteNoiseModel)
@@ -337,7 +351,29 @@ var models = {
   'S2VVDV': S2VVDV,
   'S2VDVV': S2VDVV,
   'S2DVVV': S2DVVV,
-  'S2VVVV': S2VVVV }
+  'S2VVVV': S2VVVV,
+  'L2DDDDD': L2DDDDD,
+  'L2DDDDV': L2DDDDV,
+  'L2DDDVD': L2DDDVD,
+  'L2DDVDD': L2DDVDD,
+  'L2DVDDD': L2DVDDD,
+  'L2VDDDD': L2VDDDD,
+  'L2DDDVV': L2DDDVV,
+  'L2DDVVD': L2DDVVD,
+  'L2DVVDD': L2DVVDD,
+  'L2VVDDD': L2VVDDD,
+  'L2DDVDV': L2DDVDV,
+  'L2DVDDV': L2DVDDV,
+  'L2VDDDV': L2VDDDV,
+  'L2VDDVD': L2VDDVD,
+  'L2VDVDD': L2VDVDD,
+  'L2DVDVD': L2DVDVD,
+  'L2VDVDD': L2VDVDD,
+  'L2DDVVV': L2DDVVV,
+  'L2VVVDD': L2VVVDD,
+  'S3DVVVVV': S3DVVVVV,
+  'L3DDVVVVV': L3DDVVVVV
+  }
 
 var getModel = function(modelName) {
   return models[modelName]
