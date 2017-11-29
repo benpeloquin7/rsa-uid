@@ -51,7 +51,7 @@ speakerModels <- c(
 variableNeedProbs <- "
 var worldDistr = Categorical({
   vs:[{color:'a'}, {color:'b'}, {color:'c'}, {color:'d'}, {color:'e'}], 
-  ps:[0.1, 0.5, 1, 1, 1]
+  ps:[0.1, 0.3, 0.5, 0.7, 1]
 })
 "
 
@@ -71,17 +71,18 @@ buildCompleteModel <- function(needProbs) {
   completeModelStr
 }
 
-run <- function(modelName, input, needProbs, needType, theta) {
+run <- function(modelName, input, needProbs, needType, theta, alpha=1) {
   completeModelStr <- buildCompleteModel(needProbs)
   isSpeakerExp <- unlist(strsplit(modelName, ''))[1] == 'S'
   isVariableNeeds <- needProbs
-  rData <- data.frame(modelName=modelName, theta=theta, input=input, isSpeakerExp=isSpeakerExp)
+  rData <- data.frame(modelName=modelName, theta=theta, input=input, isSpeakerExp=isSpeakerExp, alpha=alpha)
   d <- webppl(completeModelStr, data=rData, data_var='rData') %>%
     mutate(input=input,
            theta=theta,
            modelType=modelName,
            isSpeaker=isSpeakerExp,
-           needType=needType)
+           needType=needType,
+           alpha=alpha)
   d
 }
 ```
@@ -90,13 +91,15 @@ run <- function(modelName, input, needProbs, needType, theta) {
 ```{r experiment1-setup}
 runExp1 <- function(modelName) {
   nRuns <- 10
-  models <- rep(modelName, nRuns*2)
-  inputs <- c(rep('a', nRuns), rep('e', nRuns))
-  needProbs <- rep(variableNeedProbs, nRuns*2)
-  needProbTypes <- rep('variable', nRuns*2)
-  thetas <- rep(seq(0.1, 0.9, length.out=nRuns), 2)
+  combs <- 4
+  models <- rep(modelName, nRuns*combs)
+  inputs <- c(rep('a', nRuns), rep('e', nRuns), rep('b', nRuns), rep('c', nRuns))
+  needProbs <- rep(variableNeedProbs, nRuns*combs)
+  needProbTypes <- rep('variable', nRuns*combs)
+  alphas <- rep(2, nRuns*combs)
+  thetas <- rep(seq(0.1, 0.9, length.out=nRuns), combs)
   
-  dRuns <- mapply(run, models, inputs, needProbs, needProbTypes, thetas, SIMPLIFY=FALSE)
+  dRuns <- mapply(run, models, inputs, needProbs, needProbTypes, thetas, alphas, SIMPLIFY=FALSE)
   df <- do.call(rbind, dRuns)
   rownames(df) <- 1:nrow(df)
   df
@@ -106,26 +109,96 @@ runExp1 <- function(modelName) {
 # Question 1: Do `speakers` prefer marked utterances to unmarked as a function of need probability (`p(w_i)`)
 
 ## Varying theta, holding model `S1DV` constant.
-```{r run-experiment1}
-df <- runExp1('S1DV')
+```{r run-experiment1a}
+df1a <- runExp1('S1DV')
 ```
 
-```{r plot run-experiment1}
-df %>%
+```{r plot run-experiment1a}
+df1a %>%
   mutate(support=as.character(support),
          isMarked=substring(support, 1, 1) == 'X',
-         isPrimaryCompare=ifelse(input=='a', support %in% c('X a', 'a'), support %in% c('X e', 'e')),
-         supportStr=ifelse(support %in% c('X a', 'a', 'X e', 'e'), support, 'other')) %>%
-  group_by(input, theta, supportStr, isMarked, isPrimaryCompare) %>%
-  summarise(aggProb=sum(prob)) %>%
-  mutate(supportType=ifelse(supportStr %in% c('X a', 'a'), 'a', ifelse(supportStr %in% c('X e', 'e'), 'e', 'other'))) %>%
-  ungroup %>%
-ggplot(aes(x=theta, y=aggProb, col=as.factor(supportType), lty=as.factor(isMarked))) +
-  geom_line() +
-  facet_wrap(~input) +
-  ylab("P(u|m)") +
-  theme_bw()
+         isPrimaryCompare=ifelse(input=='a', support %in% c('X a', 'a'), 
+                                 ifelse(input=='e', support %in% c('X e', 'e'),
+                                        ifelse(input=='b', support %in% c('X b', 'b'),
+                                               ifelse(input=='c', support %in% c('X c', 'c'), FALSE))))) %>%
+  filter(isPrimaryCompare) %>%
+  ggplot(aes(x=theta, y=prob, col=as.factor(input))) +
+    geom_line(aes(lty=isMarked)) +
+    ylab("P(u|m)") +
+    facet_grid(~modelType) +
+    theme_bw()
 ```
+
+## Varying `alpha` and theta, hodling model `S1DV` constant.
+```{r experiment1b-setup}
+runExp1b <- function(modelName) {
+  nRuns <- 10
+  combs <- 4
+  models <- rep(modelName, nRuns*combs)
+  inputs <- c(rep('a', nRuns*2), rep('e', nRuns*2))
+  needProbs <- rep(variableNeedProbs, nRuns*combs)
+  needProbTypes <- rep('variable', nRuns*combs)
+  alphas <- rep(c(rep(1, nRuns), rep(3, nRuns)), 2)
+  thetas <- rep(seq(0.1, 0.9, length.out=nRuns), combs)
+  
+  dRuns <- mapply(run, models, inputs, needProbs, needProbTypes, thetas, alphas, SIMPLIFY=FALSE)
+  df <- do.call(rbind, dRuns)
+  rownames(df) <- 1:nrow(df)
+  df
+}
+
+```
+
+```{r run-experiment1b}
+df1b <- runExp1b('S1DV')
+```
+
+```{r plot run-experiment1b}
+df1b %>%
+  mutate(support=as.character(support),
+         isMarked=substring(support, 1, 1) == 'X',
+         isPrimaryCompare=ifelse(input=='a', support %in% c('X a', 'a'), 
+                                 ifelse(input=='e', support %in% c('X e', 'e'),
+                                        ifelse(input=='b', support %in% c('X b', 'b'),
+                                               ifelse(input=='c', support %in% c('X c', 'c'), FALSE))))) %>%
+  filter(isPrimaryCompare) %>%
+  ggplot(aes(x=theta, y=prob, col=as.factor(input))) +
+    geom_line(aes(lty=isMarked)) +
+    ylab("P(u|m)") +
+    facet_grid(alpha~modelType) +
+    theme_bw()
+```
+
+### (Analytically) reproducing Levy & Jaeger (2007) Figure 1.
+
+Complete this with all input types... currently we just have `a` and `e`.
+
+```{r}
+worldDistr <- c(0.1, 0.3, 0.55, 0.7, 1)
+worldDistr <- worldDistr / sum(worldDistr)
+
+
+df1a %>%
+  mutate(roundTheta=round(theta, digits=2),
+         support=as.character(support),
+         isMarked=substring(support, 1, 1) == 'X',
+         isPrimaryCompare=ifelse(input=='a', support %in% c('X a', 'a'), 
+                                 ifelse(input=='e', support %in% c('X e', 'e'),
+                                        ifelse(input=='b', support %in% c('X b', 'b'),
+                                               ifelse(input=='c', support %in% c('X c', 'c'), FALSE))))) %>%
+  group_by(input) %>%
+  mutate(uncondProb=ifelse(input=='a', worldDistr[1],
+                           ifelse(input=='b', worldDistr[2],
+                                  ifelse(input=='c', worldDistr[3], worldDistr[4]))),
+         postProb=log2(uncondProb),
+         marked=ifelse(support %in% sapply(letters[1:5], function(x) paste('X', x)), 'marked', 'unmarked')) %>%
+  ungroup %>%
+  filter(isPrimaryCompare, isMarked) %>%
+  ggplot(aes(x=postProb, y=prob, col=support)) +
+    geom_point() +
+    facet_grid(~roundTheta)
+```
+
 
 UID predicts `P(marked version|{color: a}) >> P(marked version|{color: e})`.
 

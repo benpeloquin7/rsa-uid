@@ -21,8 +21,14 @@ var getTheta = function(rData) {
   return data['theta']
 }
 
+var getAlpha = function(rData) {
+  var data = rData[0]
+  return data['alpha']
+}
+
 
 var THETA = getTheta(rData)
+var ALPHA = getAlpha(rData)
 var worldPrior = function() {return sample(worldDistr)}
 var worldGenerator = function() {
   /* Note that this should eventually be different from `worldPrior`. Ideally we will have more "complex"
@@ -117,7 +123,7 @@ var buildSpeakerModel = function(listenerModel, utterancePrior, noiseModel) {
           var utterance = utterancePrior()
           var noisyUtterance = noiseModel(utterance)
           var L = listenerModel(noisyUtterance)
-          factor(L.score(world))
+          factor(ALPHA*L.score(world))
           return utterance
         }
       })
@@ -128,7 +134,7 @@ var buildSpeakerModel = function(listenerModel, utterancePrior, noiseModel) {
         model() {
           var utterance = utterancePrior()
           var L = listenerModel(utterance)
-          factor(L.score(world))
+          factor(ALPHA*L.score(world))
           return utterance 
         }
       })
