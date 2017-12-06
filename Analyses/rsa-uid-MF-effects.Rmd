@@ -110,7 +110,9 @@ runExp1 <- function(modelName) {
 
 ## Varying theta, holding model `S1DV` constant.
 ```{r run-experiment1a}
-df1a <- runExp1('S1DV')
+ptm <- proc.time()
+df1a <- runExp1('S2DVDV')
+cat('runtime: ', (proc.time() - ptm)[3]/60)
 ```
 
 ```{r plot run-experiment1a}
@@ -270,8 +272,9 @@ runExp2 <- function(modelName) {
   needProbs <- rep(variableNeedProbs, nRuns*4)
   needProbTypes <- rep('variable', nRuns*4)
   thetas <- rep(seq(0.1, 0.9, length.out=nRuns), 4)
+  alphas <- rep(20, nRuns*4)
   
-  dRuns <- mapply(run, models, inputs, needProbs, needProbTypes, thetas, SIMPLIFY=FALSE)
+  dRuns <- mapply(run, models, inputs, needProbs, needProbTypes, thetas, alphas, SIMPLIFY=FALSE)
   df <- do.call(rbind, dRuns)
   rownames(df) <- 1:nrow(df)
   df
@@ -279,7 +282,9 @@ runExp2 <- function(modelName) {
 ```
 
 ```{r exp2Run}
-df2 <- runExp2('')
+ptm <- proc.time()
+df2 <- runExp2('L1VDV')
+cat('runtime: ', (proc.time() - ptm)[3]/60)
 ```
 
 ```{r exp2Plot}
@@ -301,8 +306,9 @@ runExp3 <- function(modelName) {
   needProbs <- rep(variableNeedProbs, nRuns)
   needProbTypes <- rep('variable', nRuns)
   thetas <- seq(0.1, 0.9, length.out=nRuns)
+  alphas <- rep(10, nRuns)
   
-  dRuns <- mapply(run, models, inputs, needProbs, needProbTypes, thetas, SIMPLIFY=FALSE)
+  dRuns <- mapply(run, models, inputs, needProbs, needProbTypes, thetas, alphas, SIMPLIFY=FALSE)
   df <- do.call(rbind, dRuns)
   rownames(df) <- 1:nrow(df)
   df
@@ -311,7 +317,9 @@ runExp3 <- function(modelName) {
 ```
 
 ```{r exp3Run}
+ptm <- proc.time()
 df3 <- runExp3('L1VDD')
+cat('runtime: ', (proc.time() - ptm)[3]/60)
 ```
 
 ```{r exp3Plot}
@@ -362,8 +370,9 @@ runExp4 <- function(modelName) {
   needProbs <- c(rep(variableNeedProbs10, nRuns), rep(variableNeedProbs50, nRuns), rep(variableNeedProbs85, nRuns))
   needProbTypes <- c(rep('variableNeedProbs10', nRuns), rep('variableNeedProbs50', nRuns), rep('variableNeedProbs85', nRuns))
   thetas <- rep(seq(0.1, 0.9, length.out=nRuns), combs)
+  alphas <- rep(10, nRuns*combs)
   
-  dRuns <- mapply(run, models, inputs, needProbs, needProbTypes, thetas, SIMPLIFY=FALSE)
+  dRuns <- mapply(run, models, inputs, needProbs, needProbTypes, thetas, alphas, SIMPLIFY=FALSE)
   df <- do.call(rbind, dRuns)
   rownames(df) <- 1:nrow(df)
   df
@@ -408,6 +417,7 @@ stopCluster(cl)
 etm <- proc.time() - ptm
 cat("runtime: ", etm[3] / 60)
 ```
+
 ```{r exp5Plot}
 dSims5 %>%
   mutate(semSurprisal=ifelse(needType=='variableNeedProbs10', 'high', ifelse(needType=='variableNeedProbs50', 'medium', 'low'))) %>%
