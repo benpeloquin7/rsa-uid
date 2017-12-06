@@ -52,9 +52,9 @@ runExperimentFn <- function(runFn, modelName, alpha, lambda, theta, n) {
     df 
   })
 }
-rDataVec <- c('S1', 50, 20, 0.8, 500)
-runExp1 <- runExperimentFn(runFn, 'S1', 50, 20, 0.5, 1000)
-runExp2 <- runExperimentFn(runFn, 'S1', 5, 1, 0.2, 1000)
+nSamples <- 10
+runExp1 <- runExperimentFn(runFn, 'S2', 2, 1, 0.4, nSamples)
+runExp2 <- runExperimentFn(runFn, 'S1', 5, 1, 0.2, nSamples)
 ```
 
 ```{r lmAnalysisFn}
@@ -82,33 +82,62 @@ createLM <- function(dfCorpus) {
 
 ## Test on single run
 ```{r}
+# 5000 samples ~ 5min
+ptm <- proc.time()
 dfExp1 <- runExp1(1)
-dfExp1LM <- createLM(dfExp1)
+dfExp1LM <- createLM  (dfExp1)
+etm <- proc.time() - ptm
+cat('run time at', nSamples, ' is ', etm[3]/60)
+```
 
+```{r play1}
+# 7087 total bigram counts
+# 323 a's 
+dfExp1 %>%
+  group_by(currUtterance, isSuccess) %>%
+  summarise(n=n())
+  
+  
+```
 
+```{r play1}
+# 7087 total bigram counts
+# 323 a's 
 dfExp1LM %>%
   group_by(expNum, second) %>%
-  mutate(secondTotalProp=sum(prop),       # p(a|X) + p(a|^)
-         lik=prop/secondTotalProp) %>%    # p(X|a) = p(X a) / p(a|X) + p(a|^)
+  mutate(secondUncondProb=sum(prop),       # p(a|X) + p(a|^)
+         lik=prop/secondUncondProb) %>%
+  ungroup %>%
+  ggplot(aes(x=first, y=lik, fill=second)) +
+    geom_bar(stat='identity', position='dodge')
+```
+
+
+```{r}
+dfExp1LM %>%
+  group_by(expNum, second) %>%
+  mutate(secondUncondProb=sum(prop),       # p(a|X) + p(a|^)
+         lik=prop/secondUncondProb) %>%    # p(X|a) = p(X a) / p(a|X) + p(a|^)
   ungroup %>%
   group_by(expNum) %>%
-  mutate(postProb=log2(secondTotalProp/sum(prop))) %>%  # p(a)
+  mutate(logUncondProb=log2(secondUncondProb)) %>%  # p(a)
+  # ungroup %>%
+  # filter(first=='X') %>%
+  # select(ngrams, prop, lik, postProb)
+  # 
+  # 
+  # select(lik)
   ungroup %>%
-  filter(second=='e')
-
-
-  select(lik)
-  ungroup %>%
-  select(expNum, first, second, lik, postProb) %>%
+  select(expNum, first, second, lik, logUncondProb) %>%
   filter(second %in% c(letters[1:5], '*'), first=='X') %>%
   group_by(second) %>%
   summarise(
-    avgPostProb=mean(postProb),
-    xmin=quantile(postProb, probs=c(0.05)),
-    xmax=quantile(postProb, probs=c(0.95)),
+    avgPostProb=mean(logUncondProb),
+    xmin=quantile(logUncondProb, probs=c(0.025)),
+    xmax=quantile(logUncondProb, probs=c(0.975)),
     avgLikelihood=mean(lik),
-    ymin=quantile(lik, probs=c(0.05)),
-    ymax=quantile(lik, probs=c(0.95))) %>%
+    ymin=quantile(lik, probs=c(0.025)),
+    ymax=quantile(lik, probs=c(0.975))) %>%
   ggplot(aes(x=avgPostProb, y=avgLikelihood, col=as.factor(second))) +
     geom_point() +
     geom_errorbar(aes(ymax=ymax, ymin=ymin)) +
@@ -179,4 +208,19 @@ df %>%
       theme_bw()
 ```
 
+
+```{r}
+worldPrior <- c(0.12, 0.16, 0.24, 0.48)
+pXa <- c(0.68, 0.00004, 0.001, 0.04)
+pa <- c(0.32, 0.00007, 0.002, 0.086)
+df1 <- data.frame(world=letters[1:4], pCond=pXa, pWorld=worldPrior, form='full')
+df2 <- data.frame(world=letters[1:4], pCond=pa, pWorld=worldPrior, form='partial')
+dfComb <- rbind(df1, df2)
+dfComb %>%
+  mutate(pJoint=pCond*pWorld) %>%
+  group_by(world, form) %>%
+  summarize(prob=sum(pJoint)) %>%
+  spread(form, prob) %>%
+  mutate(ratio=full/(full+partial))
+```
 
