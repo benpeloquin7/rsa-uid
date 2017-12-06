@@ -48,14 +48,15 @@ var ALPHA = getAlpha(rData)
 var THETA = getTheta(rData)
 var N = getN(rData)
 
-var utterances = ['X a', 'a', 'X b', 'b', 'X c', 'c', 'X d', 'd', 'X e', 'e', 'X', '']
+var utterances = ['X a', 'a', 'X b', 'b', 'X c', 'c', 'X d', 'd', 'X', '']
 var utteranceProbs1 = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
-var utteranceProbs2 = [0.5, 1, 0.5, 1, 0.5, 1, 0.5, 1, 0.5, 1, 0.1, 0.01]
-var utterancesDistr = Categorical({vs:utterances, ps:utteranceProbs2})
+var utteranceProbs2 = [0.5, 1, 0.5, 1, 0.5, 1, 0.5, 1, , 0.1, 0.01]
+var utterancesDistr = Categorical({vs:utterances, ps:utteranceProbs1})
 var utterancesPrior = function() {return sample(utterancesDistr)}
 
-var worlds = [{d:'a'}, {d:'b'}, {d:'c'}, {d:'d'}, {d:'e'}]
-var worldProbs = [1, 2, 3, 4, 5]
+var worlds = [{d:'a'}, {d:'b'}, {d:'c'}, {d:'d'},]
+var worldProbs = [0.1, 0.2, 0.4, 0.8]
+var zipfianWorldProbs = [1, 1.33, 2, 4]
 var worldsDistr = Categorical({vs:worlds, ps:worldProbs})
 var worldsPrior = function() {return sample(worldsDistr)}
 
@@ -109,8 +110,7 @@ var utteranceMeaning = function(utterance) {
   return utterance.includes('a') ? utterance.charAt(lastCharIndex) :
          utterance.includes('b') ? utterance.charAt(lastCharIndex) : 
          utterance.includes('c') ? utterance.charAt(lastCharIndex) : 
-         utterance.includes('d') ? utterance.charAt(lastCharIndex) : 
-         utterance.includes('e') ? utterance.charAt(lastCharIndex) : 
+         utterance.includes('d') ? utterance.charAt(lastCharIndex) :
          sample(worldsDistr)['d']
 }
 
@@ -141,9 +141,10 @@ var S1 = function(world) {
   Infer({
     model() {
       var intendedUtterance = utterancesPrior()
-      var producedUtterance = deleteNoiseModel(intendedUtterance)
-      var L = L0(producedUtterance)
-      factor(ALPHA*L.score(world))
+      //var producedUtterance = deleteNoiseModel(intendedUtterance)
+      //var L = L0(producedUtterance)
+      var L = L0(intendedUtterance)
+      factor((L.score(world)))
       return intendedUtterance
     }
   })
@@ -167,7 +168,7 @@ var S2 = function(world) {
       var intendedUtterance = utterancesPrior()
       var producedUtterance = deleteNoiseModel(intendedUtterance)
       var L = L1(producedUtterance)
-      factor(ALPHA*L.score(world))
+      factor(ALPHA*(L.score(world)))
       return intendedUtterance
     }
   })
@@ -240,7 +241,8 @@ var getModel = function(modelName) {
   var models = {
     'L0': L0,
     'S1': S1,
-    'L1': L1
+    'L1': L1,
+    'S2': S2
   }
   return models[modelName]
 }
