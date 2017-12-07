@@ -18,6 +18,7 @@ getModelFile <- function(fPath) {
   readChar(fPath, file.info(fPath)$size)
 }
 fPath <- '/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/rsa-uid-corpus-generation-20171201.wppl'
+fPath <- '/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/rsa-uid-corpus-generation-20171206.wppl'
 modelStr <- getModelFile(fPath)
 ```
 
@@ -52,8 +53,8 @@ runExperimentFn <- function(runFn, modelName, alpha, lambda, theta, n) {
     df 
   })
 }
-nSamples <- 10
-runExp1 <- runExperimentFn(runFn, 'S2', 2, 1, 0.4, nSamples)
+nSamples <- 250
+runExp1 <- runExperimentFn(runFn, 'S2', 1, 1, 0.5, nSamples)
 runExp2 <- runExperimentFn(runFn, 'S1', 5, 1, 0.2, nSamples)
 ```
 
@@ -82,7 +83,7 @@ createLM <- function(dfCorpus) {
 
 ## Test on single run
 ```{r}
-# 5000 samples ~ 5min
+# S2DVVV 100 samples ~ 23s
 ptm <- proc.time()
 dfExp1 <- runExp1(1)
 dfExp1LM <- createLM  (dfExp1)
@@ -94,10 +95,9 @@ cat('run time at', nSamples, ' is ', etm[3]/60)
 # 7087 total bigram counts
 # 323 a's 
 dfExp1 %>%
-  group_by(currUtterance, isSuccess) %>%
-  summarise(n=n())
-  
-  
+  group_by(currUtterance, currWorld, isSuccess) %>%
+  summarise(n=n()) %>%
+  arrange(desc(n))
 ```
 
 ```{r play1}
@@ -157,7 +157,8 @@ registerDoParallel(cl)
 
 ```{r}
 ptm <- proc.time()
-simsExp1 <- foreach(i=seq(1, 100), .packages=c('dplyr', 'rwebppl'), .combine=rbind) %dopar% runExp1(i)
+nIters <-50
+simsExp1 <- foreach(i=seq(1, nIters), .packages=c('dplyr', 'rwebppl'), .combine=rbind) %dopar% runExp1(i)
 stopCluster(cl)
 etm <- proc.time() - ptm
 cat("runtime: ", etm[3] / 60)
@@ -169,14 +170,30 @@ lSimsExp1 <- simsExp1 %>%
   do(vals=data.frame(.)) %>%
   lapply(function(x) {(x)})
 
-rData <- newRData('S1', 50, 1, 0.8, 1000)
-lD <- lapply(lSimsExp1$vals, function(x) {createLM(x, rData)})
+lD <- lapply(lSimsExp1$vals, function(x) {createLM(x)})
 df <- do.call(rbind, lD)
 ```
 
 
 ```{r}
-df
+df %>%
+  group_by(expNum, second) %>%
+  mutate(secondTotalProp=sum(prop),       # p(a|X) + p(a|^)
+         lik=prop/secondTotalProp) %>%    # p(X|a) = p(X a) / p(a|X) + p(a|^)
+  ungroup %>%
+  group_by(expNum) %>%
+  mutate(postProb=log2(secondTotalProp/sum(prop))) %>%  # p(a)
+  ungroup %>%
+  select(expNum, first, second, lik, postProb) %>%
+  filter(second %in% c(letters[1:5], '*'), first=='X') %>%
+  group_by(second) %>%
+  summarise(
+    avgPostProb=mean(postProb),
+    xmin=quantile(postProb, probs=c(0.05)),
+    xmax=quantile(postProb, probs=c(0.95)),
+    avgLikelihood=mean(lik),
+    ymin=quantile(lik, probs=c(0.05)),
+    ymax=quantile(lik, probs=c(0.95)))
 ```
 
 
@@ -201,12 +218,70 @@ df %>%
     ymax=quantile(lik, probs=c(0.95))) %>%
     ggplot(aes(x=avgPostProb, y=avgLikelihood, col=as.factor(second))) +
       geom_point() +
-      geom_errorbar(aes(ymax=ymax, ymin=ymin)) +
-      geom_errorbarh(aes(xmax=xmax, xmin=xmin)) +
+      geom_errorbar(aes(ymax=ymax, ymin=ymin, width=0)) +
+      geom_errorbarh(aes(xmax=xmax, xmin=xmin, height=0)) +
+      geom_smooth(group=0) +
       ylab('Likelihood of marked version') +
       xlab('mean(log(p(utt))') +
       theme_bw()
 ```
+
+```{r}
+df %>%
+  group_by(expNum, second) %>%
+  mutate(secondTotalProp=sum(prop),       # p(a|X) + p(a|^)
+         lik=prop/secondTotalProp) %>%    # p(X|a) = p(X a) / p(a|X) + p(a|^)
+  ungroup %>%
+  group_by(expNum) %>%
+  mutate(postProb=log2(secondTotalProp/sum(prop))) %>%  # p(a)
+  ungroup %>%
+  select(expNum, first, second, lik, postProb) %>%
+  filter(second %in% c(letters[1:5], '*'), first=='X') %>%
+  ggplot(aes(x=postProb, y=lik, col=as.factor(second))) +
+    geom_point() +
+    ylab('Likelihood of marked version') +
+    xlab('mean(log(p(utt))') +
+    theme_bw()
+```
+
+
+```{r}
+df %>%
+  group_by(expNum, second) %>%
+  mutate(secondTotalProp=sum(prop),       # p(a|X) + p(a|^)
+         lik=prop/secondTotalProp) %>%    # p(X|a) = p(X a) / p(a|X) + p(a|^)
+  ungroup %>%
+  group_by(expNum) %>%
+  mutate(postProb=log2(secondTotalProp/sum(prop))) %>%  # p(a)
+  ungroup %>%
+  select(expNum, first, second, lik, postProb) %>%
+  filter(second %in% c(letters[1:5], '*'), first=='X') %>%
+  group_by(expNum) %>%
+  mutate(dist=lik - mean(lik)) %>%
+  ungroup %>%
+  group_by(second) %>%
+  summarise(
+    avgDist=mean(dist),                        # add likelihood rank
+    distMin=quantile(dist, probs=c(0.05)),        # add likelihood rank
+    distMax=quantile(dist, probs=c(0.95)),        # add likelihood rank
+    avgPostProb=mean(postProb),
+    postProbMin=quantile(postProb, probs=c(0.05)),
+    postProbMax=quantile(postProb, probs=c(0.95)),
+    avgLikelihood=mean(lik),
+    likMin=quantile(lik, probs=c(0.05)),
+    likMax=quantile(lik, probs=c(0.95))) %>%
+  select(second, avgDist, distMin, distMax, avgPostProb, postProbMin, postProbMax) %>%
+  ggplot(aes(x=avgPostProb, y=avgDist, col=as.factor(second))) +
+      geom_point() +
+      geom_errorbar(aes(ymax=distMax, ymin=distMin, width=0)) +
+      geom_errorbarh(aes(xmax=postProbMax, xmin=postProbMin, height=0)) +
+      ylab('Likelihood of marked version') +
+      xlab('mean(log(p(utt))') +
+      # ylim(-.5, .5) +
+      theme_bw()
+  
+```
+
 
 
 ```{r}
