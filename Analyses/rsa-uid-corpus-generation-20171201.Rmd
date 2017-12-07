@@ -53,7 +53,7 @@ runExperimentFn <- function(runFn, modelName, alpha, lambda, theta, n) {
     df 
   })
 }
-nSamples <- 250
+nSamples <- 300
 runExp1 <- runExperimentFn(runFn, 'S2', 1, 1, 0.5, nSamples)
 runExp2 <- runExperimentFn(runFn, 'S1', 5, 1, 0.2, nSamples)
 ```
@@ -82,7 +82,7 @@ createLM <- function(dfCorpus) {
 ```
 
 ## Test on single run
-```{r}
+```{r testRun}
 # S2DVVV 100 samples ~ 23s
 ptm <- proc.time()
 dfExp1 <- runExp1(1)
@@ -91,16 +91,16 @@ etm <- proc.time() - ptm
 cat('run time at', nSamples, ' is ', etm[3]/60)
 ```
 
-```{r play1}
+```{r checks, eval=FALSE}
 # 7087 total bigram counts
 # 323 a's 
 dfExp1 %>%
   group_by(currUtterance, currWorld, isSuccess) %>%
   summarise(n=n()) %>%
-  arrange(desc(n))
+  arrange(currWorld)
 ```
 
-```{r play1}
+```{r plot1}
 # 7087 total bigram counts
 # 323 a's 
 dfExp1LM %>%
@@ -113,7 +113,7 @@ dfExp1LM %>%
 ```
 
 
-```{r}
+```{r plot2}
 dfExp1LM %>%
   group_by(expNum, second) %>%
   mutate(secondUncondProb=sum(prop),       # p(a|X) + p(a|^)
@@ -121,12 +121,6 @@ dfExp1LM %>%
   ungroup %>%
   group_by(expNum) %>%
   mutate(logUncondProb=log2(secondUncondProb)) %>%  # p(a)
-  # ungroup %>%
-  # filter(first=='X') %>%
-  # select(ngrams, prop, lik, postProb)
-  # 
-  # 
-  # select(lik)
   ungroup %>%
   select(expNum, first, second, lik, logUncondProb) %>%
   filter(second %in% c(letters[1:5], '*'), first=='X') %>%
@@ -149,13 +143,13 @@ dfExp1LM %>%
 
 
 ## Simulations
-```{r}
+```{r parSetup}
 no_cores <- detectCores() - 1
 cl <- makeCluster(no_cores, type='FORK')
 registerDoParallel(cl)
 ```
 
-```{r}
+```{r runPar}
 ptm <- proc.time()
 nIters <-50
 simsExp1 <- foreach(i=seq(1, nIters), .packages=c('dplyr', 'rwebppl'), .combine=rbind) %dopar% runExp1(i)
@@ -164,7 +158,7 @@ etm <- proc.time() - ptm
 cat("runtime: ", etm[3] / 60)
 ```
 
-```{r}
+```{r preprocessParData}
 lSimsExp1 <- simsExp1 %>%
   group_by(expNum) %>%
   do(vals=data.frame(.)) %>%
@@ -175,7 +169,7 @@ df <- do.call(rbind, lD)
 ```
 
 
-```{r}
+```{r checkParRun}
 df %>%
   group_by(expNum, second) %>%
   mutate(secondTotalProp=sum(prop),       # p(a|X) + p(a|^)
@@ -197,7 +191,7 @@ df %>%
 ```
 
 
-```{r}
+```{r parPlot1}
 df %>%
   group_by(expNum, second) %>%
   mutate(secondTotalProp=sum(prop),       # p(a|X) + p(a|^)
@@ -226,7 +220,7 @@ df %>%
       theme_bw()
 ```
 
-```{r}
+```{r parPlot2}
 df %>%
   group_by(expNum, second) %>%
   mutate(secondTotalProp=sum(prop),       # p(a|X) + p(a|^)
@@ -243,59 +237,3 @@ df %>%
     xlab('mean(log(p(utt))') +
     theme_bw()
 ```
-
-
-```{r}
-df %>%
-  group_by(expNum, second) %>%
-  mutate(secondTotalProp=sum(prop),       # p(a|X) + p(a|^)
-         lik=prop/secondTotalProp) %>%    # p(X|a) = p(X a) / p(a|X) + p(a|^)
-  ungroup %>%
-  group_by(expNum) %>%
-  mutate(postProb=log2(secondTotalProp/sum(prop))) %>%  # p(a)
-  ungroup %>%
-  select(expNum, first, second, lik, postProb) %>%
-  filter(second %in% c(letters[1:5], '*'), first=='X') %>%
-  group_by(expNum) %>%
-  mutate(dist=lik - mean(lik)) %>%
-  ungroup %>%
-  group_by(second) %>%
-  summarise(
-    avgDist=mean(dist),                        # add likelihood rank
-    distMin=quantile(dist, probs=c(0.05)),        # add likelihood rank
-    distMax=quantile(dist, probs=c(0.95)),        # add likelihood rank
-    avgPostProb=mean(postProb),
-    postProbMin=quantile(postProb, probs=c(0.05)),
-    postProbMax=quantile(postProb, probs=c(0.95)),
-    avgLikelihood=mean(lik),
-    likMin=quantile(lik, probs=c(0.05)),
-    likMax=quantile(lik, probs=c(0.95))) %>%
-  select(second, avgDist, distMin, distMax, avgPostProb, postProbMin, postProbMax) %>%
-  ggplot(aes(x=avgPostProb, y=avgDist, col=as.factor(second))) +
-      geom_point() +
-      geom_errorbar(aes(ymax=distMax, ymin=distMin, width=0)) +
-      geom_errorbarh(aes(xmax=postProbMax, xmin=postProbMin, height=0)) +
-      ylab('Likelihood of marked version') +
-      xlab('mean(log(p(utt))') +
-      # ylim(-.5, .5) +
-      theme_bw()
-  
-```
-
-
-
-```{r}
-worldPrior <- c(0.12, 0.16, 0.24, 0.48)
-pXa <- c(0.68, 0.00004, 0.001, 0.04)
-pa <- c(0.32, 0.00007, 0.002, 0.086)
-df1 <- data.frame(world=letters[1:4], pCond=pXa, pWorld=worldPrior, form='full')
-df2 <- data.frame(world=letters[1:4], pCond=pa, pWorld=worldPrior, form='partial')
-dfComb <- rbind(df1, df2)
-dfComb %>%
-  mutate(pJoint=pCond*pWorld) %>%
-  group_by(world, form) %>%
-  summarize(prob=sum(pJoint)) %>%
-  spread(form, prob) %>%
-  mutate(ratio=full/(full+partial))
-```
-
