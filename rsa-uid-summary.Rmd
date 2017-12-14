@@ -1,0 +1,38 @@
+---
+title: "rsa-uid-summary"
+author: "Ben"
+date: "12/6/2017"
+output: html_document
+---
+
+# The pragmatics of Uniform Information Density
+
+## Intro
+
+A remarkable result of natural language is the  ability to communicate about a potentially infinite set of meanings from a finite set of tools. However, an alternative view of this combinatorial expressivity is less rosy; as speakers we may face a potentially infinite number of ways to communicate just a single meaning. How do we navigate this decision space? 
+
+Under one view, the Uniform Information Density hypothesis (UID), if speakers are rational and communication takes place in a noisy environment, they should attempt to optimize communicative properties of their signal. In particular, speakers should plan their utterance so that its information rate is both uniform and close to channel capacity (Levy & Jaeger 2007). One interpretation of this hypothesis frames utterance production as a function of both speaker and listener considerations -- speakers should attempt to minimize listener comprehension difficulty while avoiding disproportionately costly utterances (Levy & Jaeger 2007).  While UID and UID-related work has successfully characterized aspects of production at multiple levels of abstraction (Aylett & Turk, 2004, Bell et al. 2003, Frank & Jaeger, 2008, Levy & Jaeger, 2007, Genzel & Charniak, 2002) it has done so without an explicit representation of listeners.
+
+In the following work, we address listener representation directly -- exploring the degree to which UID effects can emerge in speakers who reason about how listeners will interpret their utterances under noise conditions. To do so, we employ a class of computational pragmatics models known as rational speech act models (RSA) (Goodman & Frank, 2016, Frank & Goodman, 2012) conducting a series of experiments simulating UID-like effects in pragmatic agents. Under this view, UID effects are related to both processing (cost) and pragmatic (social reasoning) mechanisms.
+
+We begin with an overview of UID and RSA, discussing shared and diverging components. Next, we propose a modified RSA model, introducing a noisy channel into the framework (noisy-RSA). Following an analysis of noisy-RSA speaker / listener behavior we conduct a series of experiments aimed at replicating UID effects found in Levy & Jaeger (2007). We end with a discussion of our findings and a summary of next steps.
+
+## Uniform Information Density
+
+## Rational Speech-act theory
+
+## Noisy RSA
+
+$$P_{S_2}(u|m) \propto e^{\lambda U(u|m)}$$
+$$U(u|m) \propto log(P_{L_1}(m|u))-\text{cost}(u)$$
+$$P_{S_2}(u|m) \propto exp{-\alpha(-log(P_{L_1}(m|u))-\text{cost}(u))]$$
+
+## Simulations
+
+### Speaker preference to mark utterances when they are high surprisal
+
+### Listener "um"-implicature
+
+### Replicating Levy & Jaeger (2007)
+
+### General Discussion
