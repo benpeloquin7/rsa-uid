@@ -50,9 +50,14 @@ df %>%
     theme(plot.title=element_text(hjust = 0.5))
 ```
 
+
+!["Levy & Jaeger (2007), Fig1"](/Users/benpeloquin/Desktop/Projects/rsa_uid/img/levy-jaeger-2007-fig1.png)
+
+
 ```{r}
 summary(lm(lik~supr, data=df))
 ```
+
 ```{r}
 df %>%
   filter(lik>0.75, total>5)
