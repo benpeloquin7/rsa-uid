@@ -1,0 +1,59 @@
+---
+title: "rsa-uid-switchboard"
+author: "Ben"
+date: "12/14/2017"
+output: html_document
+---
+
+```{r packages, message=FALSE, warning=FALSE}
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+```
+
+
+```{r data}
+setwd('/Users/benpeloquin/Desktop/Projects/rsa_uid/')
+df <- read.csv('Data/switchboard-uh-data-20171214.csv')
+```
+
+```{r preprocess}
+df <- df %>%
+  select(after, before, lik, supr, total) %>%
+  unique
+```
+
+
+```{r counts-histogram}
+df %>%
+  ggplot(aes(x=total)) +
+    geom_density()
+```
+
+```{r counts-check}
+df %>%
+  group_by(total) %>%
+  summarise(cnt=n()) %>% 
+  head()
+```
+
+```{r info-plot}
+df %>%
+  filter(total > 4, before!='^') %>%
+  ggplot(aes(x=supr, y=lik, size=total)) +
+    geom_point() +
+    geom_smooth(method='lm') +
+    xlab('log(p(w_i|w_{i-1}))') +
+    ylab('cnt(w_i|w_{i-2} + "uh")/cnt(w_i|w_{i-2})') +
+    ggtitle('Likelihood of disfluency as a function of bigram LM informativity') + 
+    theme_bw() +
+    theme(plot.title=element_text(hjust = 0.5))
+```
+
+```{r}
+summary(lm(lik~supr, data=df))
+```
+```{r}
+df %>%
+  filter(lik>0.75, total>5)
+```
