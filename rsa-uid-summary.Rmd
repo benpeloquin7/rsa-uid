@@ -13,7 +13,7 @@ setwd("/Users/benpeloquin/Desktop/Projects/rsa_uid/")
 ```
 
 
-# Information-theoretic account of listener expectations during disfluency
+# Information-theoretic account of **listener expectations** during disfluency
 
 ## Modeling
 
@@ -43,7 +43,7 @@ Noise <- function(theta) {
 getModelFile <- function(fPath) {
   readChar(fPath, file.info(fPath)$size)
 }
-modelFile <- getModelFile(file.path('Models', 'um-implicature-model-20171215.wppl'))
+modelFile <- getModelFile(file.path('Models', 'um-listener-model-20171215.wppl'))
 ```
 
 ```{r um-implicature-helpers, echo=FALSE}
@@ -69,7 +69,7 @@ run <- function(modelName, alpha, lambda, theta) {
 }
 ```
 
-```{r um-implicature-run, echo=FALSE}
+```{r um-implicature-run, echo=FALSE, warning=FALSE, message=FALSE}
 thetas <- seq(0.05, 0.95, 0.05)
 modelNames <- rep('L1', length(thetas))
 ALPHA <- 1
@@ -85,6 +85,12 @@ cat("run time:", etm[3]/60)
 ```
 
 Noise aware listeners who reason about (noise-aware) speakers generate "um"-implicature -- preference for high-surpsial items given UID cue ("um").
+
+$U \in \{``X a", ``X b", ``a", ``b"\}$
+
+$P(U=u) = [0.1666667, 0.3333333, 0.1666667, 0.3333333]$
+
+$P(M=m) = [\{a\}:0.2, \{b\}:0.8]$
 
 ```{r um-impliucature-plot1}
 df %>%
@@ -108,7 +114,71 @@ Screen shot here - point to code somewhere...
 ```
 
 
-# A pragmatic/info-theoretic account of disfluency production.
+# A pragmatic/info-theoretic account of disfluency **production**.
+
+## Speaker modeling
+
+```{r readModelFileSpeaker, echo=FALSE}
+getModelFile <- function(fPath) {
+  readChar(fPath, file.info(fPath)$size)
+}
+modelFile <- getModelFile(file.path('Models', 'um-speaker-model-20171215.wppl'))
+```
+
+```{r production-helpers}
+newRData <- function(modelName, alpha, lambda, theta, speakerInput) {
+  data.frame(modelName=modelName,
+             alpha=alpha,
+             lambda=lambda,
+             theta=theta,
+             speakerInput=speakerInput,
+             stringsAsFactors=FALSE)
+}
+
+runUmModel <- function(data, dataName='rData') {
+  rwebppl::webppl(modelFile, data=data, data_var=dataName)
+}
+
+run <- function(modelName, alpha, lambda, theta, speakerInput) {
+  rData <- newRData(modelName, alpha, lambda, theta, speakerInput)
+  res <- runUmModel(rData) %>%
+    mutate(modelName=modelName,
+           alpha=alpha,
+           lambda=lambda,
+           theta=theta,
+           speakerInput=speakerInput)
+}
+```
+
+```{r um-speaker-run, echo=FALSE, warning=FALSE, message=FALSE}
+thetas <- rep(seq(0.05, 0.95, 0.05), 2)
+MODEL <- 'S2'
+modelNames <- rep(MODEL, length(thetas)*2)
+ALPHA <- 5
+LAMBDA <- 1
+alphas <- rep(ALPHA, length(thetas)*2)
+lambdas <- rep(LAMBDA, length(thetas)*2)
+speakerInputs <- c(rep('a', length(thetas)), rep('b', length(thetas)))
+
+ptm <- proc.time()
+df <- as.data.frame(do.call(rbind, mapply(run, modelNames, alphas, lambdas, thetas, speakerInputs, SIMPLIFY=FALSE)))
+rownames(df) <- 1:nrow(df)
+etm <- proc.time() - ptm
+cat("run time:", etm[3]/60)
+```
+
+```{r um-speaker-plot1}
+df %>% 
+  filter((support %in% c('X a', 'a') & speakerInput=='a') | (support %in% c('X b', 'b') & speakerInput=='b')) %>%
+  ggplot(aes(x=theta, y=prob, col=support)) +
+    geom_line() +
+    xlab('theta') +
+    ylab(paste0(MODEL, '(m|u)')) +
+    ggtitle(paste0('Probability of Um-implicature by noise level', ' (alpha=', ALPHA, ')')) +
+    theme_bw() +
+    theme(plot.title = element_text(hjust = 0.5))
+```
+
 
 Do speakers produce disfluencies prior to high-informativity content? Analysis of switchboard data.
 ```{r read-switchbaord-data}

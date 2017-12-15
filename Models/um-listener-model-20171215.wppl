@@ -1,0 +1,246 @@
+/***
+
+  rData
+  alpha
+  lambda
+  theta
+  modelName
+  N
+
+***/
+
+/*********************/
+/*********************/
+/******* SETUP *******/
+/*********************/
+/*********************/
+
+var getAlpha = function(rData) {
+  var data = rData[0]
+  return data['alpha']
+}
+
+var getLambda = function(rData) {
+  var data = rData[0]
+  return data['lambda']
+}
+
+var getTheta = function(rData) {
+  var data = rData[0]
+  return data['theta']
+}
+
+var getModelName = function(rData) {
+  var data = rData[0]
+  return data['modelName']
+}
+
+var getN = function(rData) {
+  var data = rData[0]
+  return data['n']
+}
+
+//var rData = [{'alpha':1, 'lambda':1, 'modelName':'L1', 'theta':0.1}]
+
+var LAMBDA = getLambda(rData)
+var ALPHA = getAlpha(rData)
+var THETA = getTheta(rData)
+
+var utterances = ['X a', 'a', 'X b', 'b']
+var utteranceProbs = [0.5, 1, 0.5, 1]
+var utterancesDistr = Categorical({vs:utterances, ps:utteranceProbs})
+var utterancesPrior = function() {return sample(utterancesDistr)}
+
+
+var worlds = [{d:'a'}, {d:'b'}]
+var worldProbs = [0.5, 2]
+var worldsDistr = Categorical({vs:worlds, ps:worldProbs})
+var worldsPrior = function() {return sample(worldsDistr)}
+
+/*********************/
+/*********************/
+/****** MODELS *******/
+/*********************/
+/*********************/
+
+// Noise
+var _removeEmptyItems = function(arr) {
+  filter(function(x) {return x != ''}, arr)
+}
+
+var replaceIndex = function(arr, index, replacement) {
+  return arr.slice(0, index).concat([replacement]).concat(arr.slice(index + 1, arr.length))
+}
+var transformUtterance = function(transformFn) {
+  return function(utterance) {
+      var tokens = utterance.split(' ')
+      var index = sample(RandomInteger({n:tokens.length}))
+      var replacement = transformFn(index)
+      return _removeEmptyItems(replaceIndex(tokens, index, replacement)).join(' ')
+  }  
+}
+var _deleteFn = function(s) {
+  return ''
+}
+var deleteTransform = transformUtterance(_deleteFn)
+
+var vacuousNoiseModel = function(utterance) {
+  return utterance
+}
+var deleteNoiseModel = function(utterance) {
+  return flip(THETA) ? deleteTransform(utterance) : utterance
+}
+
+var decode = function(utteranceProduced, noiseModel) {
+  Infer({
+    model() {
+      var utteranceIntended = utterancesPrior()
+      var noisyUtterance = noiseModel(utteranceIntended, THETA)
+      factor(utteranceProduced == noisyUtterance ? 0 : -Infinity)
+      return utteranceIntended
+    }
+  })
+}
+
+var utteranceMeaning = function(utterance) {
+  var lastCharIndex = utterance.length - 1
+  return utterance.includes('a') ? utterance.charAt(lastCharIndex) :
+         utterance.includes('b') ? utterance.charAt(lastCharIndex) :
+         utterance.includes('X') ? worldsPrior()['d'] : '*'
+}
+
+var meaning = function(utterance, world) {
+  var worldDim = world['d']
+  return utteranceMeaning(utterance) == worldDim
+}
+
+
+var L0 = function(utterance) {
+  Infer({
+    model() {
+      var world = worldsPrior()
+      var intendedUtterance = sample(decode(utterance, deleteNoiseModel))
+      var meaning = meaning(utteranceMeaning(intendedUtterance), world)
+      factor(meaning ? 0 : -Infinity)
+      return world
+    }
+  })
+}
+
+var cost = function(utterance) {
+  return utterance.split(' ').length
+}
+
+var S1 = function(world) {
+  Infer({
+    model() {
+      var intendedUtterance = utterancesPrior()
+      var producedUtterance = deleteNoiseModel(intendedUtterance)
+      var L = L0(producedUtterance)
+      factor(ALPHA*(L.score(world)))
+      return intendedUtterance
+    }
+  })
+}
+
+var L1 = function(utterance) {
+  Infer({
+    model() {
+      var world = worldsPrior()
+      var intendedUtterance = sample(decode(utterance, deleteNoiseModel))
+      var S = S1(world)
+      factor(LAMBDA*(S.score(intendedUtterance)))
+      return world
+    }
+  })
+}
+
+var S2 = function(world) {
+  Infer({
+    model() {
+      var intendedUtterance = utterancesPrior()
+      var producedUtterance = deleteNoiseModel(intendedUtterance)
+      var L = L1(producedUtterance)
+      factor(ALPHA*(L.score(world)))
+      return intendedUtterance
+    }
+  })
+}
+
+var L2 = function(utterance) {
+  Infer({
+    model() {
+      var world = worldsPrior()
+      var S = S2(world)
+      var intendedUtterance = sample(decode(utterance, deleteNoiseModel))
+      factor(LAMBDA*S.score(intendedUtterance))
+      return world
+    }
+  })
+}
+
+/*********************/
+/*********************/
+/**** CORPUS GEN *****/
+/*********************/
+/*********************/
+
+var runExperiment = function(speaker, world) {
+  return sample(speaker(world))
+}
+
+var runExperiments = function(worldGenerator, speaker, n, data) {
+  /*
+  Parameters
+  ----------
+  worldGenerator: fn
+    Generate a full world.
+  spekeaker: fn
+    RSA speaker function. Input worlds, output utterances.
+  n: int
+    Number of forward samples.
+  data: array
+    Data store (corpus).
+    
+  Returns
+  -------
+  array
+    Array of utterances.
+  
+  */
+  var world = worldGenerator()
+  var currUtt = runExperiment(speaker, world)  // really this should be a dict object with context
+  var success = utteranceMeaning(currUtt) == world['d']
+  var currData = {currUtterance:currUtt, currWorld:world['d'], isSuccess:success}
+  data.push(currData)
+  return n <= 1 ? data : runExperiments(worldGenerator, speaker, n-1, data)
+}
+
+var worldGenerator = function() {
+  /* Note that this should eventually be different from `worldsPrior`. Ideally we will have more "complex"
+  worlds of (a) multiple objects and (b) objects with multiple dimensions. In the 
+  single object, single object case this will look just like a single prior over a dimension.
+  */
+  return worldsPrior()
+}
+
+/*********************/
+/*********************/
+/******** run ********/
+/*********************/
+/*********************/
+
+var getModel = function(modelName) {
+  var models = {
+    'L0': L0,
+    'S1': S1,
+    'L1': L1,
+    'S2': S2,
+    'L2': L2
+  }
+  return models[modelName]
+}
+
+var modelName = getModelName(rData)
+var model = getModel(modelName)
+model('X')
