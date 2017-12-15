@@ -5,11 +5,142 @@ date: "12/6/2017"
 output: html_document
 ---
 
-# The pragmatics of Uniform Information Density
+```{r packages, warning=FALSE, message=FALSE}
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+setwd("/Users/benpeloquin/Desktop/Projects/rsa_uid/")
+```
+
+
+# Information-theoretic account of listener expectations during disfluency
+
+## Modeling
+
+Standard RSA with noise-aware listeners / speakers.
+
+$P_{L_0} \propto P(m)\sum_{u_i:m\in[[u_i]]}P(u_i)\times P_{Noise}(u_p|u_i)$
+
+$P_{S_1}(u|m) \propto e^{\alpha U(u|m)}$
+
+$U(u|m) \propto \sum_{u_p}P_{Noise}(u_p|u_i)\times log(P_{L_0}(m|u_p))-cost(u_i)$
+
+$P_{L_1}(m|u) \propto \lambda \times \sum_{m\in M}P_{Noise}(u_i|u_p)P_{S_1}(u_i|m)$
+
+```
+Noise <- function(theta) { 
+  return function(utterance) {
+      var tokens = utterance.split(' ')
+      var index = sample(RandomInteger({n:tokens.length}))
+      var replacement = transformFn(index)
+      return _removeEmptyItems(replaceIndex(tokens, index, replacement)).join(' ')
+    }  
+}
+
+```
+
+```{r readModelFile, echo=FALSE}
+getModelFile <- function(fPath) {
+  readChar(fPath, file.info(fPath)$size)
+}
+modelFile <- getModelFile(file.path('Models', 'um-implicature-model-20171215.wppl'))
+```
+
+```{r um-implicature-helpers, echo=FALSE}
+newRData <- function(modelName, alpha, lambda, theta) {
+  data.frame(modelName=modelName,
+             alpha=alpha,
+             lambda=lambda,
+             theta=theta,
+             stringsAsFactors=FALSE)
+}
+
+runUmModel <- function(data, dataName='rData') {
+  rwebppl::webppl(modelFile, data=data, data_var=dataName)
+}
+
+run <- function(modelName, alpha, lambda, theta) {
+  rData <- newRData(modelName, alpha, lambda, theta)
+  res <- runUmModel(rData) %>%
+    mutate(modelName=modelName,
+           alpha=alpha,
+           lambda=lambda,
+           theta=theta)
+}
+```
+
+```{r um-implicature-run, echo=FALSE}
+thetas <- seq(0.05, 0.95, 0.05)
+modelNames <- rep('L1', length(thetas))
+ALPHA <- 1
+LAMBDA <- 5
+alphas <- rep(ALPHA, length(thetas))
+lambdas <- rep(LAMBDA, length(thetas))
+
+ptm <- proc.time()
+df <- as.data.frame(do.call(rbind, mapply(run, modelNames, alphas, lambdas, thetas, SIMPLIFY=FALSE)))
+rownames(df) <- 1:nrow(df)
+etm <- proc.time() - ptm
+cat("run time:", etm[3]/60)
+```
+
+Noise aware listeners who reason about (noise-aware) speakers generate "um"-implicature -- preference for high-surpsial items given UID cue ("um").
+
+```{r um-impliucature-plot1}
+df %>%
+  mutate(label=ifelse(d=='a', 'High surprisal (-log2(p)=2.3)', 'Low suprisal (-log2(p)=0.32)')) %>%
+  ggplot(aes(x=theta, y=prob, col=label)) +
+    geom_line() +
+    xlab('theta') +
+    ylab('L1(m|u)') +
+    ggtitle(paste0('Probability of Um-implicature by noise level', ' (lambda=', LAMBDA, ')')) +
+    theme_bw() +
+    theme(plot.title = element_text(hjust = 0.5))
+```
+
+Note that implicature probability increases as a function of `theta` and `lambda` (although lambda is held constant here).
+
+## Proposed experiment: high(er) surprisal bias given disfluency cue.
+
+Screen shot here - point to code somewhere...
+```{r}
+
+```
+
+
+# A pragmatic/info-theoretic account of disfluency production.
+
+Do speakers produce disfluencies prior to high-informativity content? Analysis of switchboard data.
+```{r read-switchbaord-data}
+dfSB <- read.csv(file.path('Data', 'switchboard-uh-data-20171215.csv')) 
+dfSB <- dfSB %>%
+  select(disfluency, after, before, lik, supr, total) %>%
+  unique
+```
+
+```{r sb-plot1}
+dfSB %>%
+  filter(total > 4, before!='^') %>%
+  ggplot(aes(x=supr, y=lik, size=total)) +
+    geom_point(aes(col=after), alpha=0.6, stroke=0.75) +
+    geom_smooth(method='lm', group=0) +
+    xlab('log(p(w_i|w_{i-1}))') +
+    ylab('cnt(w_i|w_{i-2} + "uh")/\ncnt(w_i|w_{i-2})') +
+    ggtitle('Likelihood of disfluency as a function of bigram LM informativity') + 
+    theme_bw() +
+    theme(plot.title=element_text(hjust = 0.5),
+          legend.position="none")
+```
+
+Note this the basic direction of the effect as documented in Levy & Jaeger (2007) Fig1.
+
+!["Levy & Jaeger (2007), Fig1"](/Users/benpeloquin/Desktop/Projects/rsa_uid/img/levy-jaeger-2007-fig1.png)
+
+# Corpus generation
 
 ## Intro
 
-A remarkable result of natural language is the  ability to communicate about a potentially infinite set of meanings from a finite set of tools. However, an alternative view of this combinatorial expressivity is less rosy; as speakers we may face a potentially infinite number of ways to communicate just a single meaning. How do we navigate this decision space? 
+A remarkable result of the expressivity of natural language is the ability to communicate about a potentially infinite set of meanings from a finite set of tools (citation). But, by this same mechanism speakers may confront a potentially infinite number of ways to communicate just a single meaning. How do we navigate this decision space? 
 
 Under one view, the Uniform Information Density hypothesis (UID), if speakers are rational and communication takes place in a noisy environment, they should attempt to optimize communicative properties of their signal. In particular, speakers should plan their utterance so that its information rate is both uniform and close to channel capacity (Levy & Jaeger 2007). One interpretation of this hypothesis frames utterance production as a function of both speaker and listener considerations -- speakers should attempt to minimize listener comprehension difficulty while avoiding disproportionately costly utterances (Levy & Jaeger 2007).  While UID and UID-related work has successfully characterized aspects of production at multiple levels of abstraction (Aylett & Turk, 2004, Bell et al. 2003, Frank & Jaeger, 2008, Levy & Jaeger, 2007, Genzel & Charniak, 2002) it has done so without an explicit representation of listeners.
 
@@ -23,9 +154,8 @@ We begin with an overview of UID and RSA, discussing shared and diverging compon
 
 ## Noisy RSA
 
-$$P_{S_2}(u|m) \propto e^{\lambda U(u|m)}$$
-$$U(u|m) \propto log(P_{L_1}(m|u))-\text{cost}(u)$$
-$$P_{S_2}(u|m) \propto exp{-\alpha(-log(P_{L_1}(m|u))-\text{cost}(u))]$$
+
+
 
 ## Simulations
 
