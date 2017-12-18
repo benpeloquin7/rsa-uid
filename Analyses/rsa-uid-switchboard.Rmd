@@ -58,7 +58,19 @@ df %>%
 summary(lm(lik~supr, data=df))
 ```
 
+## Thinking about fitting `theta` in speaker model
+```{r}
+# df %>%
+#   filter(total > 4, before!='^') %>%
+#   mutate(numMarked=lik*total) %>%
+#   select(supr, total, numMarked) %>%
+#   write.csv('theta-fitting.csv')
+```
+
+
 ```{r}
 df %>%
-  filter(lik>0.75, total>5)
+  filter(total > 4, before!='^') %>%
+  mutate(semProb=exp(supr)) %>%
+  arrange(desc(lik))
 ```
