@@ -16,7 +16,7 @@ setwd("/Users/benpeloquin/Desktop/Projects/rsa_uid/")
 
 # Information-theoretic account of **listener expectations** during disfluency
 
-## Modeling
+### Listener model
 
 Standard RSA with noise-aware listeners / speakers.
 
@@ -107,11 +107,12 @@ df %>%
 
 Note that implicature probability increases as a function of `theta` and `lambda` (although lambda is held constant here).
 
-## Proposed experiment: high(er) surprisal bias given disfluency cue.
+### Proposed experiment: high(er) surprisal bias given disfluency cue.
 
 Screen shot here - point to code somewhere...
 ```{r exp-code}
-
+# Place-holder - See
+# https://github.com/benpeloquin7/rsa-uid/blob/master/Analyses/rsa-uid-switchboard.ipynb
 ```
 
 
@@ -181,7 +182,7 @@ df %>%
 ```
 
 
-## Switchboard speaker data
+### Switchboard speaker data
 
 Do speakers produce disfluencies prior to high-informativity content? Analysis of switchboard data.
 ```{r read-switchbaord-data}
@@ -271,6 +272,7 @@ etm <- proc.time() - ptm
 cat('run time:', etm[3]/60)
 ```
 
+Note below plot uses a tiny subset of the SB data. Should not be interepreted. This is just a place-holder.
 ```{r run-sb-data-fitting-plot1}
 df_bda %>%
   mutate(isMarked=ifelse(res=='X a', 1, 0)) %>%
@@ -282,11 +284,17 @@ df_bda %>%
             ymax=lik+qnorm(0.975)*sqrt(lik*(1-lik)/total)) %>%
   ggplot(aes(x=log2(semProb), y=lik)) +
     geom_errorbar(aes(ymax=ymax, ymin=ymin)) +
-    geom_point()
+    geom_point() +
+    theme_bw() +
+    ggtitle('RSA speaker modeling Switchboard disfluencies.')
 ```
 
 
 # Corpus generation
+```{r}
+# Add code from https://htmlpreview.github.io/?https://github.com/benpeloquin7/rsa-uid/blob/master/Analyses/rsa-uid-corpus-generation-20171201.html
+```
+
 
 ## Intro
 
