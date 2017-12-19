@@ -8,6 +8,11 @@
 var alphas = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 var alphaPrior = Categorical({ps:repeat(alphas.length, function() {return 1}), vs:alphas})
 var thetaPriorDistr = Uniform({a:0, b:1})
+var markedCost = Uniform({a:0, b:1})
+
+var cost = function(utterance) {
+  return utterance.split(' ').length / 10
+}
 
 // var experimentalData = [{semProb: 0.001, marked: 'X a'}, 
 //                         {semProb: 0.1, utt: 'a'},
@@ -18,106 +23,206 @@ var thetaPriorDistr = Uniform({a:0, b:1})
 //                         {semProb: 0.001, utt: 'X a'},
 //                         {semProb: 0.3, utt: 'a'}]
 
-var experimentalData = [{'marked': 'a', 'semProb': 0.0053159731055218455},
- {'marked': 'a', 'semProb': 0.015299898417040131},
- {'marked': 'a', 'semProb': 0.011026807778520224},
- {'marked': 'a', 'semProb': 0.10797848045731266},
- {'marked': 'a', 'semProb': 0.013238439270845049},
- {'marked': 'a', 'semProb': 0.0037625865912625771},
- {'marked': 'a', 'semProb': 0.02752165842543788},
- {'marked': 'a', 'semProb': 0.00987084766632936},
- {'marked': 'a', 'semProb': 0.013238439270845049},
- {'marked': 'a', 'semProb': 0.014559932879877153},
- {'marked': 'a', 'semProb': 0.081190103341166109},
- {'marked': 'a', 'semProb': 0.0023932795320961231},
- {'marked': 'a', 'semProb': 0.0010095228703882562},
- {'marked': 'a', 'semProb': 0.055046571702941173},
- {'marked': 'X a', 'semProb': 0.0036285947290404007},
- {'marked': 'a', 'semProb': 0.0065056082625198526},
- {'marked': 'a', 'semProb': 0.055046571702941173},
- {'marked': 'a', 'semProb': 0.00042768989590078491},
- {'marked': 'a', 'semProb': 0.014145440031183345},
- {'marked': 'a', 'semProb': 0.0070053965719909976},
- {'marked': 'a', 'semProb': 0.043603349753476246},
- {'marked': 'a', 'semProb': 0.013952035578291382},
- {'marked': 'a', 'semProb': 0.071610453688721029},
- {'marked': 'a', 'semProb': 0.028838701587612741},
- {'marked': 'a', 'semProb': 0.0030684081741926602},
- {'marked': 'a', 'semProb': 0.013952035578291382},
- {'marked': 'a', 'semProb': 0.001986256060880519},
- {'marked': 'a', 'semProb': 0.0046940644137598176},
- {'marked': 'a', 'semProb': 0.11046109898654194},
- {'marked': 'a', 'semProb': 0.02752165842543788},
- {'marked': 'a', 'semProb': 0.033729915377612878},
- {'marked': 'X a', 'semProb': 0.0060833188993940999},
- {'marked': 'a', 'semProb': 0.70828309544245438},
- {'marked': 'a', 'semProb': 0.028838701587612741},
- {'marked': 'a', 'semProb': 0.016758309947356251},
- {'marked': 'a', 'semProb': 0.087370437077600352},
- {'marked': 'a', 'semProb': 0.028134782927929959},
- {'marked': 'a', 'semProb': 0.028838701587612741},
- {'marked': 'a', 'semProb': 0.11046109898654194},
- {'marked': 'X a', 'semProb': 0.013952035578291382},
- {'marked': 'a', 'semProb': 0.0069364835424438566},
- {'marked': 'a', 'semProb': 0.0053159731055218455},
- {'marked': 'a', 'semProb': 0.0083499854044257853},
- {'marked': 'a', 'semProb': 0.010443712988049947},
- {'marked': 'a', 'semProb': 0.012363777426124387},
- {'marked': 'a', 'semProb': 0.029568350282991269},
- {'marked': 'a', 'semProb': 0.015299898417040131},
- {'marked': 'a', 'semProb': 0.01846020615653135},
- {'marked': 'a', 'semProb': 0.016758309947356251},
- {'marked': 'a', 'semProb': 0.071610453688721029},
- {'marked': 'a', 'semProb': 0.016758309947356251},
- {'marked': 'a', 'semProb': 0.013772672310763082},
- {'marked': 'a', 'semProb': 0.0069364835424438566},
- {'marked': 'X a', 'semProb': 0.00042768989590078491},
- {'marked': 'a', 'semProb': 0.12540138755318742},
- {'marked': 'a', 'semProb': 0.0014181235665053878},
- {'marked': 'a', 'semProb': 0.0018882026867153615},
- {'marked': 'a', 'semProb': 0.0056823470818059768},
- {'marked': 'a', 'semProb': 0.071610453688721029},
- {'marked': 'a', 'semProb': 0.00044813151573856855},
- {'marked': 'a', 'semProb': 0.022278548343534772},
- {'marked': 'X a', 'semProb': 0.0056247867335733068},
- {'marked': 'a', 'semProb': 0.010443712988049947},
- {'marked': 'a', 'semProb': 0.055046571702941173},
- {'marked': 'a', 'semProb': 0.015299898417040131},
- {'marked': 'X a', 'semProb': 0.0011035821150926907},
- {'marked': 'a', 'semProb': 0.043603349753476246},
- {'marked': 'a', 'semProb': 0.087370437077600352},
- {'marked': 'a', 'semProb': 0.0086502669960350099},
- {'marked': 'X a', 'semProb': 0.01846020615653135},
- {'marked': 'a', 'semProb': 0.071610453688721029},
- {'marked': 'a', 'semProb': 0.071610453688721029},
- {'marked': 'a', 'semProb': 0.12540138755318742},
- {'marked': 'a', 'semProb': 0.016758309947356251},
+var experimentalData = [{'marked': 'X a', 'semProb': 0.0088882384099008838},
+ {'marked': 'X a', 'semProb': 0.0088882384099008838},
+ {'marked': 'X a', 'semProb': 0.0088882384099008838},
+ {'marked': 'a', 'semProb': 0.0088882384099008838},
+ {'marked': 'a', 'semProb': 0.0088882384099008838},
+ {'marked': 'a', 'semProb': 0.0088882384099008838},
+ {'marked': 'a', 'semProb': 0.0088882384099008838},
+ {'marked': 'a', 'semProb': 0.0088882384099008838},
+ {'marked': 'a', 'semProb': 0.0088882384099008838},
+ {'marked': 'a', 'semProb': 0.0088882384099008838},
+ {'marked': 'a', 'semProb': 0.0088882384099008838},
+ {'marked': 'a', 'semProb': 0.0088882384099008838},
+ {'marked': 'a', 'semProb': 0.0088882384099008838},
+ {'marked': 'a', 'semProb': 0.0088882384099008838},
+ {'marked': 'a', 'semProb': 0.0088882384099008838},
+ {'marked': 'a', 'semProb': 0.0088882384099008838},
+ {'marked': 'a', 'semProb': 0.0088882384099008838},
+ {'marked': 'a', 'semProb': 0.0088882384099008838},
+ {'marked': 'a', 'semProb': 0.0088882384099008838},
+ {'marked': 'a', 'semProb': 0.0088882384099008838},
+ {'marked': 'a', 'semProb': 0.0088882384099008838},
+ {'marked': 'a', 'semProb': 0.0088882384099008838},
+ {'marked': 'a', 'semProb': 0.0088882384099008838},
+ {'marked': 'a', 'semProb': 0.0088882384099008838},
+ {'marked': 'a', 'semProb': 0.0088882384099008838},
+ {'marked': 'a', 'semProb': 0.0088882384099008838},
+ {'marked': 'a', 'semProb': 0.0088882384099008838},
+ {'marked': 'a', 'semProb': 0.0088882384099008838},
+ {'marked': 'a', 'semProb': 0.0088882384099008838},
+ {'marked': 'a', 'semProb': 0.0088882384099008838},
+ {'marked': 'a', 'semProb': 0.0088882384099008838},
+ {'marked': 'a', 'semProb': 0.0088882384099008838},
+ {'marked': 'a', 'semProb': 0.0088882384099008838},
+ {'marked': 'a', 'semProb': 0.0088882384099008838},
+ {'marked': 'a', 'semProb': 0.0088882384099008838},
+ {'marked': 'a', 'semProb': 0.0088882384099008838},
+ {'marked': 'a', 'semProb': 0.0088882384099008838},
+ {'marked': 'a', 'semProb': 0.0088882384099008838},
+ {'marked': 'a', 'semProb': 0.0088882384099008838},
+ {'marked': 'X a', 'semProb': 0.007314140248299854},
+ {'marked': 'X a', 'semProb': 0.007314140248299854},
+ {'marked': 'a', 'semProb': 0.007314140248299854},
+ {'marked': 'a', 'semProb': 0.007314140248299854},
+ {'marked': 'a', 'semProb': 0.007314140248299854},
+ {'marked': 'a', 'semProb': 0.007314140248299854},
+ {'marked': 'a', 'semProb': 0.007314140248299854},
+ {'marked': 'a', 'semProb': 0.007314140248299854},
+ {'marked': 'a', 'semProb': 0.007314140248299854},
+ {'marked': 'a', 'semProb': 0.007314140248299854},
+ {'marked': 'a', 'semProb': 0.007314140248299854},
+ {'marked': 'a', 'semProb': 0.007314140248299854},
+ {'marked': 'a', 'semProb': 0.007314140248299854},
+ {'marked': 'a', 'semProb': 0.007314140248299854},
+ {'marked': 'a', 'semProb': 0.007314140248299854},
+ {'marked': 'a', 'semProb': 0.007314140248299854},
+ {'marked': 'a', 'semProb': 0.007314140248299854},
+ {'marked': 'a', 'semProb': 0.007314140248299854},
+ {'marked': 'a', 'semProb': 0.007314140248299854},
+ {'marked': 'a', 'semProb': 0.007314140248299854},
+ {'marked': 'a', 'semProb': 0.007314140248299854},
+ {'marked': 'a', 'semProb': 0.007314140248299854},
+ {'marked': 'a', 'semProb': 0.007314140248299854},
+ {'marked': 'a', 'semProb': 0.007314140248299854},
+ {'marked': 'a', 'semProb': 0.007314140248299854},
+ {'marked': 'a', 'semProb': 0.007314140248299854},
+ {'marked': 'X a', 'semProb': 0.030121973994583145},
+ {'marked': 'X a', 'semProb': 0.030121973994583145},
+ {'marked': 'X a', 'semProb': 0.030121973994583145},
+ {'marked': 'X a', 'semProb': 0.030121973994583145},
+ {'marked': 'a', 'semProb': 0.030121973994583145},
+ {'marked': 'a', 'semProb': 0.030121973994583145},
+ {'marked': 'a', 'semProb': 0.030121973994583145},
+ {'marked': 'a', 'semProb': 0.030121973994583145},
+ {'marked': 'a', 'semProb': 0.030121973994583145},
+ {'marked': 'a', 'semProb': 0.030121973994583145},
+ {'marked': 'a', 'semProb': 0.030121973994583145},
+ {'marked': 'a', 'semProb': 0.030121973994583145},
+ {'marked': 'a', 'semProb': 0.030121973994583145},
+ {'marked': 'a', 'semProb': 0.030121973994583145},
+ {'marked': 'a', 'semProb': 0.030121973994583145},
+ {'marked': 'a', 'semProb': 0.030121973994583145},
+ {'marked': 'a', 'semProb': 0.030121973994583145},
+ {'marked': 'a', 'semProb': 0.030121973994583145},
+ {'marked': 'a', 'semProb': 0.030121973994583145},
+ {'marked': 'a', 'semProb': 0.030121973994583145},
+ {'marked': 'a', 'semProb': 0.030121973994583145},
+ {'marked': 'a', 'semProb': 0.030121973994583145},
+ {'marked': 'a', 'semProb': 0.030121973994583145},
+ {'marked': 'a', 'semProb': 0.030121973994583145},
+ {'marked': 'a', 'semProb': 0.030121973994583145},
+ {'marked': 'a', 'semProb': 0.030121973994583145},
+ {'marked': 'a', 'semProb': 0.030121973994583145},
+ {'marked': 'a', 'semProb': 0.030121973994583145},
+ {'marked': 'a', 'semProb': 0.030121973994583145},
+ {'marked': 'a', 'semProb': 0.030121973994583145},
+ {'marked': 'a', 'semProb': 0.030121973994583145},
+ {'marked': 'a', 'semProb': 0.030121973994583145},
+ {'marked': 'a', 'semProb': 0.030121973994583145},
+ {'marked': 'a', 'semProb': 0.030121973994583145},
+ {'marked': 'a', 'semProb': 0.030121973994583145},
+ {'marked': 'a', 'semProb': 0.030121973994583145},
+ {'marked': 'a', 'semProb': 0.030121973994583145},
+ {'marked': 'a', 'semProb': 0.030121973994583145},
+ {'marked': 'a', 'semProb': 0.030121973994583145},
+ {'marked': 'a', 'semProb': 0.030121973994583145},
+ {'marked': 'a', 'semProb': 0.030121973994583145},
+ {'marked': 'a', 'semProb': 0.030121973994583145},
+ {'marked': 'a', 'semProb': 0.030121973994583145},
+ {'marked': 'a', 'semProb': 0.030121973994583145},
+ {'marked': 'a', 'semProb': 0.030121973994583145},
+ {'marked': 'a', 'semProb': 0.030121973994583145},
+ {'marked': 'a', 'semProb': 0.030121973994583145},
+ {'marked': 'a', 'semProb': 0.030121973994583145},
+ {'marked': 'X a', 'semProb': 0.0026486885323097099},
+ {'marked': 'X a', 'semProb': 0.0026486885323097099},
+ {'marked': 'X a', 'semProb': 0.0026486885323097099},
+ {'marked': 'a', 'semProb': 0.0026486885323097099},
+ {'marked': 'a', 'semProb': 0.0026486885323097099},
+ {'marked': 'a', 'semProb': 0.0026486885323097099},
+ {'marked': 'a', 'semProb': 0.0026486885323097099},
+ {'marked': 'a', 'semProb': 0.0026486885323097099},
+ {'marked': 'a', 'semProb': 0.0026486885323097099},
+ {'marked': 'a', 'semProb': 0.0026486885323097099},
+ {'marked': 'a', 'semProb': 0.0026486885323097099},
+ {'marked': 'a', 'semProb': 0.0026486885323097099},
+ {'marked': 'a', 'semProb': 0.0026486885323097099},
+ {'marked': 'a', 'semProb': 0.0026486885323097099},
+ {'marked': 'a', 'semProb': 0.0026486885323097099},
+ {'marked': 'a', 'semProb': 0.0026486885323097099},
+ {'marked': 'a', 'semProb': 0.0026486885323097099},
+ {'marked': 'a', 'semProb': 0.0026486885323097099},
+ {'marked': 'a', 'semProb': 0.0026486885323097099},
+ {'marked': 'a', 'semProb': 0.0026486885323097099},
+ {'marked': 'a', 'semProb': 0.0026486885323097099},
+ {'marked': 'a', 'semProb': 0.0026486885323097099},
+ {'marked': 'a', 'semProb': 0.0026486885323097099},
+ {'marked': 'a', 'semProb': 0.0026486885323097099},
  {'marked': 'X a', 'semProb': 0.012363777426124387},
- {'marked': 'a', 'semProb': 0.033729915377612878},
- {'marked': 'a', 'semProb': 0.0053992037569581585},
- {'marked': 'a', 'semProb': 0.037465120003833653},
- {'marked': 'a', 'semProb': 0.081190103341166109},
- {'marked': 'a', 'semProb': 0.10797848045731266},
- {'marked': 'a', 'semProb': 0.037465120003833653},
- {'marked': 'a', 'semProb': 0.10647692173142115},
- {'marked': 'a', 'semProb': 0.0087418382884726243},
- {'marked': 'a', 'semProb': 0.02752165842543788},
- {'marked': 'a', 'semProb': 0.0060833188993940999},
- {'marked': 'X a', 'semProb': 0.12540138755318742},
- {'marked': 'a', 'semProb': 0.011026807778520224},
- {'marked': 'a', 'semProb': 0.087370437077600352},
- {'marked': 'a', 'semProb': 0.014145440031183345},
- {'marked': 'a', 'semProb': 0.70828309544245438},
- {'marked': 'a', 'semProb': 0.071610453688721029},
- {'marked': 'a', 'semProb': 0.12540138755318742},
- {'marked': 'a', 'semProb': 0.087370437077600352},
- {'marked': 'X a', 'semProb': 0.0013333600553888864},
- {'marked': 'a', 'semProb': 0.0069364835424438566},
- {'marked': 'a', 'semProb': 0.074266069716424077},
- {'marked': 'a', 'semProb': 0.015299898417040131},
- {'marked': 'a', 'semProb': 0.004187156433340178},
- {'marked': 'a', 'semProb': 0.046105842712134533},
- {'marked': 'a', 'semProb': 0.00046769090870347438}]
+ {'marked': 'X a', 'semProb': 0.012363777426124387},
+ {'marked': 'X a', 'semProb': 0.012363777426124387},
+ {'marked': 'X a', 'semProb': 0.012363777426124387},
+ {'marked': 'X a', 'semProb': 0.012363777426124387},
+ {'marked': 'X a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387},
+ {'marked': 'a', 'semProb': 0.012363777426124387}]
 
 
 var BDAModel = function() {
@@ -126,14 +231,9 @@ var BDAModel = function() {
   var alpha = sample(alphaPrior)
 
   var utterances = ['X a', 'a', 'X b', 'b']
-  var utteranceProbs = [0.5, 1, 0.5, 1]
+  var utteranceProbs = [0.1, 1, 0.1, 1]
   var utterancesDistr = Categorical({vs:utterances, ps:utteranceProbs})
   var utterancesPrior = function() {return sample(utterancesDistr)}
-
-  var worlds = [{d:'a'}, {d:'b'}]
-  var worldProbs = [0.5, 2]
-  var worldsDistr = Categorical({vs:worlds, ps:worldProbs})
-  var worldsPrior = function() {return sample(worldsDistr)}
 
   /*********************/
   /*********************/
@@ -184,7 +284,7 @@ var BDAModel = function() {
     var lastCharIndex = utterance.length - 1
     return utterance.includes('a') ? utterance.charAt(lastCharIndex) :
     utterance.includes('b') ? utterance.charAt(lastCharIndex) :
-    utterance.includes('X') ? worldsPrior()['d'] : '*'
+    utterance.includes('X') ? sample(worldsPrior)['d'] : '*'
   }
 
   var meaning = function(utterance, world) {
@@ -195,12 +295,12 @@ var BDAModel = function() {
   //
   // AGENTS
   //
-  var createLiteralListener = function(woldsPrior) {
+  var createLiteralListener = function(worldsPrior) {
     var currWorldsPrior = worldsPrior
     return function(utterance) {
       Infer({
         model() {
-          var world = currWorldsPrior()
+          var world = sample(currWorldsPrior)
           var intendedUtterance = sample(decode(utterance, deleteNoiseModel))
           var meaning = meaning(utteranceMeaning(intendedUtterance, currWorldsPrior), world)
           factor(meaning ? 0 : -Infinity)
@@ -229,13 +329,16 @@ var BDAModel = function() {
     var semProb = d['semProb'] // SB data
     var marked = d['marked']         // SB data
     var targetWorld = {'d':'a'}
-    observe(createSpeaker(3, semProb)(targetWorld), marked)}, experimentalData)
-  return {theta: THETA}
+    observe(createSpeaker(alpha, semProb)(targetWorld), marked)}, experimentalData)
+  return {
+    theta: THETA,
+    alpha: alpha
+  }
 }
-
 
 
 var opts = {
   method: "MCMC", callbacks: [editor.MCMCProgress()],
-  samples: 750, burn: 100};
-Infer(opts, BDAModel)
+  samples: 100, burn: 50};
+var postBeliefs = Infer(opts, BDAModel)
+viz.marginals(postBeliefs)
