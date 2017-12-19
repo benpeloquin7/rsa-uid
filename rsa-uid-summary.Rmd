@@ -16,7 +16,7 @@ setwd("/Users/benpeloquin/Desktop/Projects/rsa_uid/")
 
 # Information-theoretic account of **listener expectations** during disfluency
 
-### Listener model
+### Speaker / listener models
 
 Standard RSA with noise-aware listeners / speakers.
 
@@ -24,7 +24,7 @@ $P_{L_0} \propto P(m)\sum_{u_i:m\in[[u_i]]}P(u_i)\times P_{Noise}(u_p|u_i)$
 
 $P_{S_1}(u|m) \propto e^{\alpha U(u|m)}$
 
-$U(u|m) \propto \sum_{u_p}P_{Noise}(u_p|u_i)\times log(P_{L_0}(m|u_p))-cost(u_i)$
+$U(u|m) \propto \sum_{u_i}P_{Noise}(u_p|u_i)\times log(P_{L_0}(m|u_p))-cost(u_i)$
 
 $P_{L_1}(m|u) \propto \lambda \times \sum_{m\in M}P_{Noise}(u_i|u_p)P_{S_1}(u_i|m)$
 
@@ -37,8 +37,9 @@ Noise <- function(theta) {
       return _removeEmptyItems(replaceIndex(tokens, index, replacement)).join(' ')
     }  
 }
-
 ```
+
+### Um-implicature
 
 ```{r readModelFile, echo=FALSE}
 getModelFile <- function(fPath) {
@@ -85,14 +86,18 @@ etm <- proc.time() - ptm
 cat("run time:", etm[3]/60)
 ```
 
-Noise aware listeners who reason about (noise-aware) speakers generate "um"-implicature -- preference for high-surpsial items given UID cue ("um").
+Noise-aware listeners who reason about noise-aware speakers generate "um"-implicature -- preference for high-surpsial items given UID cue ("um").
 
 $U \in \{``X a", ``X b", ``a", ``b"\}$
 
 $P(U=u) = [0.1666667, 0.3333333, 0.1666667, 0.3333333]$
 
-$P(M=m) = [\{a\}:0.2, \{b\}:0.8]$
+$M \in \{\{a\}, \{b\}\}$
 
+$P(M=m) = [0.2, 0.8]$
+
+
+To get this result I needed to introduce `lambda` a listener-level rationality parameter. Note that listeners are more likely to generate the implicature as a function of noise (`theta`). This result depends on a noise-aware literal listener who reasons about intended utterances from produced utterances $P_{Noise}(u_p|u_i)$.
 ```{r um-impliucature-plot1}
 df %>%
   mutate(label=ifelse(d=='a', 'High surprisal (-log2(p)=2.3)', 'Low suprisal (-log2(p)=0.32)')) %>%
@@ -105,16 +110,17 @@ df %>%
     theme(plot.title = element_text(hjust = 0.5))
 ```
 
-Note that implicature probability increases as a function of `theta` and `lambda` (although lambda is held constant here).
-
 ### Proposed experiment: high(er) surprisal bias given disfluency cue.
 
-Screen shot here - point to code somewhere...
-```{r exp-code}
-# Place-holder - See
-# https://github.com/benpeloquin7/rsa-uid/blob/master/Analyses/rsa-uid-switchboard.ipynb
-```
+Foxtree & Clark (2002) argue that speakers *use* disfluencies such as *um* and *uh* to implicate processing difficulties to listeners. Further, listeners should take advantage of these cues. In one study (Barr, 1998) listeners had to point to abstract shapes on a computer monitor while listening to descriptions. When the shapes were new, listeners responded faster and moved their cursors toward them faster when the descriptions were preceded by um. Under this account speaker disfluencies may effect listener expectations about the surprisal of following content.
 
+In this experiment we test this hypothesis using sentence fragments from the Switchboard corpus. Listeners are presented a incomplete sentence fragment and asked to choose the best candidate to complete the sentence. `Candidates` are chosen from a language model (one high surprisal, one medium surprisal, one low surprisal). Presence of an original disfluency is manipulated - the prediction being that presence of the dislfluency should bias listeners toward high-suprisal content.
+
+Here's an example design (just in a notebook and without controlling for candidate grammaticality or surprisal).
+
+<div style="width:1200px; height=800x">
+![\nUm-implicature experimental design](/Users/benpeloquin/Desktop/Projects/rsa_uid/img/um-implicature-exp-design3.gif)
+</div>
 
 # A pragmatic/info-theoretic account of disfluency **production**.
 
@@ -127,7 +133,7 @@ getModelFile <- function(fPath) {
 modelFile <- getModelFile(file.path('Models', 'um-speaker-model-20171215.wppl'))
 ```
 
-```{r production-helpers}
+```{r production-helpers, echo=FALSE}
 newRData <- function(modelName, alpha, lambda, theta, speakerInput) {
   data.frame(modelName=modelName,
              alpha=alpha,
@@ -169,6 +175,7 @@ etm <- proc.time() - ptm
 cat("run time:", etm[3]/60)
 ```
 
+"Marked" utterances are preceded by `X` (e.g. `X a` or `X b`). As theta increases our S1 speaker prefers `X a` to `a`. We don't see this pattern with the `X b`. This is due to the nature of the recovery process -- if a listener gets a degenerate utterance (e.g. '_' or 'X') they sample from their semantic prior (which favors `b`). That is, due to noise, a rational speaker can "get away with" incorrect utterances for low-surprisal items. She will be able to recover by relying on the semantic prior.
 ```{r um-speaker-plot1}
 df %>% 
   filter((support %in% c('X a', 'a') & speakerInput=='a') | (support %in% c('X b', 'b') & speakerInput=='b')) %>%
@@ -181,11 +188,10 @@ df %>%
     theme(plot.title = element_text(hjust = 0.5))
 ```
 
-
-### Switchboard speaker data
+### Reproducing Levy & Jaeger (2007) Fig1 with disfluencies in Switchboard.
 
 Do speakers produce disfluencies prior to high-informativity content? Analysis of switchboard data.
-```{r read-switchbaord-data}
+```{r read-switchbaord-data, echo=FALSE}
 dfSB <- read.csv(file.path('Data', 'switchboard-uh-data-20171215.csv')) 
 dfSB <- dfSB %>%
   select(disfluency, after, before, lik, supr, total) %>%
@@ -215,7 +221,7 @@ This the basic direction of the effect as documented in Levy & Jaeger (2007) Fig
 * removed sentence initial disfluencies.
 * removed bigrams with $< 5$ instances.
 
-```{r switchboard-analysis-surpisal-distr, echo=FALSE}
+```{r switchboard-analysis-surpisal-distr, echo=FALSE, eval=FALSE}
 dfSB %>%
   filter(total > 4, before!='^') %>%
   ggplot(aes(x=supr)) +
@@ -228,51 +234,63 @@ dfSB %>%
 
 ## Modeling switchboard speaker data
 
+
 ### Inferring SB `noise-level`
 
-```{r read-SB-model}
+What is a realistic level of noise in a dialogue corpus like Switchboard? Can we model the data generating process from our speakers and infer `theta`?
+
+`NOTE` this is incomplete work -- this is being run on a fraction of the total (relevant) SB data.
+```{r read-SB-model, echo=FALSE}
 f <- file.path('Models', 'rsa-uid-speaker-bda-20171218.wppl')
-# BDAmodelFile <- getModelFile(f)
+BDAmodelFile <- getModelFile(f)
 ```
 
-```{r infer-noise-level}
-
+```{r infer-noise-level, echo=FALSE}
+ptm <- proc.time()
+df <- rwebppl::webppl(BDAmodelFile)
+etm <- proc.time() - ptm
+cat('run time', etm[3]/6)
 ```
 
 ```{r infer-noise-level-plot1}
-
+df %>%
+  ggplot(aes(x=value)) +
+    geom_density(fill='blue', alpha=0.5) +
+    facet_grid(~Parameter, scales='free') +
+    theme_bw()
 ```
 
 ### Modeling SB data with `S1 speaker`
 
-Using `MAP` for `theta` param
+Can we use RSA as a classifier? That is, can we predict the instances in which a speaker is likely to be disfluent?
+
+`NOTE` this is incomplete work -- this is being run on a fraction of the total (relevant) SB data.
 ```{r run-sb-modeling}
 # dfSB %>%
 #   filter(total > 4, before!='^') %>% 
 ```
 
-```{r sb-modeling-fit-plot1}
+```{r sb-modeling-fit-plot1, echo=FALSE}
 f <- file.path('Models', 'rsa-uid-speaker-bda-fit-data-20171218.wppl')
 BDAmodelFile <- getModelFile(f)
 ```
 
-```{r parSetup}
+```{r parSetup, echo=FALSE}
 no_cores <- detectCores() - 1
 cl <- makeCluster(no_cores, type='FORK')
 registerDoParallel(cl)
 ```
 
-Note: I'm currently limited by the number datapoints I can model (Max cell capacity), but there's an opportunty to pass the SB data in batches here.
-```{r run-sb-data-fitting}
+```{r run-sb-data-fitting, echo=FALSE}
 ptm <- proc.time()
-nIters <- 250
+nIters <- 50
 df_bda <- foreach(i=seq(1, nIters), .packages=c('dplyr', 'rwebppl'), .combine=rbind) %dopar% rwebppl::webppl(BDAmodelFile)
 stopCluster(cl)
 etm <- proc.time() - ptm
 cat('run time:', etm[3]/60)
 ```
 
-Note below plot uses a tiny subset of the SB data. Should not be interepreted. This is just a place-holder.
+`NOTE` this is incomplete work -- this is being run on a fraction of the total (relevant) SB data.
 ```{r run-sb-data-fitting-plot1}
 df_bda %>%
   mutate(isMarked=ifelse(res=='X a', 1, 0)) %>%
@@ -296,6 +314,8 @@ df_bda %>%
 ```
 
 
+# Paper scaffolding
+
 ## Intro
 
 A remarkable result of the expressivity of natural language is the ability to communicate about a potentially infinite set of meanings from a finite set of tools (citation). But, by this same mechanism speakers may confront a potentially infinite number of ways to communicate just a single meaning. How do we navigate this decision space? 
@@ -311,8 +331,6 @@ We begin with an overview of UID and RSA, discussing shared and diverging compon
 ## Rational Speech-act theory
 
 ## Noisy RSA
-
-
 
 
 ## Simulations
