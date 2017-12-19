@@ -6,6 +6,7 @@ output: html_document
 ---
 
 ```{r packages, warning=FALSE, message=FALSE}
+library(doParallel)
 library(dplyr)
 library(ggplot2)
 library(tidyr)
@@ -109,7 +110,7 @@ Note that implicature probability increases as a function of `theta` and `lambda
 ## Proposed experiment: high(er) surprisal bias given disfluency cue.
 
 Screen shot here - point to code somewhere...
-```{r}
+```{r exp-code}
 
 ```
 
@@ -174,11 +175,13 @@ df %>%
     geom_line() +
     xlab('theta') +
     ylab(paste0(MODEL, '(m|u)')) +
-    ggtitle(paste0('Probability of Um-implicature by noise level', ' (alpha=', ALPHA, ')')) +
+    ggtitle(paste0('Speaker preference for marked utterances as a function of noise\n', '(alpha=', ALPHA, ')')) +
     theme_bw() +
     theme(plot.title = element_text(hjust = 0.5))
 ```
 
+
+## Switchboard speaker data
 
 Do speakers produce disfluencies prior to high-informativity content? Analysis of switchboard data.
 ```{r read-switchbaord-data}
@@ -193,7 +196,8 @@ dfSB %>%
   filter(total > 4, before!='^') %>%
   ggplot(aes(x=supr, y=lik, size=total)) +
     geom_point(aes(col=after), alpha=0.6, stroke=0.75) +
-    geom_smooth(method='lm', group=0) +
+    geom_smooth(method='loess', group=0, lty=2, size=0.75, alpha=0.2, col='green') +
+    geom_smooth(method='lm', group=0, col='red', size=0.9) +
     xlab('log(p(w_i|w_{i-1}))') +
     ylab('cnt(w_i|w_{i-2} + "uh")/\ncnt(w_i|w_{i-2})') +
     ggtitle('Likelihood of disfluency as a function of bigram LM informativity') + 
@@ -202,9 +206,85 @@ dfSB %>%
           legend.position="none")
 ```
 
-Note this the basic direction of the effect as documented in Levy & Jaeger (2007) Fig1.
+This the basic direction of the effect as documented in Levy & Jaeger (2007) Fig1.
 
 !["Levy & Jaeger (2007), Fig1"](/Users/benpeloquin/Desktop/Projects/rsa_uid/img/levy-jaeger-2007-fig1.png)
+
+### Note
+* removed sentence initial disfluencies.
+* removed bigrams with $< 5$ instances.
+
+```{r switchboard-analysis-surpisal-distr, echo=FALSE}
+dfSB %>%
+  filter(total > 4, before!='^') %>%
+  ggplot(aes(x=supr)) +
+    geom_density() +
+    ggtitle('Suprisal density') +
+    theme_bw() +
+    theme(plot.title=element_text(hjust = 0.5),
+          legend.position="none")
+```
+
+## Modeling switchboard speaker data
+
+### Inferring SB `noise-level`
+
+```{r read-SB-model}
+f <- file.path('Models', 'rsa-uid-speaker-bda-20171218.wppl')
+# BDAmodelFile <- getModelFile(f)
+```
+
+```{r infer-noise-level}
+
+```
+
+```{r infer-noise-level-plot1}
+
+```
+
+### Modeling SB data with `S1 speaker`
+
+Using `MAP` for `theta` param
+```{r run-sb-modeling}
+# dfSB %>%
+#   filter(total > 4, before!='^') %>% 
+```
+
+```{r sb-modeling-fit-plot1}
+f <- file.path('Models', 'rsa-uid-speaker-bda-fit-data-20171218.wppl')
+BDAmodelFile <- getModelFile(f)
+```
+
+```{r parSetup}
+no_cores <- detectCores() - 1
+cl <- makeCluster(no_cores, type='FORK')
+registerDoParallel(cl)
+```
+
+Note: I'm currently limited by the number datapoints I can model (Max cell capacity), but there's an opportunty to pass the SB data in batches here.
+```{r run-sb-data-fitting}
+ptm <- proc.time()
+nIters <- 250
+df_bda <- foreach(i=seq(1, nIters), .packages=c('dplyr', 'rwebppl'), .combine=rbind) %dopar% rwebppl::webppl(BDAmodelFile)
+stopCluster(cl)
+etm <- proc.time() - ptm
+cat('run time:', etm[3]/60)
+```
+
+```{r run-sb-data-fitting-plot1}
+df_bda %>%
+  mutate(isMarked=ifelse(res=='X a', 1, 0)) %>%
+  group_by(semProb) %>%
+  summarise(nMarked=sum(isMarked),
+            total=n(),
+            lik=nMarked/total,
+            ymin=lik+qnorm(0.025)*sqrt(lik*(1-lik)/total),
+            ymax=lik+qnorm(0.975)*sqrt(lik*(1-lik)/total)) %>%
+  ggplot(aes(x=log2(semProb), y=lik)) +
+    geom_errorbar(aes(ymax=ymax, ymin=ymin)) +
+    geom_point()
+```
+
 
 # Corpus generation
 
