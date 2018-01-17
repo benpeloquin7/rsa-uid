@@ -40,7 +40,7 @@ var getN = function(rData) {
   return data['n']
 }
 
-//var rData = [{'alpha':2, 'lambda':50, 'modelName':'S1', 'theta':0.4}]
+var rData = [{'alpha':2, 'lambda':50, 'modelName':'S1', 'theta':0.9}]
 
 var LAMBDA = getLambda(rData)
 var ALPHA = getAlpha(rData)
@@ -50,34 +50,29 @@ var N = getN(rData)
 var aUtterances = ['X a', 'a']
 var bUtterances = ['X b', 'b']
 var cUtterances = ['X c', 'c']
+var dUtterances = ['X d', 'd']
 var partialUtteranceProbs = [0.5, 1]
 var aUtterancesDistr = Categorical({vs:aUtterances, ps:partialUtteranceProbs})
 var bUtterancesDistr = Categorical({vs:bUtterances, ps:partialUtteranceProbs})
 var cUtterancesDistr = Categorical({vs:cUtterances, ps:partialUtteranceProbs})
+var dUtterancesDistr = Categorical({vs:dUtterances, ps:partialUtteranceProbs})
 
-var utterances = ['X a', 'a', 'X b', 'b']
-var utteranceProbs = [0.5, 1, 0.5, 1]
+var utterances = ['X a', 'a', 'X b', 'b', 'X c', 'c', 'X d', 'd']
+var utteranceProbs = [1, 1, 1, 1, 1, 1, 1, 1]
 var utterancesDistr = Categorical({vs:utterances, ps:utteranceProbs})
 var utterancesPrior = function() {return sample(utterancesDistr)}
-// var constructUtterance = function(c, sem) {
-//   return function() {
-//       return flip(sem) ? c : 'X ' + c
-//   }
-// }
-// var highPrior = constructUtterance('b', 0.9)
-// var lowPrior = constructUtterance('a', 0.1)
-// var utterancesPrior = function(c) {
-//   return c[d] == 'a' ? lowPrior() : highPrior()
-// } 
 
 
-var worlds = [{d:'a'}, {d:'b'}]
-var worldProbs = [0.1, 0.9]
+var worlds = [{d:'a'}, {d:'b'}, {d:'c'}, {d:'d'}]
+var worldProbs = [1, 2, 3, 4]
 var worldsDistr = Categorical({vs:worlds, ps:worldProbs})
 var worldsPrior = function() {return sample(worldsDistr)}
 
 var getValidUtteranceGivenWorld = function(w) {
-  return w['d'] == 'a' ? sample(aUtterancesDistr) : w['d'] == 'b' ? sample(bUtterancesDistr) : sample(cUtterancesDistr)
+  return w['d'] == 'a' ? sample(aUtterancesDistr) :
+         w['d'] == 'b' ? sample(bUtterancesDistr) : 
+         w['d'] == 'c' ? sample(cUtterancesDistr) :
+         sample(dUtterancesDistr)
 }
 
 /*********************/
@@ -136,17 +131,13 @@ var utteranceMeaning = function(utterance) {
     return 'b'
   } else if (utterance.includes('c')) {
     return 'c'
-  } else {
+  } else if (utterance.includes('d')) {
+    return 'd'
+  }else {
     console.log("Error on", utterance)
   }
 }
-//var utteranceMeaning = function(utterance) {
-//  var lastCharIndex = utterance.length - 1
-//  return utterance.includes('a') ? utterance.charAt(lastCharIndex) :
-         //utterance.includes('b') ? utterance.charAt(lastCharIndex) :
-//          worldsPrior()['d']
-//         utterance.includes('X') ? worldsPrior()['d'] : '*'
-//}
+
 
 var meaning = function(utterance, world) {
   var worldDim = world['d']
@@ -293,11 +284,8 @@ var getModel = function(modelName) {
   }
   return models[modelName]
 }
-
 var modelName = getModelName(rData)
 var model = getModel(modelName)
 
-// Corpus
 var data = []
 runExperiments(worldGenerator, model, N, data)
-

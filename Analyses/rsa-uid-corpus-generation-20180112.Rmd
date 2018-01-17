@@ -18,6 +18,7 @@ getModelFile <- function(fPath) {
   readChar(fPath, file.info(fPath)$size)
 }
 fPath <- '/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/rsa-uid-corpus-generation-20180112.wppl'
+fPath <- '/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/rsa-uid-corpus-generation-20180117.wppl'
 modelStr <- getModelFile(fPath)
 ```
 
@@ -54,7 +55,7 @@ runExperimentFn <- function(runFn, modelName, alpha, lambda, theta, n) {
   })
 }
 nSamples <- 1000
-runExp1 <- runExperimentFn(runFn, 'S1', 2, 1, 0.8, nSamples)
+runExp1 <- runExperimentFn(runFn, 'S1', 3, 1, 0.95, nSamples)
 ```
 
 ```{r lmAnalysisFn}
@@ -122,6 +123,7 @@ dfExp1LM %>%
     geom_errorbarh(aes(xmax=xmax, xmin=xmin)) +
     ylab('Likelihood of marked version') +
     xlab('mean(log(p(utt))') +
+    ylim(0, 1) +
     theme_bw()
 ```
 
@@ -183,36 +185,5 @@ df %>%
       theme_bw()
 ```
 
-
-
-
-
-
-```{r}
-library(dplyr)
-library(tidyr)
-```
-
-
-```{r}
-df <- data.frame(
-  world=c(rep('a', 4), rep('b', 4)), 
-  utt=rep(c('X a', 'a', 'X b', 'b'), 2),
-  postProbs=c(0.46, 0.427, 0.099, 0.0077, 0.04961328492428481, 	9.661590951810712e-7, 0.5300247504353464, 0.4203609984812739),
-  priorProbs=c(rep(0.2, 4), rep(0.8, 4)),
-  n=rep(100, 8))
-```
-
-```{r}
-df
-```
-
-
-```{r}
-df %>%
-  mutate(cnt=postProbs*n*priorProbs) %>%
-  group_by(utt) %>%
-  summarise(cnt=sum(cnt))
-  
-```
+!["Levy & Jaeger (2007), Fig1"](/Users/benpeloquin/Desktop/Projects/rsa_uid/img/levy-jaeger-2007-fig1.png)
 
