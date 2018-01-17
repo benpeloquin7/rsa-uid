@@ -1,0 +1,303 @@
+/***
+
+  rData
+  alpha
+  lambda
+  theta
+  modelName
+  N
+
+***/
+
+/*********************/
+/*********************/
+/******* SETUP *******/
+/*********************/
+/*********************/
+
+var getAlpha = function(rData) {
+  var data = rData[0]
+  return data['alpha']
+}
+
+var getLambda = function(rData) {
+  var data = rData[0]
+  return data['lambda']
+}
+
+var getTheta = function(rData) {
+  var data = rData[0]
+  return data['theta']
+}
+
+var getModelName = function(rData) {
+  var data = rData[0]
+  return data['modelName']
+}
+
+var getN = function(rData) {
+  var data = rData[0]
+  return data['n']
+}
+
+//var rData = [{'alpha':2, 'lambda':50, 'modelName':'S1', 'theta':0.4}]
+
+var LAMBDA = getLambda(rData)
+var ALPHA = getAlpha(rData)
+var THETA = getTheta(rData)
+var N = getN(rData)
+
+var aUtterances = ['X a', 'a']
+var bUtterances = ['X b', 'b']
+var cUtterances = ['X c', 'c']
+var partialUtteranceProbs = [0.5, 1]
+var aUtterancesDistr = Categorical({vs:aUtterances, ps:partialUtteranceProbs})
+var bUtterancesDistr = Categorical({vs:bUtterances, ps:partialUtteranceProbs})
+var cUtterancesDistr = Categorical({vs:cUtterances, ps:partialUtteranceProbs})
+
+var utterances = ['X a', 'a', 'X b', 'b']
+var utteranceProbs = [0.5, 1, 0.5, 1]
+var utterancesDistr = Categorical({vs:utterances, ps:utteranceProbs})
+var utterancesPrior = function() {return sample(utterancesDistr)}
+// var constructUtterance = function(c, sem) {
+//   return function() {
+//       return flip(sem) ? c : 'X ' + c
+//   }
+// }
+// var highPrior = constructUtterance('b', 0.9)
+// var lowPrior = constructUtterance('a', 0.1)
+// var utterancesPrior = function(c) {
+//   return c[d] == 'a' ? lowPrior() : highPrior()
+// } 
+
+
+var worlds = [{d:'a'}, {d:'b'}]
+var worldProbs = [0.1, 0.9]
+var worldsDistr = Categorical({vs:worlds, ps:worldProbs})
+var worldsPrior = function() {return sample(worldsDistr)}
+
+var getValidUtteranceGivenWorld = function(w) {
+  return w['d'] == 'a' ? sample(aUtterancesDistr) : w['d'] == 'b' ? sample(bUtterancesDistr) : sample(cUtterancesDistr)
+}
+
+/*********************/
+/*********************/
+/****** MODELS *******/
+/*********************/
+/*********************/
+
+// Noise
+var _removeEmptyItems = function(arr) {
+  filter(function(x) {return x != ''}, arr)
+}
+
+var replaceIndex = function(arr, index, replacement) {
+  return arr.slice(0, index).concat([replacement]).concat(arr.slice(index + 1, arr.length))
+}
+var transformUtterance = function(transformFn) {
+  return function(utterance) {
+      var tokens = utterance.split(' ')
+      var index = sample(RandomInteger({n:tokens.length}))
+      var replacement = transformFn(index)
+      return _removeEmptyItems(replaceIndex(tokens, index, replacement)).join(' ')
+  }  
+}
+var _deleteFn = function(s) {
+  return ''
+}
+var deleteTransform = transformUtterance(_deleteFn)
+
+var vacuousNoiseModel = function(utterance) {
+  return utterance
+}
+var deleteNoiseModel = function(utterance) {
+  return flip(THETA) ? deleteTransform(utterance) : utterance
+}
+
+var decode = cache(function(utteranceProduced, noiseModel) {
+  Infer({
+    model() {
+      var utteranceIntended = utterancesPrior()
+      var noisyUtterance = noiseModel(utteranceIntended, THETA)
+      factor(utteranceProduced == noisyUtterance ? 0 : -Infinity)
+      return utteranceIntended
+    }
+  })
+})
+
+var utteranceMeaning = function(utterance) {
+  if (utterance == '') {
+    console.log("Error on", utterance)
+  }
+  var lastCharIndex = utterance.length - 1
+  if (utterance.includes('a')) {
+    return 'a'
+  } else if (utterance.includes('b')) {
+    return 'b'
+  } else if (utterance.includes('c')) {
+    return 'c'
+  } else {
+    console.log("Error on", utterance)
+  }
+}
+//var utteranceMeaning = function(utterance) {
+//  var lastCharIndex = utterance.length - 1
+//  return utterance.includes('a') ? utterance.charAt(lastCharIndex) :
+         //utterance.includes('b') ? utterance.charAt(lastCharIndex) :
+//          worldsPrior()['d']
+//         utterance.includes('X') ? worldsPrior()['d'] : '*'
+//}
+
+var meaning = function(utterance, world) {
+  var worldDim = world['d']
+  return utteranceMeaning(utterance) == worldDim
+}
+
+
+var L0 = cache(function(utterance) {
+  Infer({
+    model() {
+      var world = worldsPrior()
+      var intendedUtterance = sample(decode(utterance, deleteNoiseModel))
+      var meaning = meaning(utteranceMeaning(intendedUtterance), world)
+      factor(meaning ? 0 : -Infinity)
+      return world
+    }
+  })
+})
+
+var cost = function(utterance) {
+  return utterance.split(' ').length
+}
+
+var S1 = cache(function(world) {
+  Infer({
+    model() {
+//       var intendedUtterance = utterancesPrior()
+      var intendedUtterance = getValidUtteranceGivenWorld(world)
+      var producedUtterance = deleteNoiseModel(intendedUtterance)
+      var L = L0(producedUtterance)
+      factor(ALPHA*(L.score(world) - cost(intendedUtterance)/10))
+      return intendedUtterance
+    }
+  })
+})
+
+var L1 = cache(function(utterance) {
+  Infer({
+    model() {
+      var world = worldsPrior()
+      var intendedUtterance = sample(decode(utterance, deleteNoiseModel))
+      var S = S1(world)
+      factor(LAMBDA*(S.score(intendedUtterance)))
+      return world
+    }
+  })
+})
+
+var S2 = cache(function(world) {
+  Infer({
+    model() {
+      var intendedUtterance = utterancesPrior()
+      var producedUtterance = deleteNoiseModel(intendedUtterance)
+      var L = L1(producedUtterance)
+      factor(ALPHA*(L.score(world)))
+      return intendedUtterance
+    }
+  })
+})
+
+var L2 = function(utterance) {
+  Infer({
+    model() {
+      var world = worldsPrior()
+      var intendedUtterance = sample(decode(utterance, deleteNoiseModel))
+      var S = S2(world)
+      factor(LAMBDA*S.score(intendedUtterance))
+      return world
+    }
+  })
+}
+
+var S3 = cache(function(world) {
+  Infer({
+    model() {
+      var intendedUtterance = utterancesPrior()
+      var producedUtterance = deleteNoiseModel(intendedUtterance)
+      var L = L2(producedUtterance)
+      factor((L.score(world)))
+      return intendedUtterance
+    }
+  })
+})
+
+/*********************/
+/*********************/
+/**** CORPUS GEN *****/
+/*********************/
+/*********************/
+
+var runExperiment = function(speaker, world) {
+  return sample(speaker(world))
+}
+
+var runExperiments = function(worldGenerator, speaker, n, data) {
+  /*
+  Parameters
+  ----------
+  worldGenerator: fn
+    Generate a full world.
+  spekeaker: fn
+    RSA speaker function. Input worlds, output utterances.
+  n: int
+    Number of forward samples.
+  data: array
+    Data store (corpus).
+    
+  Returns
+  -------
+  array
+    Array of utterances.
+  
+  */
+  var world = worldGenerator()
+  var currUtt = runExperiment(speaker, world)  // really this should be a dict object with context
+  var success = utteranceMeaning(currUtt) == world['d']
+//   var currData = {currUtterance:currUtt, currWorld:world['d'], isSuccess:success}
+  var currData = {currUtterance:currUtt, isSuccess:success}
+  data.push(currData)
+  return n <= 1 ? data : runExperiments(worldGenerator, speaker, n-1, data)
+}
+
+var worldGenerator = function() {
+  /* Note that this should eventually be different from `worldsPrior`. Ideally we will have more "complex"
+  worlds of (a) multiple objects and (b) objects with multiple dimensions. In the 
+  single object, single object case this will look just like a single prior over a dimension.
+  */
+  return worldsPrior()
+}
+
+/*********************/
+/*********************/
+/******** run ********/
+/*********************/
+/*********************/
+
+var getModel = function(modelName) {
+  var models = {
+    'L0': L0,
+    'S1': S1,
+    'L1': L1,
+    'S2': S2,
+    'L2': L2
+  }
+  return models[modelName]
+}
+
+var modelName = getModelName(rData)
+var model = getModel(modelName)
+
+// Corpus
+var data = []
+runExperiments(worldGenerator, model, N, data)
+

@@ -1,0 +1,218 @@
+---
+title: "Rsa-uid-corpus-generation-20180112"
+author: "Ben"
+date: "1/12/2018"
+output: html_document
+---
+
+```{r packages, message=FALSE, warning=FALSE}
+library(doParallel)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+```
+
+
+```{r webpplFile}
+getModelFile <- function(fPath) {
+  readChar(fPath, file.info(fPath)$size)
+}
+fPath <- '/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/rsa-uid-corpus-generation-20180112.wppl'
+modelStr <- getModelFile(fPath)
+```
+
+
+```{r utils}
+newRData <- function(modelName, alpha, lambda, theta, n) {
+  data.frame(modelName=modelName,
+             alpha=alpha,
+             lambda=lambda,
+             theta=theta,
+             n=n,
+             stringsAsFactors=FALSE)
+}
+# rData <- newRData('S1', 1, 1, 0.5, 10)
+
+createRunFn <- function(modelStr) {
+  return(function(data, dataName='rData') { 
+    rwebppl::webppl(modelStr, data=data, data_var=dataName)
+  })
+}
+runFn <- createRunFn(modelStr)
+
+runExperimentFn <- function(runFn, modelName, alpha, lambda, theta, n) {
+  return(function(expNum) {
+    rData <- newRData(modelName, alpha, lambda, theta, n)
+    df <- runFn(rData) %>%
+      mutate(modelName=modelName,
+             alpha=alpha,
+             lambda=lambda,
+             theta=theta,
+             n=n,
+             expNum=expNum)
+    df 
+  })
+}
+nSamples <- 1000
+runExp1 <- runExperimentFn(runFn, 'S1', 2, 1, 0.8, nSamples)
+```
+
+```{r lmAnalysisFn}
+createLM <- function(dfCorpus) {
+  annotateUtterance <- function(x) {
+    x <- gsub(' ', '', x)
+    x <- paste0('^', x)
+    x <- paste0(x, '$')
+    return(x)
+  }
+  stream <- dfCorpus %>%
+          mutate(annotatedUtterance=annotateUtterance(currUtterance)) %>%
+          select(annotatedUtterance) %>%
+          unlist %>%
+          paste0(collapse='') %>%
+          gsub(' ', '', ., fixed=TRUE)
+  ng <- ngram::ngram(stream, n=2, sep='')  # bigram model
+  dfNgramRaw <- data.frame(ngram::get.phrasetable(ng))
+  dfNgramRaw$first <- sapply(dfNgramRaw$ngrams, function(x) {strsplit(x, '')}[[1]][1])
+  dfNgramRaw$second <- sapply(dfNgramRaw$ngrams, function(x) {strsplit(x, '')}[[1]][3])
+  dfNgramRaw <- dfNgramRaw %>%
+    mutate(first=ifelse(first==' ', '*', first),
+           second=ifelse(second==' ', '*', second))
+  dfNgramRaw$theta <- unique(dfCorpus$theta)
+  dfNgramRaw$alpha <- unique(dfCorpus$alpha)
+  dfNgramRaw$lambda <- unique(dfCorpus$lambda)
+  dfNgramRaw$expNum <- unique(dfCorpus$expNum)
+  dfNgramRaw
+}
+```
+
+
+```{r testRun}
+# S2DVVV 100 samples ~ 23s
+ptm <- proc.time()
+dfExp1 <- runExp1(1)
+dfExp1LM <- createLM(dfExp1)
+etm <- proc.time() - ptm
+cat('run time at', nSamples, ' is ', etm[3]/60)
+```
+
+
+```{r}
+dfExp1LM %>%
+  group_by(expNum, second) %>%
+  mutate(secondUncondProb=sum(prop),       # p(a|X) + p(a|^)
+         lik=prop/secondUncondProb) %>%    # p(X|a) = p(X a) / p(a|X) + p(a|^)
+  ungroup %>%
+  group_by(expNum) %>%
+  mutate(logUncondProb=log2(secondUncondProb)) %>%  # p(a)
+  ungroup %>%
+  select(expNum, first, second, lik, logUncondProb) %>%
+  filter(second %in% c(letters[1:5], '*'), first=='X') %>%
+  group_by(second) %>%
+  summarise(
+    avgPostProb=mean(logUncondProb),
+    xmin=quantile(logUncondProb, probs=c(0.025)),
+    xmax=quantile(logUncondProb, probs=c(0.975)),
+    avgLikelihood=mean(lik),
+    ymin=quantile(lik, probs=c(0.025)),
+    ymax=quantile(lik, probs=c(0.975))) %>%
+  ggplot(aes(x=avgPostProb, y=avgLikelihood, col=as.factor(second))) +
+    geom_point() +
+    geom_errorbar(aes(ymax=ymax, ymin=ymin)) +
+    geom_errorbarh(aes(xmax=xmax, xmin=xmin)) +
+    ylab('Likelihood of marked version') +
+    xlab('mean(log(p(utt))') +
+    theme_bw()
+```
+
+
+
+```{r parSetup}
+no_cores <- detectCores() - 1
+cl <- makeCluster(no_cores, type='FORK')
+registerDoParallel(cl)
+```
+
+```{r runPar}
+ptm <- proc.time()
+nIters <- 100
+simsExp1 <- foreach(i=seq(1, nIters), .packages=c('dplyr', 'rwebppl'), .combine=rbind) %dopar% runExp1(i)
+stopCluster(cl)
+etm <- proc.time() - ptm
+cat("runtime: ", etm[3] / 60)
+```
+
+
+```{r preprocessParData}
+lSimsExp1 <- simsExp1 %>%
+  group_by(expNum) %>%
+  do(vals=data.frame(.)) %>%
+  lapply(function(x) {(x)})
+
+lD <- lapply(lSimsExp1$vals, function(x) {createLM(x)})
+df <- do.call(rbind, lD)
+```
+
+```{r parPlot1}
+df %>%
+  group_by(expNum, second) %>%
+  mutate(secondTotalProp=sum(prop),       # p(a|X) + p(a|^)
+         lik=prop/secondTotalProp) %>%    # p(X|a) = p(X a) / p(a|X) + p(a|^)
+  ungroup %>%
+  group_by(expNum) %>%
+  mutate(postProb=log2(secondTotalProp/sum(prop))) %>%  # p(a)
+  ungroup %>%
+  select(expNum, first, second, lik, postProb) %>%
+  filter(second %in% c(letters[1:5], '*'), first=='X') %>%
+  group_by(second) %>%
+  summarise(
+    avgPostProb=mean(postProb),
+    xmin=quantile(postProb, probs=c(0.05)),
+    xmax=quantile(postProb, probs=c(0.95)),
+    avgLikelihood=mean(lik),
+    ymin=quantile(lik, probs=c(0.05)),
+    ymax=quantile(lik, probs=c(0.95))) %>%
+    ggplot(aes(x=avgPostProb, y=avgLikelihood, col=as.factor(second))) +
+      geom_point() +
+      geom_errorbar(aes(ymax=ymax, ymin=ymin, width=0)) +
+      geom_errorbarh(aes(xmax=xmax, xmin=xmin, height=0)) +
+      geom_smooth(group=0) +
+      ylab('Likelihood of marked version') +
+      xlab('mean(log(p(utt))') +
+      ylim(0, 1) +
+      theme_bw()
+```
+
+
+
+
+
+
+```{r}
+library(dplyr)
+library(tidyr)
+```
+
+
+```{r}
+df <- data.frame(
+  world=c(rep('a', 4), rep('b', 4)), 
+  utt=rep(c('X a', 'a', 'X b', 'b'), 2),
+  postProbs=c(0.46, 0.427, 0.099, 0.0077, 0.04961328492428481, 	9.661590951810712e-7, 0.5300247504353464, 0.4203609984812739),
+  priorProbs=c(rep(0.2, 4), rep(0.8, 4)),
+  n=rep(100, 8))
+```
+
+```{r}
+df
+```
+
+
+```{r}
+df %>%
+  mutate(cnt=postProbs*n*priorProbs) %>%
+  group_by(utt) %>%
+  summarise(cnt=sum(cnt))
+  
+```
+
