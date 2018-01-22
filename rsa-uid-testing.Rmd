@@ -1,0 +1,208 @@
+---
+title: "Rsa-uid-testing"
+author: "Ben"
+date: "1/22/2018"
+output: html_document
+---
+
+# Desiderata for rsa-uid model
+
+### (1) Preferential marking of high-surprisal utterances by speakers
+The basic UID finding is that speakers are more likely to mark (add a complementizer, use a full form instead of contraction, etc.) items that are high surprisal.
+
+* We should expect this preference to increase as a function of surprisal for noise and non-noise models.
+* We should expect this preference to increase as a function of theta for noise models.
+
+### (2) Um-implicature for listeners
+Listeners who are aware of the production process should infer that the content following a marked term (or consisting just of a marked term) should be followed by a high-surprisal item.
+
+* We should expect this preference to increase as a function of surprisal for noise and non-noise models.
+* We should expect this preference to increase as a function of theta for noise models.
+
+### (2) UID-corpus effect.
+A corpus of utterances generate by a UID-speaker should display the standard relationship described in Levy & Jaeger (2007) -- the probability of a marked utterance should increase with the suprisal of the following content under a language model
+
+* We should expect this finding to be modulated by theta, but robust across different levels of theta.
+
+# Tests
+
+Things to normalize across models:
+
+* Model parameters
+  + input
+  + theta
+  + utterance set
+  + utterance probs
+  + worlds
+  + world probs
+  + recursion level
+
+```{r warning=FALSE, message=FALSE}
+library(doParallel)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+setwd('/Users/benpeloquin/Desktop/Projects/rsa_uid/')
+```
+
+```{r helpers}
+getModelFile <- function(fPath) {
+  readChar(fPath, file.info(fPath)$size)
+}
+
+create_test <- function(fPath, run_fn, test_fn) {
+  m <- getModelFile(fPath)
+  d <- run_fn(m)
+  return(function() test_fn(d))
+}
+```
+
+### Listener test
+```{r test_1}
+noisy_rsa1_listener_file <- 'Models/testing/noisy-rsa1-listener.wppl'
+noisy_rsa1_listener_run_fn <- function(modelFile) {
+  rwebppl::webppl(modelFile)
+}
+noisy_rsa_listener_test_Fn <- function(df) {
+  filter(df, d=='a')$prob > filter(df, d=='b')$prob
+}
+
+test_1_fn <- create_test(noisy_rsa1_listener_file, noisy_rsa1_listener_run_fn, noisy_rsa_listener_test_Fn)
+```
+### Speaker test
+```{r test_2}
+noisy_rsa1_speaker_file <- 'Models/testing/noisy-rsa1-speaker.wppl'
+
+noisy_rsa1_speaker_run_fn <- function(modelFile){
+  noisy_rsa1_speaker_run_fn_ <- function(modelFile, input) {
+    rData <- data.frame(alpha=1, lambda=1, modelName='S1', theta=0.2, speakerInput=input)
+    rwebppl::webppl(modelFile, data=rData, data_var='rData')
+  }
+  
+  d1 <- noisy_rsa1_speaker_run_fn_(modelFile, 'a') %>%
+    mutate(input='a')
+  d2 <- noisy_rsa1_speaker_run_fn_(modelFile, 'b') %>%
+    mutate(input='b')
+  d_full <- rbind(d1, d2)
+  d_full
+}
+
+noisy_rsa1_speaker_test_fn <- function(df) {
+  dfa <- filter(df, input=='a')
+  dfb <- filter(df, input=='b')
+  propAMarked <- filter(dfa, support=='X a')$prob / (filter(dfa, support=='X a')$prob + filter(dfa, support=='a')$prob)
+  propBMarked <- filter(dfa, support=='X b')$prob / (filter(dfa, support=='X b')$prob + filter(dfa, support=='b')$prob)
+  propAMarked > propBMarked
+}
+
+test_2_fn <- create_test(noisy_rsa1_speaker_file, noisy_rsa1_speaker_run_fn, noisy_rsa1_speaker_test_fn)
+```
+
+### Corpus test
+```{r corpus_helpers}
+# runExperimentFn <- function(runFn, modelName, alpha, lambda, theta, n) {
+#   return(function(expNum) {
+#     rData <- newRData(modelName, alpha, lambda, theta, n)
+#     df <- runFn(rData) %>%
+#       mutate(modelName=modelName,
+#              alpha=alpha,
+#              lambda=lambda,
+#              theta=theta,
+#              n=n,
+#              expNum=expNum)
+#     df 
+#   })
+# }
+
+createLM <- function(dfCorpus) {
+  annotateUtterance <- function(x) {
+    x <- gsub(' ', '', x)
+    x <- paste0('^', x)
+    x <- paste0(x, '$')
+    return(x)
+  }
+  stream <- dfCorpus %>%
+          mutate(annotatedUtterance=annotateUtterance(currUtterance)) %>%
+          select(annotatedUtterance) %>%
+          unlist %>%
+          paste0(collapse='') %>%
+          gsub(' ', '', ., fixed=TRUE)
+  ng <- ngram::ngram(stream, n=2, sep='')  # bigram model
+  dfNgramRaw <- data.frame(ngram::get.phrasetable(ng))
+  dfNgramRaw$first <- sapply(dfNgramRaw$ngrams, function(x) {strsplit(x, '')}[[1]][1])
+  dfNgramRaw$second <- sapply(dfNgramRaw$ngrams, function(x) {strsplit(x, '')}[[1]][3])
+  dfNgramRaw <- dfNgramRaw %>%
+    mutate(first=ifelse(first==' ', '*', first),
+           second=ifelse(second==' ', '*', second))
+  dfNgramRaw$theta <- unique(dfCorpus$theta)
+  dfNgramRaw$alpha <- unique(dfCorpus$alpha)
+  dfNgramRaw$lambda <- unique(dfCorpus$lambda)
+  dfNgramRaw$expNum <- unique(dfCorpus$expNum)
+  dfNgramRaw
+}
+
+run_corpus_analysis_ <- function(df_lm) {
+  df_lm %>%
+    group_by(second) %>%
+    mutate(secondUncondProb=sum(prop),                # p(a|X) + p(a|^)
+           lik=prop/secondUncondProb) %>%             # p(X|a) = p(X a) / p(a|X) + p(a|^)
+    ungroup %>%
+    mutate(logUncondProb=log2(secondUncondProb)) %>%  # p(a)
+    ungroup %>%
+    select(first, second, lik, logUncondProb) %>%
+    filter(second %in% c(letters[1:5], '*'), first=='X') %>%
+    group_by(second) %>%
+    summarise(
+      avgPostProb=mean(logUncondProb),
+      avgLikelihood=mean(lik))
+}
+
+# Put in a function somewhere
+# no_cores <- detectCores() - 1
+# cl <- makeCluster(no_cores, type='FORK')
+# registerDoParallel(cl)
+# 
+# simsExp1 <- foreach(i=seq(1, nIters), .packages=c('dplyr', 'rwebppl'), .combine=rbind) %dopar% runExp1(i)
+# stopCluster(cl)
+```
+
+```{r test_3}
+noisy_rsa1_corpus_file <- 'Models/testing/noisy-rsa1-corpus.wppl'
+noisy_rsa1_corpus_run_fn <- function(modelFile) {
+  rData <- data.frame(modelName='S1', alpha=1, lambda=1, theta=0.2, n=100)
+  df <- rwebppl::webppl(modelFile, data=rData, data_var='rData') %>%
+    mutate(modelName=rData$modelName,
+           alpha=rData$alpha,
+           lambda=rData$lambda,
+           theta=rData$theta,
+           n=rData$n)
+  # Parallelize runs below
+  # -----------------------
+  # no_cores <- detectCores() - 1
+  # cl <- makeCluster(no_cores, type='FORK')
+  # registerDoParallel(cl)
+  # sims <- foreach(i=seq(1, nIters), .packages=c('dplyr', 'rwebppl'), .combine=rbind) %dopar% runExp1(i)
+  df_lm <- createLM(df)
+  df_summary <- run_corpus_analysis_(df_lm)
+  df_summary
+}
+
+noisy_rsa1_corpus_test_fn <- function(df) {
+  return(
+    (filter(df, second=='a')$avgPostProb < filter(df, second=='b')$avgPostProb) && 
+    (filter(df, second=='a')$avgLikelihood > filter(df, second=='b')$avgLikelihood))
+}
+
+test_3_fn <- create_test(noisy_rsa1_corpus_file, noisy_rsa1_corpus_run_fn, noisy_rsa1_corpus_test_fn)
+```
+
+```{r run_all_tests}
+run_all_tests <- function(tests){
+  sapply(tests, function(x) x())
+}
+
+noisy_rsa1_tests <- c(test_1_fn, test_2_fn, test_3_fn)
+run_all_tests(noisy_rsa1_tests)
+```
+
+
