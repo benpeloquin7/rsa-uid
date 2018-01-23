@@ -55,27 +55,29 @@ create_test <- function(fPath, run_fn, test_fn) {
   d <- run_fn(m)
   return(function() test_fn(d))
 }
+
+ALPHA <- 5
+LAMBDA <- 50
+THETA <- 0.9
 ```
 
+## Noisy RSA1
 ### Listener test
 ```{r test_1}
-noisy_rsa1_listener_file <- 'Models/testing/noisy-rsa1-listener.wppl'
-noisy_rsa1_listener_run_fn <- function(modelFile) {
-  rwebppl::webppl(modelFile)
+listener_run_fn_ <- function(modelFile) {
+  rData <- data.frame(alpha=ALPHA, lambda=LAMBDA, modelName='L1', theta=THETA)
+  rwebppl::webppl(modelFile, data=rData, data_var='rData')
 }
-noisy_rsa_listener_test_Fn <- function(df) {
+listener_test_fn_ <- function(df) {
   filter(df, d=='a')$prob > filter(df, d=='b')$prob
 }
-
-test_1_fn <- create_test(noisy_rsa1_listener_file, noisy_rsa1_listener_run_fn, noisy_rsa_listener_test_Fn)
 ```
+
 ### Speaker test
 ```{r test_2}
-noisy_rsa1_speaker_file <- 'Models/testing/noisy-rsa1-speaker.wppl'
-
-noisy_rsa1_speaker_run_fn <- function(modelFile){
+speaker_run_fn_ <- function(modelFile){
   noisy_rsa1_speaker_run_fn_ <- function(modelFile, input) {
-    rData <- data.frame(alpha=1, lambda=1, modelName='S1', theta=0.2, speakerInput=input)
+    rData <- data.frame(alpha=ALPHA, lambda=LAMBDA, modelName='S1', theta=THETA, speakerInput=input)
     rwebppl::webppl(modelFile, data=rData, data_var='rData')
   }
   
@@ -87,15 +89,19 @@ noisy_rsa1_speaker_run_fn <- function(modelFile){
   d_full
 }
 
-noisy_rsa1_speaker_test_fn <- function(df) {
+speaker_test_fn_ <- function(df) {
+  # Test one, check proportions
   dfa <- filter(df, input=='a')
   dfb <- filter(df, input=='b')
   propAMarked <- filter(dfa, support=='X a')$prob / (filter(dfa, support=='X a')$prob + filter(dfa, support=='a')$prob)
-  propBMarked <- filter(dfa, support=='X b')$prob / (filter(dfa, support=='X b')$prob + filter(dfa, support=='b')$prob)
+  propBMarked <- filter(dfb, support=='X b')$prob / (filter(dfb, support=='X b')$prob + filter(dfb, support=='b')$prob)
   propAMarked > propBMarked
 }
 
-test_2_fn <- create_test(noisy_rsa1_speaker_file, noisy_rsa1_speaker_run_fn, noisy_rsa1_speaker_test_fn)
+speaker_test_fn_ <- function(df) {
+  # Test one, check proportions
+  filter(df, input=='a' & support == 'X a')$prob > filter(df, input=='b' & support == 'X b')$prob
+}
 ```
 
 ### Corpus test
@@ -167,9 +173,8 @@ run_corpus_analysis_ <- function(df_lm) {
 ```
 
 ```{r test_3}
-noisy_rsa1_corpus_file <- 'Models/testing/noisy-rsa1-corpus.wppl'
-noisy_rsa1_corpus_run_fn <- function(modelFile) {
-  rData <- data.frame(modelName='S1', alpha=1, lambda=1, theta=0.2, n=100)
+corpus_run_fn_ <- function(modelFile) {
+  rData <- data.frame(modelName='S1', alpha=ALPHA, lambda=LAMBDA, theta=THETA, n=10000)
   df <- rwebppl::webppl(modelFile, data=rData, data_var='rData') %>%
     mutate(modelName=rData$modelName,
            alpha=rData$alpha,
@@ -187,22 +192,51 @@ noisy_rsa1_corpus_run_fn <- function(modelFile) {
   df_summary
 }
 
-noisy_rsa1_corpus_test_fn <- function(df) {
+corpus_test_fn_ <- function(df) {
   return(
     (filter(df, second=='a')$avgPostProb < filter(df, second=='b')$avgPostProb) && 
     (filter(df, second=='a')$avgLikelihood > filter(df, second=='b')$avgLikelihood))
 }
-
-test_3_fn <- create_test(noisy_rsa1_corpus_file, noisy_rsa1_corpus_run_fn, noisy_rsa1_corpus_test_fn)
 ```
 
-```{r run_all_tests}
+```{r run_tests_helper}
 run_all_tests <- function(tests){
   sapply(tests, function(x) x())
 }
+```
 
-noisy_rsa1_tests <- c(test_1_fn, test_2_fn, test_3_fn)
+```{r run_noisy_rsa1_tests}
+noisy_rsa1_listener_file <- 'Models/testing/noisy-rsa1-listener.wppl'
+noisy_rsa1_listener_test <- create_test(noisy_rsa1_listener_file, listener_run_fn_, listener_test_fn_)
+noisy_rsa1_speaker_file <- 'Models/testing/noisy-rsa1-speaker.wppl'
+noisy_rsa1_speaker_test <- create_test(noisy_rsa1_speaker_file, speaker_run_fn_, speaker_test_fn_)
+noisy_rsa1_corpus_file <- 'Models/testing/noisy-rsa1-corpus.wppl'
+noisy_rsa1_corpus_test <- create_test(noisy_rsa1_corpus_file, corpus_run_fn_, corpus_test_fn_)
+noisy_rsa1_tests <- c(noisy_rsa1_listener_test, noisy_rsa1_speaker_test, noisy_rsa1_corpus_test)
 run_all_tests(noisy_rsa1_tests)
+```
+
+```{r run_noisy_rsa1_tests}
+noisy_rsa2_listener_file <- 'Models/testing/noisy-rsa2-listener.wppl'
+noisy_rsa2_listener_test <- create_test(noisy_rsa2_listener_file, listener_run_fn_, listener_test_fn_)
+noisy_rsa2_speaker_file <- 'Models/testing/noisy-rsa2-speaker.wppl'
+noisy_rsa2_speaker_test <- create_test(noisy_rsa2_speaker_file, speaker_run_fn_, speaker_test_fn_)
+noisy_rsa2_corpus_file <- 'Models/testing/noisy-rsa2-corpus.wppl'
+noisy_rsa2_corpus_test <- create_test(noisy_rsa2_corpus_file, corpus_run_fn_, corpus_test_fn_)
+noisy_rsa2_tests <- c(noisy_rsa2_listener_test, noisy_rsa2_speaker_test, noisy_rsa2_corpus_test)
+run_all_tests(noisy_rsa2_tests)
+```
+
+## Basic RSA - no noise
+```{r run_basic_rsa1_tests}
+basic_rsa1_listener_file <- 'Models/testing/basic-rsa1-listener.wppl'
+basic_rsa1_listener_test <- create_test(basic_rsa1_listener_file, listener_run_fn_, listener_test_fn_)
+basic_rsa1_speaker_file <- 'Models/testing/basic-rsa1-speaker.wppl'
+basic_rsa1_speaker_test <- create_test(basic_rsa1_speaker_file, speaker_run_fn_, speaker_test_fn_)
+basic_rsa1_corpus_file <- 'Models/testing/basic-rsa1-corpus.wppl'
+basic_rsa1_corpus_test <- create_test(basic_rsa1_corpus_file, corpus_run_fn_, corpus_test_fn_)
+basic_rsa1_tests <- c(basic_rsa1_listener_test, basic_rsa1_speaker_test, basic_rsa1_corpus_test)
+run_all_tests(basic_rsa1_tests)
 ```
 
 

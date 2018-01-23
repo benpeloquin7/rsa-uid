@@ -1,14 +1,3 @@
-/***
-
-  rData
-  alpha
-  lambda
-  theta
-  modelName
-  N
-
-***/
-
 /*********************/
 /*********************/
 /******* SETUP *******/
@@ -40,12 +29,17 @@ var getN = function(rData) {
   return data['n']
 }
 
-//var rData = [{'alpha':2, 'lambda':50, 'modelName':'S1', 'theta':0.9, 'n':10000}]
+var getSpeakerInput = function(rData) {
+  var data = rData[0]
+  return {d: data['speakerInput']}
+}
+
+//var rData = [{'alpha':1, 'lambda':1, 'modelName':'S1', 'theta':0.2, 'speakerInput':'a'}]
 
 var LAMBDA = getLambda(rData)
 var ALPHA = getAlpha(rData)
 var THETA = getTheta(rData)
-var N = getN(rData)
+var INPUT = getSpeakerInput(rData)
 
 var aUtterances = ['X a', 'a']
 var bUtterances = ['X b', 'b']
@@ -164,11 +158,10 @@ var cost = function(utterance) {
 var S1 = cache(function(world) {
   Infer({
     model() {
-//       var intendedUtterance = utterancesPrior()
-      var intendedUtterance = getValidUtteranceGivenWorld(world)
+      var intendedUtterance = utterancesPrior()
       var producedUtterance = deleteNoiseModel(intendedUtterance)
       var L = L0(producedUtterance)
-      factor(L.score(world) - cost(intendedUtterance)/10)
+      factor(ALPHA*(L.score(world) - cost(intendedUtterance)/10))
       return intendedUtterance
     }
   })
@@ -286,4 +279,4 @@ var getModel = function(modelName) {
 }
 var modelName = getModelName(rData)
 var model = getModel(modelName)
-model('X')
+model(INPUT)

@@ -1,0 +1,181 @@
+/***
+
+  rData
+  alpha
+  lambda
+  theta
+  modelName
+  N
+
+***/
+
+/*********************/
+/*********************/
+/******* SETUP *******/
+/*********************/
+/*********************/
+
+var getAlpha = function(rData) {
+  var data = rData[0]
+  return data['alpha']
+}
+
+var getLambda = function(rData) {
+  var data = rData[0]
+  return data['lambda']
+}
+
+var getTheta = function(rData) {
+  var data = rData[0]
+  return data['theta']
+}
+
+var getModelName = function(rData) {
+  var data = rData[0]
+  return data['modelName']
+}
+
+var getN = function(rData) {
+  var data = rData[0]
+  return data['n']
+}
+
+var getSpeakerInput = function(rData) {
+  var data = rData[0]
+  return {d: data['speakerInput']}
+}
+
+//var rData = [{'alpha':1, 'lambda':1, 'modelName':'S1', 'theta':0.2, 'speakerInput':'a'}]
+
+var LAMBDA = getLambda(rData)
+var ALPHA = getAlpha(rData)
+var THETA = getTheta(rData)
+var INPUT = getSpeakerInput(rData)
+
+var utterances = ['X a', 'a', 'X b', 'b', 'X', '']
+var utteranceProbs = [0.5, 1, 0.5, 1, .1, .01]
+var utterancesDistr = Categorical({vs:utterances, ps:utteranceProbs})
+var utterancesPrior = function() {return sample(utterancesDistr)}
+
+var worlds = [{d:'a'}, {d:'b'}, {d:'*'}]
+var worldProbs = [0.2, 2, 0.01]
+var worldsDistr = Categorical({vs:worlds, ps:worldProbs})
+var worldsPrior = function() {return sample(worldsDistr)}
+
+var meaning = function(utterance, world) {
+  var worldDim = world['d']
+  return utteranceMeaning(utterance) == worldDim
+}
+
+var utteranceMeaning = function(utterance) {
+  var lastCharIndex = utterance.length - 1
+  return utterance.includes('a') ? utterance.charAt(lastCharIndex) :
+         utterance.includes('b') ? utterance.charAt(lastCharIndex) :
+         utterance.includes('X') ? worldsPrior()['d'] : '*'
+}
+
+var cost = function(utterance) {
+  return utterance.split(' ').length
+}
+
+var L0 = cache(function(utterance) {
+  Infer({
+    model() {
+      var world = worldsPrior()
+      var meaning = meaning(utteranceMeaning(utterance), world)
+      factor(meaning ? 0: -Infinity)
+      return world
+  }})
+})
+
+var S1 = cache(function(world) {
+  Infer({
+    model() {
+      var utterance = utterancesPrior()
+      var L = L0(utterance)
+      factor(ALPHA * (L.score(world) - cost(utterance)/10))
+      return utterance
+  }})
+})
+
+var L1 = cache(function(utterance) {
+  Infer({
+    model() {
+      var world = worldsPrior()
+      var S = S1(world)
+      factor(S.score(utterance))
+      return world
+  }})
+})
+
+var S2 = cache(function(world) {
+  Infer({
+    model() {
+      var utterance = utterancesPrior()
+      var L = L1(utterance)
+      factor(alpha * (L.score(world) - cost(utterance)/10))
+      return utterance
+  }})
+})
+
+// ------------
+//    Corpus
+// ------------
+var runExperiment = function(speaker, world) {
+  return sample(speaker(world))
+}
+
+var runExperiments = function(worldGenerator, speaker, n, data) {
+  /*
+  Parameters
+  ----------
+  worldGenerator: fn
+    Generate a full world.
+  spekeaker: fn
+    RSA speaker function. Input worlds, output utterances.
+  n: int
+    Number of forward samples.
+  data: array
+    Data store (corpus).
+    
+  Returns
+  -------
+  array
+    Array of utterances.
+  
+  */
+  var world = worldGenerator()
+  var currUtt = runExperiment(speaker, world)  // really this should be a dict object with context
+  var success = utteranceMeaning(currUtt) == world['d']
+  var currData = {currUtterance:currUtt, isSuccess:success}
+  data.push(currData)
+  return n <= 1 ? data : runExperiments(worldGenerator, speaker, n-1, data)
+}
+
+var worldGenerator = function() {
+  /* Note that this should eventually be different from `worldsPrior`. Ideally we will have more "complex"
+  worlds of (a) multiple objects and (b) objects with multiple dimensions. In the 
+  single object, single object case this will look just like a single prior over a dimension.
+  */
+  return worldsPrior()
+}
+
+
+/*********************/
+/*********************/
+/******** run ********/
+/*********************/
+/*********************/
+
+var getModel = function(modelName) {
+  var models = {
+    'L0': L0,
+    'S1': S1,
+    'L1': L1,
+    'S2': S2
+  }
+  return models[modelName]
+}
+var modelName = getModelName(rData)
+var model = getModel(modelName)
+model(INPUT)
