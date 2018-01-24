@@ -40,12 +40,18 @@ var getN = function(rData) {
   return data['n']
 }
 
-//var rData = [{'alpha':2, 'lambda':50, 'modelName':'S1', 'theta':0.9, 'n':10000}]
+var getSpeakerInput = function(rData) {
+  var data = rData[0]
+  return {d: data['speakerInput']}
+}
+
+// var rData = [{'alpha':5, 'lambda':1, 'modelName':'S1', 'theta':0.1, 'n':10000}]
 
 var LAMBDA = getLambda(rData)
 var ALPHA = getAlpha(rData)
 var THETA = getTheta(rData)
 var N = getN(rData)
+var INPUT = getSpeakerInput(rData)
 
 var aUtterances = ['X a', 'a']
 var bUtterances = ['X b', 'b']
@@ -58,20 +64,25 @@ var cUtterancesDistr = Categorical({vs:cUtterances, ps:partialUtteranceProbs})
 var dUtterancesDistr = Categorical({vs:dUtterances, ps:partialUtteranceProbs})
 
 var utterances = ['X a', 'a', 'X b', 'b', 'X c', 'c', 'X d', 'd']
-var utteranceProbs = [1, 1, 1, 1, 1, 1, 1, 1]
+var utteranceProbs = [0.5, 1, 0.5, 1, 0.5, 1, 0.5, 1]
 var utterancesDistr = Categorical({vs:utterances, ps:utteranceProbs})
 var utterancesPrior = function() {return sample(utterancesDistr)}
 
 
 var worlds = [{d:'a'}, {d:'b'}, {d:'c'}, {d:'d'}]
-var worldProbs = [1, 2, 3, 4]
+var worldProbs = [0.2, 0.5, 1, 2.5]
 var worldsDistr = Categorical({vs:worlds, ps:worldProbs})
 var worldsPrior = function() {return sample(worldsDistr)}
+
+var thetaDistr = Categorical({vs: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+                              ps: [1, 1, 1, 1, 1, 1, 1, 1, 1]})
+var thetaPrior = function() {return sample(thetaDistr)}
 
 var getValidUtteranceGivenWorld = function(w) {
   return w['d'] == 'a' ? sample(aUtterancesDistr) :
          w['d'] == 'b' ? sample(bUtterancesDistr) : 
          w['d'] == 'c' ? sample(cUtterancesDistr) :
+         w['d'] == 'd' ? sample(cUtterancesDistr) :
          sample(dUtterancesDistr)
 }
 

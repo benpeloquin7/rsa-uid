@@ -116,15 +116,15 @@ var deleteTransform = transformUtterance(_deleteFn)
 var vacuousNoiseModel = function(utterance) {
   return utterance
 }
-var deleteNoiseModel = function(utterance) {
-  return flip(THETA) ? deleteTransform(utterance) : utterance
+var deleteNoiseModel = function(utterance, theta) {
+  return flip(theta) ? deleteTransform(utterance) : utterance
 }
 
-var decode = cache(function(utteranceProduced, noiseModel) {
+var decode = cache(function(utteranceProduced, noiseModel, theta) {
   Infer({
     model() {
       var utteranceIntended = utterancesPrior()
-      var noisyUtterance = noiseModel(utteranceIntended, THETA)
+      var noisyUtterance = noiseModel(utteranceIntended, theta)
       factor(utteranceProduced == noisyUtterance ? 0 : -Infinity)
       return utteranceIntended
     }
@@ -156,11 +156,11 @@ var meaning = function(utterance, world) {
 }
 
 
-var L0 = cache(function(utterance) {
+var L0 = cache(function(utterance, theta) {
   Infer({
     model() {
       var world = worldsPrior()
-      var intendedUtterance = sample(decode(utterance, deleteNoiseModel))
+      var intendedUtterance = sample(decode(utterance, deleteNoiseModel, theta))
       var meaning = meaning(utteranceMeaning(intendedUtterance), world)
       factor(meaning ? 0 : -Infinity)
       return world
@@ -172,61 +172,64 @@ var cost = function(utterance) {
   return utterance.split(' ').length
 }
 
-var S1 = cache(function(world) {
+var S1 = cache(function(world, theta) {
   Infer({
     model() {
-      var intendedUtterance = utterancesPrior()
-      var producedUtterance = deleteNoiseModel(intendedUtterance)
-      var L = L0(producedUtterance)
-      factor(ALPHA*(L.score(world) - cost(intendedUtterance)/10))
+      var intendedUtterance = utterancesPrior(world)
+      var producedUtterance = deleteNoiseModel(intendedUtterance, theta)
+      var L = L0(producedUtterance, theta)
+      factor(ALPHA * (L.score(world) - cost(intendedUtterance)/10))
       return intendedUtterance
     }
   })
 })
 
-var L1 = cache(function(utterance) {
+var L1 = cache(function(utterance, theta) {
   Infer({
     model() {
       var world = worldsPrior()
-      var intendedUtterance = sample(decode(utterance, deleteNoiseModel))
-      var S = S1(world)
+      var intendedUtterance = sample(decode(utterance, deleteNoiseModel, theta))
+      var S = S1(world, theta)
       factor(LAMBDA*(S.score(intendedUtterance)))
       return world
     }
   })
 })
 
-var S2 = cache(function(world) {
+var S2 = cache(function(world, theta) {
   Infer({
     model() {
+//       var theta = thetaPrior()
       var intendedUtterance = utterancesPrior()
-      var producedUtterance = deleteNoiseModel(intendedUtterance)
-      var L = L1(producedUtterance)
-      factor(ALPHA*(L.score(world) - cost(intendedUtterance)/10))
+//       var intendedUtterance = getValidUtteranceGivenWorld(world)
+      var producedUtterance = deleteNoiseModel(intendedUtterance, theta)
+      var L = L1(producedUtterance, theta)
+      factor(ALPHA*(L.score(world)))
       return intendedUtterance
     }
   })
 })
 
-var L2 = cache(function(utterance) {
+var L2 = function(utterance, theta) {
   Infer({
     model() {
       var world = worldsPrior()
-      var intendedUtterance = sample(decode(utterance, deleteNoiseModel))
-      var S = S2(world)
+      var intendedUtterance = sample(decode(utterance, deleteNoiseModel, theta))
+      var S = S2(world, theta)
       factor(LAMBDA*S.score(intendedUtterance))
       return world
     }
   })
-})
+}
 
 var S3 = cache(function(world) {
   Infer({
     model() {
+      var theta = thetaPrior()
       var intendedUtterance = getValidUtteranceGivenWorld(world)
-      var producedUtterance = deleteNoiseModel(intendedUtterance)
-      var L = L2(producedUtterance)
-      factor(ALPHA * (L.score(world) - cost(intendedUtterance)/10))
+      var producedUtterance = deleteNoiseModel(intendedUtterance, theta)
+      var L = L2(producedUtterance, theta)
+      factor(ALPHA * (L.score(world)-cost(intendedUtterance)/10))
       return intendedUtterance
     }
   })
@@ -264,7 +267,6 @@ var runExperiments = function(worldGenerator, speaker, n, data) {
   var world = worldGenerator()
   var currUtt = runExperiment(speaker, world)  // really this should be a dict object with context
   var success = utteranceMeaning(currUtt) == world['d']
-//   var currData = {currUtterance:currUtt, currWorld:world['d'], isSuccess:success}
   var currData = {currUtterance:currUtt, isSuccess:success}
   data.push(currData)
   return n <= 1 ? data : runExperiments(worldGenerator, speaker, n-1, data)

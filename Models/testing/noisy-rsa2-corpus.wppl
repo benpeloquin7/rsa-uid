@@ -40,12 +40,18 @@ var getN = function(rData) {
   return data['n']
 }
 
-//var rData = [{'alpha':2, 'lambda':50, 'modelName':'S1', 'theta':0.9, 'n':10000}]
+var getSpeakerInput = function(rData) {
+  var data = rData[0]
+  return {d: data['speakerInput']}
+}
+
+// var rData = [{'alpha':5, 'lambda':1, 'modelName':'S1', 'theta':0.1, 'n':10000}]
 
 var LAMBDA = getLambda(rData)
 var ALPHA = getAlpha(rData)
 var THETA = getTheta(rData)
 var N = getN(rData)
+var INPUT = getSpeakerInput(rData)
 
 var aUtterances = ['X a', 'a']
 var bUtterances = ['X b', 'b']
@@ -58,20 +64,25 @@ var cUtterancesDistr = Categorical({vs:cUtterances, ps:partialUtteranceProbs})
 var dUtterancesDistr = Categorical({vs:dUtterances, ps:partialUtteranceProbs})
 
 var utterances = ['X a', 'a', 'X b', 'b', 'X c', 'c', 'X d', 'd']
-var utteranceProbs = [1, 1, 1, 1, 1, 1, 1, 1]
+var utteranceProbs = [0.5, 1, 0.5, 1, 0.5, 1, 0.5, 1]
 var utterancesDistr = Categorical({vs:utterances, ps:utteranceProbs})
 var utterancesPrior = function() {return sample(utterancesDistr)}
 
 
 var worlds = [{d:'a'}, {d:'b'}, {d:'c'}, {d:'d'}]
-var worldProbs = [1, 2, 3, 4]
+var worldProbs = [0.2, 0.5, 1, 2.5]
 var worldsDistr = Categorical({vs:worlds, ps:worldProbs})
 var worldsPrior = function() {return sample(worldsDistr)}
+
+var thetaDistr = Categorical({vs: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+                              ps: [1, 1, 1, 1, 1, 1, 1, 1, 1]})
+var thetaPrior = function() {return sample(thetaDistr)}
 
 var getValidUtteranceGivenWorld = function(w) {
   return w['d'] == 'a' ? sample(aUtterancesDistr) :
          w['d'] == 'b' ? sample(bUtterancesDistr) : 
          w['d'] == 'c' ? sample(cUtterancesDistr) :
+         w['d'] == 'd' ? sample(dUtterancesDistr) :
          sample(dUtterancesDistr)
 }
 
@@ -167,7 +178,7 @@ var S1 = cache(function(world) {
       var intendedUtterance = utterancesPrior()
       var producedUtterance = deleteNoiseModel(intendedUtterance)
       var L = L0(producedUtterance)
-      factor(ALPHA*(L.score(world) - cost(intendedUtterance)/10))
+      factor(ALPHA * (L.score(world) - cost(intendedUtterance)/10))
       return intendedUtterance
     }
   })
@@ -179,7 +190,7 @@ var L1 = cache(function(utterance) {
       var world = worldsPrior()
       var intendedUtterance = sample(decode(utterance, deleteNoiseModel))
       var S = S1(world)
-      factor(LAMBDA*(S.score(intendedUtterance)))
+      factor(LAMBDA * (S.score(intendedUtterance)))
       return world
     }
   })
@@ -191,31 +202,31 @@ var S2 = cache(function(world) {
       var intendedUtterance = utterancesPrior()
       var producedUtterance = deleteNoiseModel(intendedUtterance)
       var L = L1(producedUtterance)
-      factor(ALPHA*(L.score(world)))
+      factor(ALPHA * (L.score(world) - cost(intendedUtterance)/10))
       return intendedUtterance
     }
   })
 })
 
-var L2 = function(utterance) {
+var L2 = cache(function(utterance) {
   Infer({
     model() {
       var world = worldsPrior()
       var intendedUtterance = sample(decode(utterance, deleteNoiseModel))
       var S = S2(world)
-      factor(LAMBDA*S.score(intendedUtterance))
+      factor(LAMBDA * S.score(intendedUtterance))
       return world
     }
   })
-}
+})
 
 var S3 = cache(function(world) {
   Infer({
     model() {
-      var intendedUtterance = utterancesPrior()
+      var intendedUtterance = getValidUtteranceGivenWorld(world)
       var producedUtterance = deleteNoiseModel(intendedUtterance)
       var L = L2(producedUtterance)
-      factor((L.score(world)))
+      factor(ALPHA * (L.score(world)-cost(intendedUtterance)/10))
       return intendedUtterance
     }
   })
@@ -253,7 +264,6 @@ var runExperiments = function(worldGenerator, speaker, n, data) {
   var world = worldGenerator()
   var currUtt = runExperiment(speaker, world)  // really this should be a dict object with context
   var success = utteranceMeaning(currUtt) == world['d']
-//   var currData = {currUtterance:currUtt, currWorld:world['d'], isSuccess:success}
   var currData = {currUtterance:currUtt, isSuccess:success}
   data.push(currData)
   return n <= 1 ? data : runExperiments(worldGenerator, speaker, n-1, data)
@@ -279,7 +289,8 @@ var getModel = function(modelName) {
     'S1': S1,
     'L1': L1,
     'S2': S2,
-    'L2': L2
+    'L2': L2,
+    'S3': S3
   }
   return models[modelName]
 }

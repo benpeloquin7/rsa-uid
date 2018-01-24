@@ -31,10 +31,10 @@ Things to normalize across models:
 * Model parameters
   + input
   + theta
-  + utterance set
-  + utterance probs
-  + worlds
-  + world probs
+  + utterance set: ['X a', 'a', 'X b', 'b', 'X c', 'c', 'X c', 'c']
+  + utterance probs: [marked: 0.5, unmarked: 1]
+  + worlds: [A, B, C, D] from high --> low surprisal
+  + world probs: chosen to approximate range of surprisal values in Levy & Jaeger (2007)
   + recursion level
 
 ```{r warning=FALSE, message=FALSE}
@@ -57,7 +57,7 @@ create_test <- function(fPath, run_fn, test_fn) {
 }
 
 ALPHA <- 5
-LAMBDA <- 50
+LAMBDA <- 10
 THETA <- 0.9
 ```
 
@@ -65,7 +65,7 @@ THETA <- 0.9
 ### Listener test
 ```{r test_1}
 listener_run_fn_ <- function(modelFile) {
-  rData <- data.frame(alpha=ALPHA, lambda=LAMBDA, modelName='L1', theta=THETA)
+  rData <- data.frame(alpha=1, lambda=10, modelName='L1', theta=THETA)
   rwebppl::webppl(modelFile, data=rData, data_var='rData')
 }
 listener_test_fn_ <- function(df) {
@@ -77,7 +77,7 @@ listener_test_fn_ <- function(df) {
 ```{r test_2}
 speaker_run_fn_ <- function(modelFile){
   noisy_rsa1_speaker_run_fn_ <- function(modelFile, input) {
-    rData <- data.frame(alpha=ALPHA, lambda=LAMBDA, modelName='S1', theta=THETA, speakerInput=input)
+    rData <- data.frame(alpha=5, lambda=1, modelName='S3', theta=THETA, speakerInput=input)
     rwebppl::webppl(modelFile, data=rData, data_var='rData')
   }
   
@@ -106,21 +106,41 @@ speaker_test_fn_ <- function(df) {
 
 ### Corpus test
 ```{r corpus_helpers}
-# runExperimentFn <- function(runFn, modelName, alpha, lambda, theta, n) {
-#   return(function(expNum) {
-#     rData <- newRData(modelName, alpha, lambda, theta, n)
-#     df <- runFn(rData) %>%
-#       mutate(modelName=modelName,
-#              alpha=alpha,
-#              lambda=lambda,
-#              theta=theta,
-#              n=n,
-#              expNum=expNum)
-#     df 
-#   })
-# }
+createRunFn <- function(modelStr) {
+    return(function(data, dataName='rData') { 
+      rwebppl::webppl(modelStr, data=data, data_var=dataName)
+    })
+}
 
-createLM <- function(dfCorpus) {
+createRData_ <- function(modelName, alpha, lambda, theta, n) {
+  data.frame(modelName=modelName,
+             alpha=alpha,
+             lambda=lambda,
+             theta=theta,
+             n=n,
+             stringsAsFactors=FALSE)
+}
+
+# Pipeline
+# ---------
+# (1) run experiments in parallel
+# (2) run experiments in parallel
+
+runExperimentFn_ <- function(runFn, modelName, alpha, lambda, theta, n) {
+  return(function(expNum) {
+    rData <- createRData_(modelName, alpha, lambda, theta, n)
+    df <- runFn(rData) %>%
+      mutate(modelName=modelName,
+             alpha=alpha,
+             lambda=lambda,
+             theta=theta,
+             n=n,
+             expNum=expNum)
+    df
+  })
+}
+
+createLM_ <- function(dfCorpus) {
   annotateUtterance <- function(x) {
     x <- gsub(' ', '', x)
     x <- paste0('^', x)
@@ -149,19 +169,37 @@ createLM <- function(dfCorpus) {
 
 run_corpus_analysis_ <- function(df_lm) {
   df_lm %>%
-    group_by(second) %>%
-    mutate(secondUncondProb=sum(prop),                # p(a|X) + p(a|^)
-           lik=prop/secondUncondProb) %>%             # p(X|a) = p(X a) / p(a|X) + p(a|^)
+    group_by(expNum, second) %>%
+    mutate(secondTotalProp=sum(prop),       # p(a|X) + p(a|^)
+           lik=prop/secondTotalProp) %>%    # p(X|a) = p(X a) / p(a|X) + p(a|^)
     ungroup %>%
-    mutate(logUncondProb=log2(secondUncondProb)) %>%  # p(a)
+    group_by(expNum) %>%
+    mutate(postProb=log2(secondTotalProp/sum(prop))) %>%  # p(a)
     ungroup %>%
-    select(first, second, lik, logUncondProb) %>%
+    select(expNum, first, second, lik, postProb) %>%
     filter(second %in% c(letters[1:5], '*'), first=='X') %>%
     group_by(second) %>%
     summarise(
-      avgPostProb=mean(logUncondProb),
-      avgLikelihood=mean(lik))
+      avgPostProb=mean(postProb),
+      xmin=quantile(postProb, probs=c(0.05)),
+      xmax=quantile(postProb, probs=c(0.95)),
+      avgLikelihood=mean(lik),
+      ymin=quantile(lik, probs=c(0.05)),
+      ymax=quantile(lik, probs=c(0.95)))
 }
+
+process_sims_ <- function(sims) {
+  lSimsExp1 <- sims %>%
+    group_by(expNum) %>%
+    do(vals=data.frame(.)) %>%
+    lapply(function(x) {(x)})
+
+  lD <- lapply(lSimsExp1$vals, function(x) {createLM_(x)})
+  df <- do.call(rbind, lD)
+  df
+}
+
+
 
 # Put in a function somewhere
 # no_cores <- detectCores() - 1
@@ -173,21 +211,31 @@ run_corpus_analysis_ <- function(df_lm) {
 ```
 
 ```{r test_3}
-corpus_run_fn_ <- function(modelFile) {
-  rData <- data.frame(modelName='S1', alpha=ALPHA, lambda=LAMBDA, theta=THETA, n=10000)
-  df <- rwebppl::webppl(modelFile, data=rData, data_var='rData') %>%
-    mutate(modelName=rData$modelName,
-           alpha=rData$alpha,
-           lambda=rData$lambda,
-           theta=rData$theta,
-           n=rData$n)
-  # Parallelize runs below
-  # -----------------------
-  # no_cores <- detectCores() - 1
-  # cl <- makeCluster(no_cores, type='FORK')
-  # registerDoParallel(cl)
-  # sims <- foreach(i=seq(1, nIters), .packages=c('dplyr', 'rwebppl'), .combine=rbind) %dopar% runExp1(i)
-  df_lm <- createLM(df)
+# corpus_run_fn
+# -------------
+# Pipeline
+# (1) run simulations
+# (2) create lm for each simluation
+# (3) run lm analysis per simulation - utterance surprisal X likelihood of marked
+corpus_run_fn <- function(modelFile){
+  runFn <- createRunFn(modelFile)
+  nUtts <- 1000
+  runExp_ <- runExperimentFn_(runFn, 'S3', 5, 1, THETA, nUtts)
+  # Register cores
+  no_cores <- detectCores() - 1
+  cl <- makeCluster(no_cores, type='FORK')
+  registerDoParallel(cl)
+  # Run sims
+  ptm <- proc.time()
+  nSims <- 100
+  cat("Running", nSims, "simulations each with", nUtts, "samples.")
+  sims <- foreach(i=seq(1, nSims), .packages=c('dplyr', 'rwebppl'), .combine=rbind) %dopar% runExp_(i)
+  stopCluster(cl)
+  etm <- proc.time() - ptm
+  cat("runtime: ", etm[3] / 60)
+  # Create LMs
+  df_lm <- process_sims_(sims)
+  # LM analysis
   df_summary <- run_corpus_analysis_(df_lm)
   df_summary
 }
@@ -199,6 +247,7 @@ corpus_test_fn_ <- function(df) {
 }
 ```
 
+
 ```{r run_tests_helper}
 run_all_tests <- function(tests){
   sapply(tests, function(x) x())
@@ -206,6 +255,7 @@ run_all_tests <- function(tests){
 ```
 
 ```{r run_noisy_rsa1_tests}
+# Static theta, S3 only samples all utterances
 noisy_rsa1_listener_file <- 'Models/testing/noisy-rsa1-listener.wppl'
 noisy_rsa1_listener_test <- create_test(noisy_rsa1_listener_file, listener_run_fn_, listener_test_fn_)
 noisy_rsa1_speaker_file <- 'Models/testing/noisy-rsa1-speaker.wppl'
@@ -217,6 +267,7 @@ run_all_tests(noisy_rsa1_tests)
 ```
 
 ```{r run_noisy_rsa1_tests}
+# Static theta, S3 only samples valid utterances.
 noisy_rsa2_listener_file <- 'Models/testing/noisy-rsa2-listener.wppl'
 noisy_rsa2_listener_test <- create_test(noisy_rsa2_listener_file, listener_run_fn_, listener_test_fn_)
 noisy_rsa2_speaker_file <- 'Models/testing/noisy-rsa2-speaker.wppl'
@@ -225,6 +276,19 @@ noisy_rsa2_corpus_file <- 'Models/testing/noisy-rsa2-corpus.wppl'
 noisy_rsa2_corpus_test <- create_test(noisy_rsa2_corpus_file, corpus_run_fn_, corpus_test_fn_)
 noisy_rsa2_tests <- c(noisy_rsa2_listener_test, noisy_rsa2_speaker_test, noisy_rsa2_corpus_test)
 run_all_tests(noisy_rsa2_tests)
+```
+
+
+```{r run_noisy_rsa1_tests}
+# Lifted theta - spekaers / listeners infer noise level...
+noisy_rsa3_listener_file <- 'Models/testing/noisy-rsa3-listener.wppl'
+noisy_rsa3_listener_test <- create_test(noisy_rsa3_listener_file, listener_run_fn_, listener_test_fn_)
+noisy_rsa3_speaker_file <  - 'Models/testing/noisy-rsa3-speaker.wppl'
+noisy_rsa3_speaker_test <- create_test(noisy_rsa3_speaker_file, speaker_run_fn_, speaker_test_fn_)
+noisy_rsa3_corpus_file <- 'Models/testing/noisy-rsa3-corpus.wppl'
+noisy_rsa3_corpus_test <- create_test(noisy_rsa3_corpus_file, corpus_run_fn_, corpus_test_fn_)
+noisy_rsa3_tests <- c(noisy_rsa3_listener_test, noisy_rsa3_speaker_test, noisy_rsa3_corpus_test)
+run_all_tests(noisy_rsa3_tests)
 ```
 
 ## Basic RSA - no noise
@@ -239,4 +303,16 @@ basic_rsa1_tests <- c(basic_rsa1_listener_test, basic_rsa1_speaker_test, basic_r
 run_all_tests(basic_rsa1_tests)
 ```
 
+```{r}
+corpus_run_fn_(getModelFile(basic_rsa1_corpus_file)) %>%
+  ggplot(aes(x=avgPostProb, y=avgLikelihood, col=as.factor(second))) +
+      geom_point() +
+      geom_errorbar(aes(ymax=ymax, ymin=ymin, width=0)) +
+      geom_errorbarh(aes(xmax=xmax, xmin=xmin, height=0)) +
+      geom_smooth(group=0) +
+      ylab('Likelihood of marked version') +
+      xlab('mean(log(p(utt))') +
+      ylim(0, 1) +
+      theme_bw()
+```
 

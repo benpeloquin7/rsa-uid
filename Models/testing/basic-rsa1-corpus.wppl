@@ -1,3 +1,14 @@
+/***
+
+  rData
+  alpha
+  lambda
+  theta
+  modelName
+  N
+
+***/
+
 /*********************/
 /*********************/
 /******* SETUP *******/
@@ -28,22 +39,51 @@ var getN = function(rData) {
   var data = rData[0]
   return data['n']
 }
-var rData = [{'alpha':1, 'lambda':1, 'modelName':'S1', 'theta':0.9, 'n':10000}]
+
+var getSpeakerInput = function(rData) {
+  var data = rData[0]
+  return {d: data['speakerInput']}
+}
+
+// var rData = [{'alpha':5, 'lambda':1, 'modelName':'S1', 'theta':0.1, 'n':10000}]
 
 var LAMBDA = getLambda(rData)
 var ALPHA = getAlpha(rData)
 var THETA = getTheta(rData)
 var N = getN(rData)
+var INPUT = getSpeakerInput(rData)
 
-var utterances = ['X a', 'a', 'X b', 'b', 'X', '']
-var utteranceProbs = [0.5, 1, 0.5, 1, .1, .01]
+var aUtterances = ['X a', 'a']
+var bUtterances = ['X b', 'b']
+var cUtterances = ['X c', 'c']
+var dUtterances = ['X d', 'd']
+var partialUtteranceProbs = [0.5, 1]
+var aUtterancesDistr = Categorical({vs:aUtterances, ps:partialUtteranceProbs})
+var bUtterancesDistr = Categorical({vs:bUtterances, ps:partialUtteranceProbs})
+var cUtterancesDistr = Categorical({vs:cUtterances, ps:partialUtteranceProbs})
+var dUtterancesDistr = Categorical({vs:dUtterances, ps:partialUtteranceProbs})
+
+var utterances = ['X a', 'a', 'X b', 'b', 'X c', 'c', 'X d', 'd', 'X']
+var utteranceProbs = [0.5, 1, 0.5, 1, 0.5, 1, 0.5, 1, 1]
 var utterancesDistr = Categorical({vs:utterances, ps:utteranceProbs})
 var utterancesPrior = function() {return sample(utterancesDistr)}
 
-var worlds = [{d:'a'}, {d:'b'}, {d:'*'}]
-var worldProbs = [0.2, 2, 0.01]
+var worlds = [{d:'a'}, {d:'b'}, {d:'c'}, {d:'d'}]
+var worldProbs = [0.2, 0.5, 1, 2.5]
 var worldsDistr = Categorical({vs:worlds, ps:worldProbs})
 var worldsPrior = function() {return sample(worldsDistr)}
+
+var thetaDistr = Categorical({vs: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+                              ps: [1, 1, 1, 1, 1, 1, 1, 1, 1]})
+var thetaPrior = function() {return sample(thetaDistr)}
+
+var getValidUtteranceGivenWorld = function(w) {
+  return w['d'] == 'a' ? sample(aUtterancesDistr) :
+         w['d'] == 'b' ? sample(bUtterancesDistr) : 
+         w['d'] == 'c' ? sample(cUtterancesDistr) :
+         w['d'] == 'd' ? sample(dUtterancesDistr) :
+         sample(dUtterancesDistr)
+}
 
 var meaning = function(utterance, world) {
   var worldDim = world['d']
@@ -51,10 +91,21 @@ var meaning = function(utterance, world) {
 }
 
 var utteranceMeaning = function(utterance) {
+  if (utterance == '') {
+    console.log("Error on", utterance)
+  }
   var lastCharIndex = utterance.length - 1
-  return utterance.includes('a') ? utterance.charAt(lastCharIndex) :
-         utterance.includes('b') ? utterance.charAt(lastCharIndex) :
-         utterance.includes('X') ? worldsPrior()['d'] : '*'
+  if (utterance.includes('a')) {
+    return 'a'
+  } else if (utterance.includes('b')) {
+    return 'b'
+  } else if (utterance.includes('c')) {
+    return 'c'
+  } else if (utterance.includes('d')) {
+    return 'd'
+  } else {
+    worldsPrior()['d']
+  }
 }
 
 var cost = function(utterance) {
@@ -96,7 +147,27 @@ var S2 = cache(function(world) {
     model() {
       var utterance = utterancesPrior()
       var L = L1(utterance)
-      factor(alpha * (L.score(world) - cost(utterance)/10))
+      factor(ALPHA * (L.score(world) - cost(utterance)/10))
+      return utterance
+  }})
+})
+
+var L2 = cache(function(utterance) {
+  Infer({
+    model() {
+      var world = worldsPrior()
+      var S = S2(world)
+      factor(S.score(utterance))
+      return world
+  }})
+})
+
+var S3 = cache(function(world) {
+  Infer({
+    model() {
+      var utterance = utterancesPrior()
+      var L = L2(utterance)
+      factor(ALPHA * (L.score(world) - cost(utterance)/10))
       return utterance
   }})
 })
@@ -155,7 +226,9 @@ var getModel = function(modelName) {
     'L0': L0,
     'S1': S1,
     'L1': L1,
-    'S2': S2
+    'S2': S2,
+    'L2': L2,
+    'S3': S3
   }
   return models[modelName]
 }
