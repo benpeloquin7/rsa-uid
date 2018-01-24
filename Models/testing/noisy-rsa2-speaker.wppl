@@ -1,11 +1,6 @@
 /***
 
-  rData
-  alpha
-  lambda
-  theta
-  modelName
-  N
+  Settings for S2
 
 ***/
 
@@ -199,7 +194,8 @@ var L1 = cache(function(utterance) {
 var S2 = cache(function(world) {
   Infer({
     model() {
-      var intendedUtterance = utterancesPrior()
+      //var intendedUtterance = utterancesPrior()
+      var intendedUtterance = getValidUtteranceGivenWorld(world)
       var producedUtterance = deleteNoiseModel(intendedUtterance)
       var L = L1(producedUtterance)
       factor(ALPHA*(L.score(world) - cost(intendedUtterance)/10))

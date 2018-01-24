@@ -41,6 +41,7 @@ Things to normalize across models:
 library(doParallel)
 library(dplyr)
 library(ggplot2)
+library(ggthemes)
 library(tidyr)
 setwd('/Users/benpeloquin/Desktop/Projects/rsa_uid/')
 ```
@@ -56,16 +57,14 @@ create_test <- function(fPath, run_fn, test_fn) {
   return(function() test_fn(d))
 }
 
-ALPHA <- 5
-LAMBDA <- 10
-THETA <- 0.9
+THETA <- 0.1
 ```
 
 ## Noisy RSA1
 ### Listener test
 ```{r test_1}
-listener_run_fn_ <- function(modelFile) {
-  rData <- data.frame(alpha=1, lambda=10, modelName='L1', theta=THETA)
+listener_run_fn_ <- function(modelFile, alpha=1, lambda=10, modelName='L1', theta=0.1) {
+  rData <- data.frame(alpha=alpha, lambda=lambda, modelName=modelName, theta=theta)
   rwebppl::webppl(modelFile, data=rData, data_var='rData')
 }
 listener_test_fn_ <- function(df) {
@@ -75,9 +74,11 @@ listener_test_fn_ <- function(df) {
 
 ### Speaker test
 ```{r test_2}
-speaker_run_fn_ <- function(modelFile){
-  noisy_rsa1_speaker_run_fn_ <- function(modelFile, input) {
-    rData <- data.frame(alpha=5, lambda=1, modelName='S3', theta=THETA, speakerInput=input)
+speaker_run_fn_ <- function(modelFile, alpha=5, lambda=1, modelName='S3', theta=theta, speakerInput='a'){
+  noisy_rsa1_speaker_run_fn_ <- function(modelFile, input=speakerInput) {
+    # Run Settings
+    # ------------
+    rData <- data.frame(alpha=alpha, lambda=lambda, modelName=modelName, theta=theta, speakerInput=input)
     rwebppl::webppl(modelFile, data=rData, data_var='rData')
   }
   
@@ -104,8 +105,8 @@ speaker_test_fn_ <- function(df) {
 }
 ```
 
-### Corpus test
-```{r corpus_helpers}
+## Corpus test
+```{r corpus_run_helpers}
 createRunFn <- function(modelStr) {
     return(function(data, dataName='rData') { 
       rwebppl::webppl(modelStr, data=data, data_var=dataName)
@@ -185,7 +186,8 @@ run_corpus_analysis_ <- function(df_lm) {
       xmax=quantile(postProb, probs=c(0.95)),
       avgLikelihood=mean(lik),
       ymin=quantile(lik, probs=c(0.05)),
-      ymax=quantile(lik, probs=c(0.95)))
+      ymax=quantile(lik, probs=c(0.95)),
+      n=n())
 }
 
 process_sims_ <- function(sims) {
@@ -210,17 +212,16 @@ process_sims_ <- function(sims) {
 # stopCluster(cl)
 ```
 
-```{r test_3}
+```{r corpus_run_fn}
 # corpus_run_fn
 # -------------
 # Pipeline
 # (1) run simulations
 # (2) create lm for each simluation
 # (3) run lm analysis per simulation - utterance surprisal X likelihood of marked
-corpus_run_fn <- function(modelFile){
+corpus_run_fn_ <- function(modelFile, modelName='S3', alpha=5, lambda=1, theta=0.2, nUtterances=1000){
   runFn <- createRunFn(modelFile)
-  nUtts <- 1000
-  runExp_ <- runExperimentFn_(runFn, 'S3', 5, 1, THETA, nUtts)
+  runExp_ <- runExperimentFn_(runFn, modelName, alpha, lambda, theta, nUtterances)
   # Register cores
   no_cores <- detectCores() - 1
   cl <- makeCluster(no_cores, type='FORK')
@@ -228,7 +229,7 @@ corpus_run_fn <- function(modelFile){
   # Run sims
   ptm <- proc.time()
   nSims <- 100
-  cat("Running", nSims, "simulations each with", nUtts, "samples.")
+  cat("Running", nSims, "simulations each with", nUtterances, "samples.")
   sims <- foreach(i=seq(1, nSims), .packages=c('dplyr', 'rwebppl'), .combine=rbind) %dopar% runExp_(i)
   stopCluster(cl)
   etm <- proc.time() - ptm
@@ -247,49 +248,13 @@ corpus_test_fn_ <- function(df) {
 }
 ```
 
-
 ```{r run_tests_helper}
 run_all_tests <- function(tests){
   sapply(tests, function(x) x())
 }
 ```
 
-```{r run_noisy_rsa1_tests}
-# Static theta, S3 only samples all utterances
-noisy_rsa1_listener_file <- 'Models/testing/noisy-rsa1-listener.wppl'
-noisy_rsa1_listener_test <- create_test(noisy_rsa1_listener_file, listener_run_fn_, listener_test_fn_)
-noisy_rsa1_speaker_file <- 'Models/testing/noisy-rsa1-speaker.wppl'
-noisy_rsa1_speaker_test <- create_test(noisy_rsa1_speaker_file, speaker_run_fn_, speaker_test_fn_)
-noisy_rsa1_corpus_file <- 'Models/testing/noisy-rsa1-corpus.wppl'
-noisy_rsa1_corpus_test <- create_test(noisy_rsa1_corpus_file, corpus_run_fn_, corpus_test_fn_)
-noisy_rsa1_tests <- c(noisy_rsa1_listener_test, noisy_rsa1_speaker_test, noisy_rsa1_corpus_test)
-run_all_tests(noisy_rsa1_tests)
-```
-
-```{r run_noisy_rsa1_tests}
-# Static theta, S3 only samples valid utterances.
-noisy_rsa2_listener_file <- 'Models/testing/noisy-rsa2-listener.wppl'
-noisy_rsa2_listener_test <- create_test(noisy_rsa2_listener_file, listener_run_fn_, listener_test_fn_)
-noisy_rsa2_speaker_file <- 'Models/testing/noisy-rsa2-speaker.wppl'
-noisy_rsa2_speaker_test <- create_test(noisy_rsa2_speaker_file, speaker_run_fn_, speaker_test_fn_)
-noisy_rsa2_corpus_file <- 'Models/testing/noisy-rsa2-corpus.wppl'
-noisy_rsa2_corpus_test <- create_test(noisy_rsa2_corpus_file, corpus_run_fn_, corpus_test_fn_)
-noisy_rsa2_tests <- c(noisy_rsa2_listener_test, noisy_rsa2_speaker_test, noisy_rsa2_corpus_test)
-run_all_tests(noisy_rsa2_tests)
-```
-
-
-```{r run_noisy_rsa1_tests}
-# Lifted theta - spekaers / listeners infer noise level...
-noisy_rsa3_listener_file <- 'Models/testing/noisy-rsa3-listener.wppl'
-noisy_rsa3_listener_test <- create_test(noisy_rsa3_listener_file, listener_run_fn_, listener_test_fn_)
-noisy_rsa3_speaker_file <  - 'Models/testing/noisy-rsa3-speaker.wppl'
-noisy_rsa3_speaker_test <- create_test(noisy_rsa3_speaker_file, speaker_run_fn_, speaker_test_fn_)
-noisy_rsa3_corpus_file <- 'Models/testing/noisy-rsa3-corpus.wppl'
-noisy_rsa3_corpus_test <- create_test(noisy_rsa3_corpus_file, corpus_run_fn_, corpus_test_fn_)
-noisy_rsa3_tests <- c(noisy_rsa3_listener_test, noisy_rsa3_speaker_test, noisy_rsa3_corpus_test)
-run_all_tests(noisy_rsa3_tests)
-```
+# Tests
 
 ## Basic RSA - no noise
 ```{r run_basic_rsa1_tests}
@@ -303,16 +268,235 @@ basic_rsa1_tests <- c(basic_rsa1_listener_test, basic_rsa1_speaker_test, basic_r
 run_all_tests(basic_rsa1_tests)
 ```
 
-```{r}
-corpus_run_fn_(getModelFile(basic_rsa1_corpus_file)) %>%
+```{r noisy_rsa3_corpus_plot}
+basic_rsa1_corpus_file <- 'Models/testing/basic-rsa1-corpus.wppl'
+df_brsas1 <- corpus_run_fn_(getModelFile(basic_rsa1_corpus_file))
+df_brsas1 %>% 
   ggplot(aes(x=avgPostProb, y=avgLikelihood, col=as.factor(second))) +
-      geom_point() +
-      geom_errorbar(aes(ymax=ymax, ymin=ymin, width=0)) +
-      geom_errorbarh(aes(xmax=xmax, xmin=xmin, height=0)) +
-      geom_smooth(group=0) +
-      ylab('Likelihood of marked version') +
-      xlab('mean(log(p(utt))') +
-      ylim(0, 1) +
-      theme_bw()
+    geom_point() +
+    geom_errorbar(aes(ymax=ymax, ymin=ymin, width=0)) +
+    geom_errorbarh(aes(xmax=xmax, xmin=xmin)) +
+    ylab('Proportion marked') +
+    xlab('Average surprisal') +
+    scale_y_continuous(limits=c(0, 1), breaks=seq(0, 1, length.out=6)) +
+    theme_few()
+```
+
+## Noisy RSA models
+```{r run_noisy_rsa1_tests}
+# Static theta, S3 only samples all utterances
+noisy_rsa1_listener_file <- 'Models/testing/noisy-rsa1-listener.wppl'
+noisy_rsa1_listener_test <- create_test(noisy_rsa1_listener_file, listener_run_fn_, listener_test_fn_)
+noisy_rsa1_speaker_file <- 'Models/testing/noisy-rsa1-speaker.wppl'
+noisy_rsa1_speaker_test <- create_test(noisy_rsa1_speaker_file, speaker_run_fn_, speaker_test_fn_)
+noisy_rsa1_corpus_file <- 'Models/testing/noisy-rsa1-corpus.wppl'
+noisy_rsa1_corpus_test <- create_test(noisy_rsa1_corpus_file, corpus_run_fn_, corpus_test_fn_)
+noisy_rsa1_tests <- c(noisy_rsa1_listener_test, noisy_rsa1_speaker_test, noisy_rsa1_corpus_test)
+run_all_tests(noisy_rsa1_tests)
+```
+
+
+```{r noisy_rsa1_corpus_plot}
+noisy_rsa1_corpus_file <- 'Models/testing/noisy-rsa1-corpus.wppl'
+df_nrsa1 <- corpus_run_fn_(getModelFile(noisy_rsa1_corpus_file), modelName='S1')
+df_nrsa1 %>% 
+  ggplot(aes(x=avgPostProb, y=avgLikelihood, col=as.factor(second))) +
+    geom_point() +
+    geom_errorbar(aes(ymax=ymax, ymin=ymin, width=0)) +
+    geom_errorbarh(aes(xmax=xmax, xmin=xmin), height=0) +
+    ylab('Likelihood of marked version') +
+    xlab('mean(log(p(utt))') +
+    scale_y_continuous(limits=c(0, 1), breaks=seq(0, 1, length.out=6)) +
+    theme_few()
+```
+
+```{r noisy_rsa1_vary_spaker_level}
+noisy_rsa1_corpus_file <- 'Models/testing/noisy-rsa1-corpus.wppl'
+models <- c('S1', 'S2', 'S3', 'S4', 'S5')
+noisy_rsa1_dfs <- data.frame()
+for (model in models) {
+  cat("Running model:", model)
+  df_curr_run <- corpus_run_fn_(getModelFile(noisy_rsa1_corpus_file), modelName=model) %>%
+    mutate(model=model)
+  noisy_rsa1_dfs <- rbind(noisy_rsa1_dfs, df_curr_run)
+}
+```
+
+```{r noisy_rsa1_vary_spaker_level_plot}
+noisy_rsa1_dfs %>%
+  ggplot(aes(x=avgPostProb, y=avgLikelihood, col=model)) +
+    geom_point() +
+    geom_errorbar(aes(ymax=ymax, ymin=ymin, width=0)) +
+    geom_errorbarh(aes(xmax=xmax, xmin=xmin, height=0)) +
+    ylab('Proportion marked') +
+    xlab('Average surprisal') +
+    scale_y_continuous(limits=c(0, 1), breaks=seq(0, 1, length.out=6)) +
+    theme_few()
+```
+
+
+```{r run_noisy_rsa1_tests}
+# Static theta, S3 only samples valid utterances.
+noisy_rsa2_listener_file <- 'Models/testing/noisy-rsa2-listener.wppl'
+noisy_rsa2_listener_test <- create_test(noisy_rsa2_listener_file, listener_run_fn_, listener_test_fn_)
+noisy_rsa2_speaker_file <- 'Models/testing/noisy-rsa2-speaker.wppl'
+noisy_rsa2_speaker_test <- create_test(noisy_rsa2_speaker_file, speaker_run_fn_, speaker_test_fn_)
+noisy_rsa2_corpus_file <- 'Models/testing/noisy-rsa2-corpus.wppl'
+noisy_rsa2_corpus_test <- create_test(noisy_rsa2_corpus_file, corpus_run_fn_, corpus_test_fn_)
+noisy_rsa2_tests <- c(noisy_rsa2_listener_test, noisy_rsa2_speaker_test, noisy_rsa2_corpus_test)
+run_all_tests(noisy_rsa2_tests)
+```
+
+```{r noisy_rsa2_corpus_plot}
+noisy_rsa2_corpus_file <- 'Models/testing/noisy-rsa2-corpus.wppl'
+df_nrsa2 <- corpus_run_fn_(getModelFile(noisy_rsa2_corpus_file))
+df_nrsa2 %>% 
+  ggplot(aes(x=avgPostProb, y=avgLikelihood, col=as.factor(second))) +
+    geom_point() +
+    geom_errorbar(aes(ymax=ymax, ymin=ymin, width=0)) +
+    geom_errorbarh(aes(xmax=xmax, xmin=xmin, height=0)) +
+    ylab('Proportion marked') +
+    xlab('Average surprisal') +
+    scale_y_continuous(limits=c(0, 1), breaks=seq(0, 1, length.out=6)) +
+    theme_few()
+```
+
+```{r compare}
+df_brsas1 <- df_brsas1 %>%
+  mutate(model='brsas1')
+df_nrsa1 <- df_nrsa1 %>%
+  mutate(model='nrsa1')
+df_nrsa2 <- df_nrsa2 %>%
+  mutate(model='nrsa2')
+df_nrsa3 <- df_nrsa3 %>%
+  mutate(model='nrsa3')
+df_all <- rbind(df_brsas1, df_nrsa1, df_nrsa2, df_nrsa3)
+```
+
+```{r compare_plot}
+df_all %>%
+  ggplot(aes(x=avgPostProb, y=avgLikelihood, col=model)) +
+    geom_point() +
+    geom_errorbar(aes(ymax=ymax, ymin=ymin, width=0)) +
+    geom_errorbarh(aes(xmax=xmax, xmin=xmin, height=0)) +
+    ylab('Proportion marked') +
+    xlab('Average surprisal') +
+    scale_y_continuous(limits=c(0, 1), breaks=seq(0, 1, length.out=6)) +
+    theme_few()
+```
+
+```{r run_noisy_rsa1_tests}
+# Lifted theta - spekaers / listeners infer noise level...
+noisy_rsa3_listener_file <- 'Models/testing/noisy-rsa3-listener.wppl'
+noisy_rsa3_listener_test <- create_test(noisy_rsa3_listener_file, listener_run_fn_, listener_test_fn_)
+noisy_rsa3_speaker_file <- 'Models/testing/noisy-rsa3-speaker.wppl'
+noisy_rsa3_speaker_test <- create_test(noisy_rsa3_speaker_file, speaker_run_fn_, speaker_test_fn_)
+noisy_rsa3_corpus_file <- 'Models/testing/noisy-rsa3-corpus.wppl'
+noisy_rsa3_corpus_test <- create_test(noisy_rsa3_corpus_file, corpus_run_fn_, corpus_test_fn_)
+noisy_rsa3_tests <- c(noisy_rsa3_listener_test, noisy_rsa3_speaker_test, noisy_rsa3_corpus_test)
+run_all_tests(noisy_rsa3_tests)
+```
+
+```{r noisy_rsa3_corpus_plot}
+noisy_rsa3_corpus_file <- 'Models/testing/noisy-rsa3-corpus.wppl'
+df_nrsa3 <- corpus_run_fn_(getModelFile(noisy_rsa3_corpus_file))
+df_nrsa3 %>% 
+  ggplot(aes(x=avgPostProb, y=avgLikelihood, col=as.factor(second))) +
+    geom_point() +
+    geom_errorbar(aes(ymax=ymax, ymin=ymin, width=0)) +
+    geom_errorbarh(aes(xmax=xmax, xmin=xmin, height=0)) +
+    ylab('Proportion marked') +
+    xlab('Average surprisal') +
+    scale_y_continuous(limits=c(0, 1), breaks=seq(0, 1, length.out=6)) +
+    theme_few()
+```
+
+# Explore
+
+## Effect of theta on slopes
+
+#### noisy-rsa with constrained utterances
+```{r noisy_rsa2_thetas}
+thetas <- c(0.1, 0.9)
+df_noisy_rsa2 <- data.frame()
+for (theta in thetas) {
+  cat("Runing theta:", theta)
+  df_curr_run <- corpus_run_fn_(getModelFile(noisy_rsa2_corpus_file), theta=theta) %>%
+    mutate(theta=theta)
+  df_noisy_rsa2 <- rbind(df, df_curr_run)
+}
+```
+
+```{r noisy_rsa1_thetas_plot}
+df_noisy_rsa2 %>%
+  ggplot(aes(x=avgPostProb, y=avgLikelihood, col=as.factor(theta))) +
+    geom_point() +
+    geom_errorbar(aes(ymax=ymax, ymin=ymin, width=0)) +
+    geom_errorbarh(aes(xmax=xmax, xmin=xmin, height=0)) +
+    ylab('Proportion marked') +
+    xlab('Average surprisal') +
+    scale_y_continuous(limits=c(0, 1), breaks=seq(0, 1, length.out=6)) +
+    theme_few()
+```
+
+#### noisy-rsa without constrained utterances
+```{r noisy_rsa1_thetas}
+thetas <- c(0.1, 0.3, 0.5, 0.7, 0.9)
+df_noisy_rsa1 <- data.frame()
+for (theta in thetas) {
+  cat("Runing theta:", theta)
+  df_curr_run <- corpus_run_fn_(getModelFile(noisy_rsa1_corpus_file), theta=theta) %>%
+    mutate(theta=theta)
+  df_noisy_rsa1 <- rbind(df, df_curr_run)
+}
+```
+
+```{r noisy_rsa1_thetas_plot}
+df_noisy_rsa1 %>%
+  ggplot(aes(x=avgPostProb, y=avgLikelihood, col=as.factor(theta))) +
+    geom_point() +
+    geom_errorbar(aes(ymax=ymax, ymin=ymin, width=0)) +
+    geom_errorbarh(aes(xmax=xmax, xmin=xmin, height=0)) +
+    ylab('Proportion marked') +
+    xlab('Average surprisal') +
+    scale_y_continuous(limits=c(0, 1), breaks=seq(0, 1, length.out=6)) +
+    theme_few()
+```
+Sample from all utterances, vary theta, S3 speaker.
+
+
+```{r noisy_rsa1_listeners}
+noisy_rsa1_listener_file <- 'Models/testing/noisy-rsa1-listener.wppl'
+df_noisy_rsa1_listeners <- data.frame()
+for (theta in seq(0.1, 0.9, by=0.1)) {
+  df_curr <- listener_run_fn_(getModelFile(noisy_rsa1_listener_file), theta=theta) %>%
+    mutate(theta=theta)
+  df_noisy_rsa1_listeners <- rbind(df_noisy_rsa1_listeners, df_curr)  
+}
+```
+
+```{r noisy_rsa1_listeners_plot}
+df_noisy_rsa1_listeners %>%
+  ggplot(aes(x=d, y=prob)) +
+    geom_bar(stat='identity') +
+    facet_wrap(~theta)
+```
+
+```{r noisy_rsa1_speakers}
+noisy_rsa1_speaker_file <- 'Models/testing/noisy-rsa1-speaker.wppl'
+df_noisy_rsa1_speakers <- data.frame()
+for (theta in seq(0.1, 0.9, by=0.1)) {
+  df_curr <- speaker_run_fn_(getModelFile(noisy_rsa1_speaker_file), theta=theta) %>%
+    mutate(theta=theta)
+  df_noisy_rsa1_speakers <- rbind(df_noisy_rsa1_speakers, df_curr)  
+}
+```
+
+```{r noisy_rsa1_speakers_plot}
+df_noisy_rsa1_speakers %>%
+  ggplot(aes(x=theta, y=prob)) +
+    geom_line(stat='identity') +
+    facet_grid(input~support) +
+    theme_few()
 ```
 

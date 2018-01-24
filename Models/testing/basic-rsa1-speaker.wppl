@@ -173,9 +173,36 @@ var S3 = cache(function(world) {
   }})
 })
 
-// ------------
-//    Corpus
-// ------------
+var L4 = function(utterance) {
+  Infer({
+    model() {
+      var world = worldsPrior()
+      var intendedUtterance = sample(decode(utterance, deleteNoiseModel))
+      var S = S4(world)
+      factor(LAMBDA*S.score(intendedUtterance))
+      return world
+    }
+  })
+}
+
+var S5 = cache(function(world) {
+  Infer({
+    model() {
+      var intendedUtterance = utterancesPrior()
+      var producedUtterance = deleteNoiseModel(intendedUtterance)
+      var L = L4(producedUtterance)
+      factor(ALPHA*(L.score(world) - cost(intendedUtterance)/10))
+      return intendedUtterance
+    }
+  })
+})
+
+/*********************/
+/*********************/
+/**** CORPUS GEN *****/
+/*********************/
+/*********************/
+
 var runExperiment = function(speaker, world) {
   return sample(speaker(world))
 }
@@ -202,6 +229,7 @@ var runExperiments = function(worldGenerator, speaker, n, data) {
   var world = worldGenerator()
   var currUtt = runExperiment(speaker, world)  // really this should be a dict object with context
   var success = utteranceMeaning(currUtt) == world['d']
+//   var currData = {currUtterance:currUtt, currWorld:world['d'], isSuccess:success}
   var currData = {currUtterance:currUtt, isSuccess:success}
   data.push(currData)
   return n <= 1 ? data : runExperiments(worldGenerator, speaker, n-1, data)
@@ -214,7 +242,6 @@ var worldGenerator = function() {
   */
   return worldsPrior()
 }
-
 
 /*********************/
 /*********************/
@@ -229,7 +256,11 @@ var getModel = function(modelName) {
     'L1': L1,
     'S2': S2,
     'L2': L2,
-    'S3': S3
+    'S3': S3,
+    'L3': L3,
+    'S4': S4,
+    'L4': L4,
+    'S5': S5
   }
   return models[modelName]
 }
