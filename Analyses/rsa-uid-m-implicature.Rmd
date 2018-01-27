@@ -1,0 +1,63 @@
+---
+title: "Rsa-uid-m-implicature"
+author: "Ben"
+date: "1/27/2018"
+output: html_document
+---
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(ggthemes)
+library(tidyr)
+```
+
+
+```{r}
+getModelFile <- function(fPath) {
+  readChar(fPath, file.info(fPath)$size)
+}
+
+
+run <- function(modelFile, modelName, alpha, input) {
+  model <- getModelFile(modelFile)
+  rData <- data.frame(modelName=modelName, alpha=alpha, input=input)
+  rwebppl::webppl(model, data=rData, data_var='rData')
+}
+```
+
+```{r}
+
+```
+
+```{r}
+mFile <- "/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/rsa-uid-m-implicature-20180127.wppl"
+inputs <- c('word', 'word+cue1', 'word+cue2')
+df <- data.frame()
+for (m in inputs) {
+  curr_df <- run(mFile, 'L1', 1, m) %>%
+    mutate(input=m)
+  df <- rbind(curr_df, df)
+}
+df$input <- as.factor(df$input)
+```
+
+
+```{r}
+getMode <- function(x) {
+  ux <- unique(x)
+  ux[which.max(tabulate(match(x, ux)))]
+}
+
+df %>%
+  group_by(input) %>%
+  mutate(md=getMode(value)) %>% 
+  ungroup %>%
+  ggplot(aes(x=value, col=input)) +
+    geom_density() +
+    geom_vline(aes(xintercept=md), lty=2, col='red', alpha=0.7) +
+    theme_few()
+
+  
+```
+
