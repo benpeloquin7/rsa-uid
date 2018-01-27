@@ -1,0 +1,93 @@
+---
+title: "Rsa-uid-plots-for-cocolab"
+author: "Ben"
+date: "1/27/2018"
+output: html_document
+---
+
+```{r warning=FALSE, message=FALSE}
+library(dplyr)
+library(ggplot2)
+library(ggthemes)
+library(tidyr)
+
+source("rsa-uid-plots-for-cocolab.R")
+setwd('/Users/benpeloquin/Desktop/Projects/rsa_uid/')
+```
+
+```{r}
+basic_rsa1_listener_file <- '/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/testing/basic-rsa1-listener.wppl'
+basic_rsa1_speaker_file <- 'Models/testing/basic-rsa1-speaker.wppl'
+basic_rsa1_corpus_file <- 'Models/testing/basic-rsa1-corpus.wppl'
+
+noisy_rsa1_listener_file <- 'Models/testing/noisy-rsa1-listener.wppl'
+noisy_rsa1_speaker_file <- 'Models/testing/noisy-rsa1-speaker.wppl'
+noisy_rsa1_corpus_file <- 'Models/testing/noisy-rsa1-corpus.wppl'
+```
+
+### Basic RSA - listener plot
+```{r}
+df_l1 <- listener_run_fn_(getModelFile(basic_rsa1_listener_file))
+
+df_l1 %>%
+  ggplot(aes(x=d, y=prob)) +
+    geom_bar(stat='identity') +
+    xlab("world") +
+    ylab("p(world|UID-cue)") +
+    theme_few()
+    
+```
+
+### Noisy RSA - listener plot
+```{r nrsa-lplot1-data}
+dir_path <- '/Users/benpeloquin/Desktop/Projects/rsa_uid/'
+p <- paste0(dir_path, noisy_rsa1_listener_file)
+df_l2 <- listener_run_fn_(getModelFile(p), theta=0.95)
+
+```
+```{r ```{r nrsa-lplot1}}
+
+df_l2 %>%
+  ggplot(aes(x=d, y=prob)) +
+    geom_line(group=0) +
+    xlab("world") +
+    ylab("p( world | UID-cue )") +
+    theme_few()
+```
+
+```{r nrsa-lplot2-data}
+surprisals <- data.frame(d=c('a', 'b', 'c', 'd'), 
+                         vals=c(0.2, 0.5, 1, 2.5)) %>%
+  mutate(normed_vals=vals/sum(vals),
+         surprisal=-log2(normed_vals))
+thetas <- seq(0.1, 0.9, by=0.1)
+d <- data.frame()
+for (theta in thetas) {
+  cat("Currently running theta:", theta)
+  curr_df <- listener_run_fn_(getModelFile(p), theta=theta) %>%
+    mutate(theta=theta)
+  d <- rbind(d, curr_df)
+}
+d <- inner_join(d, surprisals, by='d') %>%
+  mutate(surprisal=round(surprisal, digits=2))
+```
+
+Given multiple referent, varying in surprisal, the implicature to the high(er) surprisal items is a function of noise.
+```{r nrsa-lplot2}
+# d %>%
+#   ggplot(aes(x=d, y=prob, col=theta)) +
+#     geom_line(aes(group=theta)) +
+#     scale_colour_ptol(aes(theta)) +
+#     xlab("world") +
+#     ylab("p( world | UID-cue )") +
+#     theme_few() 
+
+d %>%
+  mutate(surprisal_=as.character(surprisal)) %>%
+  mutate(theta=as.numeric(theta)) %>%
+  ggplot(aes(x=theta, y=prob, col=surprisal_)) +
+    geom_line(aes(group=surprisal_), size=1.5, alpha=0.8) +
+    scale_color_ptol(aes(surprisal_)) +
+    theme_few()
+```
+
