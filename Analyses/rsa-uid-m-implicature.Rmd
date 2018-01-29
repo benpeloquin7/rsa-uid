@@ -27,19 +27,48 @@ run <- function(modelFile, modelName, alpha, input) {
 ```
 
 ```{r}
+mFile <- "/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/rsa-uid-m-implicature-20180127.wppl"
+df <- run(mFile, modelName='L1', alpha=7, input='word+cue2')
 
+# Listener densities for multiple utterances
+# inputs <- c('word', 'word+cue1', 'word+cue2')
+# df <- data.frame()
+# alpha <- 5
+# for (m in inputs) {
+#   curr_df <- run(mFile, 'L1', alpha, m) %>%
+#     mutate(input=m)
+#   df <- rbind(curr_df, df)
+# }
+# df$input <- as.factor(df$input)
 ```
+```{r}
+# df <- as.data.frame(df) %>%
+#   gather(utt, info, c(word, word.cue1, word.cue2)) %>%
+#   mutate(utterance=as.factor(ifelse(utt=='word', 'w{i-1}',
+#                           ifelse(utt=='word.cue1', 'w{i_1} uh', 'w{i_1} um'))), levels=c('w{i_1}', 'w{i_1} uh', 'w{i_1} um'))
+
+lvls <- c('w{i_1}', 'w{i_1} uh', 'w{i_1} um')
+df %>%
+  ggplot(aes(x=levels, y=info, fill=utterance)) +
+    geom_bar(stat='identity') +
+    ylab("Expected surprisal of next item") +
+    xlab("UID-cue") +
+    theme_few() +
+    theme(legend.position="none")
+```
+
 
 ```{r}
 mFile <- "/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/rsa-uid-m-implicature-20180127.wppl"
-inputs <- c('word', 'word+cue1', 'word+cue2')
-df <- data.frame()
-for (m in inputs) {
-  curr_df <- run(mFile, 'L1', 1, m) %>%
-    mutate(input=m)
-  df <- rbind(curr_df, df)
-}
-df$input <- as.factor(df$input)
+# inputs <- c('word', 'word+cue1', 'word+cue2')
+# df <- data.frame()
+# alpha <- 5
+# for (m in inputs) {
+#   curr_df <- run(mFile, 'L1', alpha, m) %>%
+#     mutate(input=m)
+#   df <- rbind(curr_df, df)
+# }
+# df$input <- as.factor(df$input)
 ```
 
 
@@ -53,11 +82,10 @@ df %>%
   group_by(input) %>%
   mutate(md=getMode(value)) %>% 
   ungroup %>%
-  ggplot(aes(x=value, col=input)) +
-    geom_density() +
-    geom_vline(aes(xintercept=md), lty=2, col='red', alpha=0.7) +
+  ggplot(aes(x=value, fill=input)) +
+    geom_density(alpha=0.3) +
+    # geom_vline(aes(xintercept=md), lty=2, col='red', alpha=0.7) +
+    xlab("Oncoming content surprisal") +
     theme_few()
-
-  
 ```
 
