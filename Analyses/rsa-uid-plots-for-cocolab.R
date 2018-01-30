@@ -4,6 +4,8 @@ library(ggplot2)
 library(ggthemes)
 library(tidyr)
 
+
+THETA <- 0.1
 getModelFile <- function(fPath) {
   readChar(fPath, file.info(fPath)$size)
 }
@@ -14,26 +16,16 @@ create_test <- function(fPath, run_fn, test_fn) {
   return(function() test_fn(d))
 }
 
-listener_run_fn_ <- function(modelFile, alpha=1, lambda=10, modelName='L1', theta=0.1) {
+listener_run_fn_ <- function(modelFile, alpha=1, lambda=10, modelName='L1', theta=THETA) {
   rData <- data.frame(alpha=alpha, lambda=lambda, modelName=modelName, theta=theta)
   rwebppl::webppl(modelFile, data=rData, data_var='rData')
 }
 
-
-speaker_run_fn_ <- function(modelFile, alpha=5, lambda=1, modelName='S3', theta=theta, speakerInput='a'){
-  noisy_rsa1_speaker_run_fn_ <- function(modelFile, input=speakerInput) {
-    # Run Settings
-    # ------------
-    rData <- data.frame(alpha=alpha, lambda=lambda, modelName=modelName, theta=theta, speakerInput=input)
-    rwebppl::webppl(modelFile, data=rData, data_var='rData')
-  }
-  
-  d1 <- noisy_rsa1_speaker_run_fn_(modelFile, 'a') %>%
-    mutate(input='a')
-  d2 <- noisy_rsa1_speaker_run_fn_(modelFile, 'b') %>%
-    mutate(input='b')
-  d_full <- rbind(d1, d2)
-  d_full
+speaker_run_fn_ <- function(modelFile, alpha_=5, lambda_=1, modelName_='S3', theta_=THETA, speakerInput_='a'){
+  # Run Settings
+  # ------------
+  rData <- data.frame(alpha=alpha_, lambda=lambda_, modelName=modelName_, theta=theta_, speakerInput=speakerInput_)
+  rwebppl::webppl(modelFile, data=rData, data_var='rData')
 }
 
 createRunFn <- function(modelStr) {
