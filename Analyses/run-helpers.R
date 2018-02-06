@@ -65,17 +65,17 @@ create_test <- function(modelFile, run_fn, test_fn) {
 #   Speaker rationality in listener recursion.
 # theta: float
 #   Noise level (prob of a deletion).
-# speakerInput: str
-#   Speaker target referent (one of 'a', 'b', 'c', 'd')
+# listenerInput: str
+#   Listener received utterance (one of 'a', 'X a', 'b',...,'X', etc.)
 #
 # Returns
 # -------
 # data.frame
 #    Data.frame output from a call rwebppl file.
 #
-listener_run_fn <- function(modelFile, modelName='L1', alpha=1, lambda=10, theta=THETA) {
+listener_run_fn <- function(modelFile, modelName='L1', alpha=1, lambda=10, theta=THETA, listenerInput="X") {
   modelStr <- getModelFile(modelFile)
-  rData <- data.frame(alpha=alpha, lambda=lambda, modelName=modelName, theta=theta)
+  rData <- data.frame(alpha=alpha, lambda=lambda, modelName=modelName, theta=theta, listenerInput=listenerInput)
   rwebppl::webppl(modelStr, data=rData, data_var='rData')
 }
 
