@@ -64,7 +64,7 @@ var cUtterancesDistr = Categorical({vs:cUtterances, ps:partialUtteranceProbs})
 var dUtterancesDistr = Categorical({vs:dUtterances, ps:partialUtteranceProbs})
 
 var utterances = ['X a', 'a', 'X b', 'b', 'X c', 'c', 'X d', 'd', 'X']
-var utteranceProbs = [0.5, 1, 0.5, 1, 0.5, 1, 0.5, 1, 1]
+var utteranceProbs = [0.25, 1, 0.25, 1, 0.25, 1, 0.25, 1, 1]
 var utterancesDistr = Categorical({vs:utterances, ps:utteranceProbs})
 var utterancesPrior = function() {return sample(utterancesDistr)}
 
@@ -110,7 +110,12 @@ var utteranceMeaning = function(utterance) {
 }
 
 var cost = function(utterance) {
-  return utterance.split(' ').length
+  return 0
+  //return utterance.split(' ').length
+}
+
+var nullNoiseModel = function(utterance) {
+  return utterance
 }
 
 var L0 = cache(function(utterance) {
@@ -173,13 +178,33 @@ var S3 = cache(function(world) {
   }})
 })
 
+var L3 = function(utterance) {
+  Infer({
+    model() {
+      var world = worldsPrior()
+      var S = S3(world)
+      factor(LAMBDA*S.score(utterance))
+      return world
+    }
+  })
+}
+
+var S4 = cache(function(world) {
+  Infer({
+    model() {
+      var utterance = utterancesPrior()
+      var L = L3(utterance)
+      factor(ALPHA * (L.score(world) - cost(utterance)/10))
+      return utterance
+  }})
+})
+
 var L4 = function(utterance) {
   Infer({
     model() {
       var world = worldsPrior()
-      var intendedUtterance = sample(decode(utterance, deleteNoiseModel))
       var S = S4(world)
-      factor(LAMBDA*S.score(intendedUtterance))
+      factor(LAMBDA*S.score(utterance))
       return world
     }
   })
@@ -188,11 +213,10 @@ var L4 = function(utterance) {
 var S5 = cache(function(world) {
   Infer({
     model() {
-      var intendedUtterance = utterancesPrior()
-      var producedUtterance = deleteNoiseModel(intendedUtterance)
-      var L = L4(producedUtterance)
-      factor(ALPHA*(L.score(world) - cost(intendedUtterance)/10))
-      return intendedUtterance
+      var utterance = utterancesPrior()
+      var L = L4(utterance)
+      factor(ALPHA*(L.score(world) - cost(utterance)/10))
+      return utterance
     }
   })
 })

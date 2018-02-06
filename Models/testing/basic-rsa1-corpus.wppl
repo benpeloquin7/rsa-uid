@@ -64,7 +64,7 @@ var cUtterancesDistr = Categorical({vs:cUtterances, ps:partialUtteranceProbs})
 var dUtterancesDistr = Categorical({vs:dUtterances, ps:partialUtteranceProbs})
 
 var utterances = ['X a', 'a', 'X b', 'b', 'X c', 'c', 'X d', 'd', 'X']
-var utteranceProbs = [0.5, 1, 0.5, 1, 0.5, 1, 0.5, 1, 1]
+var utteranceProbs = [0.25, 1, 0.25, 1, 0.25, 1, 0.25, 1, 1]
 var utterancesDistr = Categorical({vs:utterances, ps:utteranceProbs})
 var utterancesPrior = function() {return sample(utterancesDistr)}
 
@@ -172,6 +172,47 @@ var S3 = cache(function(world) {
   }})
 })
 
+var L3 = cache(function(utterance) {
+  Infer({
+    model() {
+      var world = worldsPrior()
+      var S = S3(world)
+      factor(S.score(utterance))
+      return world
+  }})
+})
+
+var S4 = cache(function(world) {
+  Infer({
+    model() {
+      var utterance = utterancesPrior()
+      var L = L3(utterance)
+      factor(ALPHA * (L.score(world) - cost(utterance)/10))
+      return utterance
+  }})
+})
+
+
+var L4 = cache(function(utterance) {
+  Infer({
+    model() {
+      var world = worldsPrior()
+      var S = S4(world)
+      factor(S.score(utterance))
+      return world
+  }})
+})
+
+var S5 = cache(function(world) {
+  Infer({
+    model() {
+      var utterance = utterancesPrior()
+      var L = L4(utterance)
+      factor(ALPHA * (L.score(world) - cost(utterance)/10))
+      return utterance
+  }})
+})
+
 // ------------
 //    Corpus
 // ------------
@@ -228,7 +269,11 @@ var getModel = function(modelName) {
     'L1': L1,
     'S2': S2,
     'L2': L2,
-    'S3': S3
+    'S3': S3,
+    'L3': L3,
+    'S4': S4,
+    'L4': L4,
+    'S5': S5
   }
   return models[modelName]
 }

@@ -64,7 +64,8 @@ var cUtterancesDistr = Categorical({vs:cUtterances, ps:partialUtteranceProbs})
 var dUtterancesDistr = Categorical({vs:dUtterances, ps:partialUtteranceProbs})
 
 var utterances = ['X a', 'a', 'X b', 'b', 'X c', 'c', 'X d', 'd']
-var utteranceProbs = [0.5, 1, 0.5, 1, 0.5, 1, 0.5, 1]
+var utteranceProbs = [1, 1, 1, 1, 1, 1, 1, 1]
+var utteranceProbs = [0.25, 1, 0.25, 1, 0.25, 1, 0.25, 1]
 var utterancesDistr = Categorical({vs:utterances, ps:utteranceProbs})
 var utterancesPrior = function() {return sample(utterancesDistr)}
 
@@ -74,7 +75,7 @@ var worldProbs = [0.2, 0.5, 1, 2.5]
 var worldsDistr = Categorical({vs:worlds, ps:worldProbs})
 var worldsPrior = function() {return sample(worldsDistr)}
 
-var thetaDistr = Categorical({vs: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+var thetaDistr = Categorical({vs: [0.05, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
                               ps: [1, 1, 1, 1, 1, 1, 1, 1, 1]})
 var thetaPrior = function() {return sample(thetaDistr)}
 
@@ -144,7 +145,7 @@ var utteranceMeaning = function(utterance) {
     return 'c'
   } else if (utterance.includes('d')) {
     return 'd'
-  }else {
+  } else {
     console.log("Error on", utterance)
   }
 }
@@ -169,7 +170,8 @@ var L0 = cache(function(utterance) {
 })
 
 var cost = function(utterance) {
-  return utterance.split(' ').length
+  return 0
+  //return utterance.split(' ').length
 }
 
 var S1 = cache(function(world) {
@@ -208,7 +210,7 @@ var S2 = cache(function(world) {
   })
 })
 
-var L2 = function(utterance) {
+var L2 = cache(function(utterance) {
   Infer({
     model() {
       var world = worldsPrior()
@@ -218,7 +220,7 @@ var L2 = function(utterance) {
       return world
     }
   })
-}
+})
 
 var S3 = cache(function(world) {
   Infer({
@@ -232,7 +234,7 @@ var S3 = cache(function(world) {
   })
 })
 
-var L3 = function(utterance) {
+var L3 = cache(function(utterance) {
   Infer({
     model() {
       var world = worldsPrior()
@@ -242,7 +244,7 @@ var L3 = function(utterance) {
       return world
     }
   })
-}
+})
 
 var S4 = cache(function(world) {
   Infer({
@@ -256,7 +258,7 @@ var S4 = cache(function(world) {
   })
 })
 
-var L4 = function(utterance) {
+var L4 = cache(function(utterance) {
   Infer({
     model() {
       var world = worldsPrior()
@@ -266,7 +268,7 @@ var L4 = function(utterance) {
       return world
     }
   })
-}
+})
 
 var S5 = cache(function(world) {
   Infer({

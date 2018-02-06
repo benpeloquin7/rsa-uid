@@ -45,6 +45,11 @@ var getSpeakerInput = function(rData) {
   return {d: data['speakerInput']}
 }
 
+var getListenerInput = function(rData) {
+  var data = rData[0]
+  return data['listenerInput']
+}
+
 // var rData = [{'alpha':5, 'lambda':1, 'modelName':'S1', 'theta':0.1, 'n':10000}]
 
 var LAMBDA = getLambda(rData)
@@ -52,6 +57,7 @@ var ALPHA = getAlpha(rData)
 var THETA = getTheta(rData)
 var N = getN(rData)
 var INPUT = getSpeakerInput(rData)
+var LISTENER_INPUT = getListenerInput(rData)
 
 var aUtterances = ['X a', 'a']
 var bUtterances = ['X b', 'b']
@@ -64,7 +70,7 @@ var cUtterancesDistr = Categorical({vs:cUtterances, ps:partialUtteranceProbs})
 var dUtterancesDistr = Categorical({vs:dUtterances, ps:partialUtteranceProbs})
 
 var utterances = ['X a', 'a', 'X b', 'b', 'X c', 'c', 'X d', 'd', 'X']
-var utteranceProbs = [0.5, 1, 0.5, 1, 0.5, 1, 0.5, 1, 1]
+var utteranceProbs = [0.25, 1, 0.25, 1, 0.25, 1, 0.25, 1, 1]
 var utterancesDistr = Categorical({vs:utterances, ps:utteranceProbs})
 var utterancesPrior = function() {return sample(utterancesDistr)}
 
@@ -234,4 +240,4 @@ var getModel = function(modelName) {
 var modelName = getModelName(rData)
 var model = getModel(modelName)
 
-model('X')
+model(LISTENER_INPUT)
