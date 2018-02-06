@@ -12,7 +12,7 @@ library(ggplot2)
 library(ggthemes)
 library(tidyr)
 
-source("rsa-uid-plots-for-cocolab.R")
+source("run-helpers.R")
 setwd('/Users/benpeloquin/Desktop/Projects/rsa_uid/')
 ```
 
@@ -26,99 +26,43 @@ noisy_rsa1_speaker_file <- 'Models/testing/noisy-rsa1-speaker.wppl'
 noisy_rsa1_corpus_file <- 'Models/testing/noisy-rsa1-corpus.wppl'
 ```
 
-### Basic RSA - listener plot
-```{r}
-df_l1 <- listener_run_fn_(getModelFile(basic_rsa1_listener_file))
+# Speakers
 
-df_l1 %>%
-  ggplot(aes(x=d, y=prob)) +
-    geom_bar(stat='identity') +
-    xlab("world") +
-    ylab("p(world|UID-cue)") +
-    theme_few()
-```
+```{r basic-vs-noisy-speaker-data}
+inputs <- c('a', 'b', 'c', 'd')
+dirPath <- '/Users/benpeloquin/Desktop/Projects/rsa_uid/'
+d_s1_store <- data.frame()
+for (i in inputs) {
+  df_brsa_speaker <- speaker_run_fn(paste0(dirPath, basic_rsa1_speaker_file), modelName='S5', alpha=5, speakerInput=i, theta=0.3) %>%
+    mutate(model='basic_rsa',
+           input=i)
+  df_nrsa_speaker <- speaker_run_fn(paste0(dirPath, noisy_rsa1_speaker_file), modelName='S5', alpha=5, speakerInput=i, theta=0.3) %>%
+    mutate(model='noisy_rsa',
+           input=i)
+  d_s1_store <- rbind(d_s1_store, df_brsa_speaker, df_nrsa_speaker)  
+}
 
-```{r}
-
-```
-
-## Noisy RSA - listener plot
-```{r nrsa-lplot1-data}
-dir_path <- '/Users/benpeloquin/Desktop/Projects/rsa_uid/'
-p <- paste0(dir_path, noisy_rsa1_listener_file)
-df_l2 <- listener_run_fn_(getModelFile(p), theta=0.95)
-
-surprisals <- data.frame(d=c('a', 'b', 'c', 'd'), 
-                         vals=c(0.2, 0.5, 1, 2.5)) %>%
-  mutate(normed_vals=vals/sum(vals),
-         surprisal=round(-log2(normed_vals), 2))
-
-df_l2 <- left_join(df_l2, surprisals, by='d')
-```
-
-```{r nrsa-lplot1}
-df_l2 %>%
-  ggplot(aes(x=as.factor(surprisal), y=prob, fill=d)) +
-    geom_bar(stat='identity') +
-    geom_text(aes(x=as.factor(surprisal), y=prob+0.05, ymax=prob, label=d), 
-              position = position_dodge(width=1), size=6, col='black') +
-    xlab("object surprisal log2(P(w)") +
-    ylab("P(world | UID-cue )") +
-    ylim(0, 1) +
-    theme_few() +
-    theme(legend.position="none")
-```
-
-```{r nrsa-lplot2-data}
 surprisals <- data.frame(d=c('a', 'b', 'c', 'd'), 
                          vals=c(0.2, 0.5, 1, 2.5)) %>%
   mutate(normed_vals=vals/sum(vals),
          surprisal=-log2(normed_vals))
-thetas <- seq(0.1, 0.9, by=0.1)
-d <- data.frame()
-for (theta in thetas) {
-  cat("Currently running theta:", theta)
-  curr_df <- listener_run_fn_(getModelFile(p), theta=theta) %>%
-    mutate(theta=theta)
-  d <- rbind(d, curr_df)
-}
-d <- inner_join(d, surprisals, by='d') %>%
-  mutate(surprisal=round(surprisal, digits=2))
+d_s1_store <- left_join(d_s1_store, surprisals, by=c('input'='d'))
 ```
 
-Given multiple referent, varying in surprisal, the implicature to the high(er) surprisal items is a function of noise.
-```{r nrsa-lplot2}
-# d %>%
-#   ggplot(aes(x=d, y=prob, col=theta)) +
-#     geom_line(aes(group=theta)) +
-#     scale_colour_ptol(aes(theta)) +
-#     xlab("world") +
-#     ylab("p( world | UID-cue )") +
-#     theme_few() 
-
-# d %>%
-#   mutate(surprisal_=as.factor(paste(d,"(", as.character(surprisal), ")"))) %>%
-#   mutate(theta=as.numeric(theta)) %>%
-#   ggplot(aes(x=theta, y=prob, fill=d)) +
-#     geom_bar(stat='identity') +
-#     facet_wrap(~surprisal_) +
-#     theme_few() +
-#     theme(legend.position='none')
-
-d %>%
-  mutate(surprisal_=as.character(surprisal)) %>%
-  mutate(theta=as.numeric(theta)) %>%
-  ggplot(aes(x=theta, y=prob, col=d)) +
-    geom_line(aes(group=surprisal_), size=1.5, alpha=0.8) +
-    geom_dl(aes(label=d), method = list(dl.combine("last.points"), cex=2)) +
-    xlab("Theta") +
+```{r basic-vs-noisy-speaker-plot}
+d_s1_store %>%
+  mutate(referent=ifelse(support %in% c('X a', 'a'), 'a', 
+                          ifelse(support %in% c('X b', 'b'), 'b',
+                                 ifelse(support %in% c('X c', 'c'), 'c', 'd'))),
+         marked=grepl('X', support)) %>%
+  filter(referent==input, marked) %>%
+  ggplot(aes(x=paste0(referent, ' (', round(surprisal, 2), ')'), y=prob)) +
+    geom_bar(aes(fill=model), position='dodge', stat='identity') +
     ylab("P( world | UID-cue )") +
-    ylim(0, 1) +
-    theme_few() +
-    theme(legend.position="none")
+    xlab("world") +
+    theme_few()
 ```
 
-# Noisy RSA speaker plot
 ```{r}
 surprisals <- data.frame(d=c('a', 'b', 'c', 'd'), 
                          vals=c(0.2, 0.5, 1, 2.5)) %>%
@@ -131,8 +75,10 @@ inputs <- c('a', 'b', 'c', 'd')
 thetas <- seq(0.1, 0.9, by=0.1)
 d_s1_store <- data.frame()
 for (theta in thetas) {
+  cat("theta:", theta, "\n")
   for (i in inputs) {
-    curr_df <- speaker_run_fn_(getModelFile(p), modelName='S5', alpha=5, speakerInput=i, theta=theta) %>%
+    cat("input:", i, " ")
+    curr_df <- speaker_run_fn(p, modelName='S5', alpha=5, speakerInput=i, theta=theta) %>%
       mutate(speakerInput=i,
              theta=theta)
     d_s1_store <- rbind(d_s1_store, curr_df)
@@ -152,13 +98,13 @@ df_s1 %>%
                           ifelse(support %in% c('X b', 'b'), 'b',
                                  ifelse(support %in% c('X c', 'c'), 'c', 'd'))),
          marked=grepl('X', support)) %>%
-  filter(theta==0.1) %>%
+  filter(round(theta, 1)==0.3) %>%
   filter(grepl('X', support), trueWorld==speakerInput) %>%
   ggplot(aes(x=as.factor(surprisal), y=prob, fill=support)) +
-    geom_bar(stat='identity') +
+    geom_bar(stat='identity', position='dodge') +
     xlab("object surprisal log2(P(w)") +
     ylab("Likelihood of UID cue") +
-    ylim(0, 0.5) +
+    ylim(0, 1) +
     scale_color_ptol(aes(support)) +
     theme_few() +
     theme(legend.position="none")
@@ -180,31 +126,152 @@ df_s1 %>%
     theme(legend.position="none")
 ```
 
+# Listeners
 
-
+### Basic RSA - listener plot
 ```{r}
-df_s1 %>%
-  mutate(trueWorld=ifelse(support %in% c('X a', 'a'), 'a', 
-                          ifelse(support %in% c('X b', 'b'), 'b',
-                                 ifelse(support %in% c('X c', 'c'), 'c', 'd'))),
-         marked=grepl('X', support)) %>%
-  filter(trueWorld==speakerInput)
-  group_by(speakerInput, trueWorld) %>%
-  summarise(propMarked=(prob/sum(prob))[1]) %>%
-  ungroup()
-    
+df_l1 <- listener_run_fn(basic_rsa1_listener_file)
+
+df_l1 %>%
+  ggplot(aes(x=d, y=prob)) +
+    geom_bar(stat='identity') +
+    xlab("world") +
+    ylab("p(world|UID-cue)") +
+    theme_few()
+```
+
+
+## Noisy RSA - listener plot
+```{r nrsa-lplot1-data}
+dir_path <- '/Users/benpeloquin/Desktop/Projects/rsa_uid/'
+p <- paste0(dir_path, noisy_rsa1_listener_file)
+df_l2 <- listener_run_fn(p, theta=0.95)
+
+surprisals <- data.frame(d=c('a', 'b', 'c', 'd'), 
+                         vals=c(0.2, 0.5, 1, 2.5)) %>%
+  mutate(normed_vals=vals/sum(vals),
+         surprisal=round(-log2(normed_vals), 2))
+
+df_l2 <- left_join(df_l2, surprisals, by='d')
+```
+
+Note I'm no longer using this in the langcog presentation. Instead using the next plot in `combine-brsa1-nrsa1-plot` chunk.
+```{r nrsa-lplot1}
+df_l2 %>%
+  ggplot(aes(x=as.factor(surprisal), y=prob, fill=d)) +
+    geom_bar(stat='identity') +
+    geom_text(aes(x=as.factor(surprisal), y=prob+0.05, ymax=prob, label=d), 
+              position = position_dodge(width=1), size=6, col='black') +
+    xlab("object surprisal log2(P(w)") +
+    ylab("P(world | UID-cue )") +
+    ylim(0, 1) +
+    theme_few() +
+    theme(legend.position="none")
+```
+
+```{r combine brsa1-nrsa1-preprocess}
+df_listener_join <- left_join(df_l2, df_l1, by='d') %>%
+  rename(noisy_rsa=prob.x,
+         basic_rsa=prob.y)
+```
+
+```{r combine-brsa1-nrsa1-plot}
+df_listener_join %>%
+  gather(model, prob, c(noisy_rsa, basic_rsa)) %>%
+  ggplot(aes(x=as.factor(paste(d, '(', surprisal, ')')), y=prob)) +
+    # geom_line(aes(col=model), group=2) +
+    geom_bar(stat='identity', position='dodge', aes(fill=model)) +
+    # geom_text(aes(x=as.factor(surprisal), y=prob+0.05, ymax=prob, label=d), 
+    #           position = position_dodge(width=1), size=6, col='black') +
+    xlab("object surprisal log2(P(w)") +
+    ylab("P(world | UID-cue )") +
+    ylim(0, 1) +
+    theme_few()
+```
+
+
+```{r nrsa1-vary-theta-data}
+p <- paste0(dir_path, noisy_rsa1_listener_file)
+inputs <- c('a', 'b', 'c', 'd', 'X a', 'X b', 'X c', 'X d', 'X')
+thetas <- seq(0.1, 0.9, by=0.1)
+df_listeners <- data.frame()
+for (i in inputs) {
+  cat("\ninput:", i, ' ')
+  for (theta in thetas) {
+    cat("theta:", theta, ' ')
+    curr_df <- listener_run_fn(p, theta=theta, listenerInput=i) %>%
+      mutate(input=i,
+             theta=theta)
+    df_listeners <- rbind(df_listeners, curr_df)
+  }
+}
+```
+```{r nrsa-plot2-varying-theta}
+# df_listeners %>%
+#   ggplot(aes(x=d, y=prob)) +
+#     geom_bar(stat='identity', position='dodge') +
+#     facet_grid(theta~input)
+
+df_listeners %>%
+  filter(input=='X') %>%
+  rename(world=d) %>%
+  ggplot(aes(x=theta, y=prob, col=world)) +
+    geom_line(size=1.5, alpha=0.8) +
+    xlab("Theta") +
+    ylab("P( world | UID-cue )") +
+    ylim(0, 1) +
+    theme_few()
+
+```
+
+Given multiple referent, varying in surprisal, the implicature to the high(er) surprisal items is a function of noise.
+```{r nrsa-lplot2}
+# d %>%
+#   ggplot(aes(x=d, y=prob, col=theta)) +
+#     geom_line(aes(group=theta)) +
+#     scale_colour_ptol(aes(theta)) +
+#     xlab("world") +
+#     ylab("p( world | UID-cue )") +
+#     theme_few() 
+
+# d %>%
+#   mutate(surprisal_=as.factor(paste(d,"(", as.character(surprisal), ")"))) %>%
+#   mutate(theta=as.numeric(theta)) %>%
+#   ggplot(aes(x=theta, y=prob, fill=d)) +
+#     geom_bar(stat='identity') +
+#     facet_wrap(~surprisal_) +
+#     theme_few() +
+#     theme(legend.position='none')
+
+# d %>%
+#   mutate(surprisal_=as.character(surprisal)) %>%
+#   mutate(theta=as.numeric(theta)) %>%
+#   ggplot(aes(x=theta, y=prob, col=d)) +
+#     geom_line(aes(group=surprisal_), size=1.5, alpha=0.8) +
+#     geom_dl(aes(label=d), method = list(dl.combine("last.points"), cex=2)) +
+#     xlab("Theta") +
+#     ylab("P( world | UID-cue )") +
+#     ylim(0, 1) +
+#     theme_few() +
+#     theme(legend.position="none")
 ```
 
 # Corpus plots
-```{r corpus-data1}
+```{r corpus-brsa-vs-nrsa-data}
 dir_path <- '/Users/benpeloquin/Desktop/Projects/rsa_uid/'
-p_corpus <- paste0(dir_path, noisy_rsa1_corpus_file)
-df_corpus1 <- corpus_run_fn_(getModelFile(p_corpus), modelName="S5", theta=0.3, alpha=3)
+n_corpus <- paste0(dir_path, noisy_rsa1_corpus_file)
+b_corpus <- paste0(dir_path, basic_rsa1_corpus_file)
+# function(modelFile, modelName, alpha, lambda, theta, nUtterances)
+df_nrsa_corpus <- corpus_run_fn(n_corpus, "S3", 5, 1, 0.3, 1000) %>%
+  mutate(model='noisy_rsa')
+df_brsa_corpus <- corpus_run_fn(b_corpus, "S3", 5, 1, 0.3, 1000)  %>%
+  mutate(model='basic_rsa')
+df_corpsus_comb <- rbind(df_nrsa_corpus, df_brsa_corpus)
 ```
 
-```{r corpus-data1-PLOT}
-df_corpus1 %>%
-  ggplot(aes(x=avgPostProb, y=avgLikelihood)) +
+```{r corpus-brsa-vs-nrsa-plot}
+df_corpsus_comb %>%
+  ggplot(aes(x=avgPostProb, y=avgLikelihood, col=model)) +
       geom_line() +
       geom_errorbar(aes(ymax=ymax, ymin=ymin, width=0)) +
       geom_errorbarh(aes(xmax=xmax, xmin=xmin, height=0)) +
@@ -215,18 +282,21 @@ df_corpus1 %>%
 ```
 
 
-```{r corpus-data2}
+```{r corpus-nrsa-vary-theta-data}
+dir_path <- '/Users/benpeloquin/Desktop/Projects/rsa_uid/'
+n_corpus <- paste0(dir_path, noisy_rsa1_corpus_file)
 thetas <- seq(0.1, 0.9, by=0.1)
 df_corpus2 <- data.frame()
 for (theta in thetas) {
   cat("Running theta:", theta, " ")
-  curr_df <- corpus_run_fn_(getModelFile(p_corpus), modelName="S5", theta=theta, alpha=3) %>%
+  curr_df <- corpus_run_fn(n_corpus, modelName="S5", theta=theta, alpha=5, nUtterances=1000) %>%
     mutate(modelName="S5",
            theta=theta)
   df_corpus2 <- rbind(df_corpus2, curr_df)
 }
 ```
-```{r corpus-data2-plot}
+
+```{r corpus-nrsa-vary-theta-plot}
 df_corpus2 %>%
   ggplot(aes(x=avgPostProb, y=avgLikelihood, col=as.factor(theta))) +
     geom_line() +
@@ -234,37 +304,73 @@ df_corpus2 %>%
 ```
 
 
+### `CAUTION` - slow running
 
-```{r corpus-data2}
+Notice cached data below...
+```{r corpus-nrsa-vary-theta-and-model-data}
 dir_path <- '/Users/benpeloquin/Desktop/Projects/rsa_uid/'
 p_corpus <- paste0(dir_path, noisy_rsa1_corpus_file)
 
-thetas <- c(0.1, 0.3, 0.5, 0.7, 0.9)
+thetas <- seq(0.1, 0.9, by=0.1)
 models <- c('S1', 'S2', 'S3', 'S4', 'S5')
-d_noisy_rsa1 <- data.frame()
+df_corpuses <- data.frame()
 for (model in models ) {
   for (theta in thetas) {
-    cat("Running theta:", theta, ' model:', model)
-    df_curr_run <- corpus_run_fn_(getModelFile(p_corpus), modelName=model, theta=theta) %>%
+    cat("Running theta:", theta, ' model:', model, '\n')
+    df_curr_run <- corpus_run_fn(p_corpus, modelName=model, alpha=5, lambda=1, theta=theta, nUtterances=500) %>%
       mutate(theta=theta,
              modelName=model)
-    d_noisy_rsa1 <- rbind(d_noisy_rsa1, df_curr_run)
+    df_corpuses <- rbind(df_corpuses, df_curr_run)
   }
 }
 
+# Store and read from cache
+cache_path <- '/Users/benpeloquin/Desktop/Projects/rsa_uid/Data/cache-corpus-run-vary-speaker-theta-20180208.csv'
+# write.csv(df_corpuses, file=cache_path)
 ```
 
-```{r corpus-data-plot1}
-d_noisy_rsa1 %>%
-  filter(theta==0.3, modelName=='S5') %>%
+```{r corpus-nrsa-vary-theta-and-model-plot2}
+df_corpuses %>%
+  mutate(noise=as.factor(theta)) %>%
+  filter(noise==0.3) %>%
   ggplot(aes(x=avgPostProb, y=avgLikelihood)) +
-    geom_line() +
+    geom_line(aes(col=modelName)) +
+    # geom_ribbon(aes(ymin=ymin,ymax=ymax, fill=modelName), alpha=0.3) +
     geom_errorbar(aes(ymax=ymax, ymin=ymin, width=0)) +
     geom_errorbarh(aes(xmax=xmax, xmin=xmin, height=0)) +
     xlab("log( P( u1 | u2 ))") +
     ylab("Likelihood of full form") +
     ylim(0, 1) +
     theme_few()
+```
+
+
+
+```{r corpus-nrsa-vary-theta-and-model-plot2}
+df_corpuses %>%
+  mutate(noise=as.factor(theta))%>%
+  # filter(modelName=='S5') %>%
+  ggplot(aes(x=avgPostProb, y=avgLikelihood)) +
+    geom_line(aes(col=modelName)) +
+    # geom_errorbar(aes(ymax=ymax, ymin=ymin, width=0)) +
+    # geom_errorbarh(aes(xmax=xmax, xmin=xmin, height=0)) +
+    xlab("log( P( u1 | u2 ))") +
+    ylab("Likelihood of full form") +
+    ylim(0, 1) +
+    theme_few() +
+    # theme(legend.position='none') +
+    facet_wrap(~noise)
+
+# d_noisy_rsa1 %>%
+#   filter(theta==0.3, modelName=='S5') %>%
+#   ggplot(aes(x=avgPostProb, y=avgLikelihood)) +
+#     geom_line() +
+#     geom_errorbar(aes(ymax=ymax, ymin=ymin, width=0)) +
+#     geom_errorbarh(aes(xmax=xmax, xmin=xmin, height=0)) +
+#     xlab("log( P( u1 | u2 ))") +
+#     ylab("Likelihood of full form") +
+#     ylim(0, 1) +
+#     theme_few()
 ```
 
 
