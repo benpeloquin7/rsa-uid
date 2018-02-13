@@ -1,0 +1,175 @@
+---
+title: "Rsa-uid-discourse-20180212"
+author: "Ben"
+date: "2/12/2018"
+output: html_document
+---
+
+```{r libraries, message=FALSE, warning=FALSE}
+library(doParallel)
+library(dplyr)
+library(ggplot2)
+library(ggthemes)
+library(tidyr)
+
+source("run-helpers.R")
+```
+
+```{r}
+fPath <- '/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/rsa-uid-discourse-20180205.wppl'
+m <- getModelFile(fPath)
+```
+
+```{r runFn}
+NUM_UTTERANCES <- 200
+run <- createRunFn(m)
+runFn <- function(i) {
+  dTemp <- data.frame(nUtterances=NUM_UTTERANCES)
+  df <- run(dTemp) %>%
+    mutate(runNum=i)
+  df
+}
+```
+
+```{r singleRun}
+df <- runFn(1)
+```
+
+
+```{r topicPlot}
+df %>% 
+  gather(topic, listenerTopciPosterior, c(t_distr1, t_distr2, t_distr3)) %>%
+  ggplot(aes(x=utteranceNum, y=listenerTopciPosterior, col=topic)) +
+    geom_line() +
+    theme_few()
+```
+
+
+```{r utterancePlot}
+df %>%
+  mutate(utteranceVal=ifelse(utterance=='a', 1, ifelse(utterance=='b', 1, 1))) %>%
+  ggplot(aes(x=utteranceNum, y=utteranceVal, col=utterance), alpha=0.6) +
+    # geom_point() +
+    geom_jitter(height=0.05) +
+    ylim(0.75, 1.25) +
+    theme_few()
+```
+
+```{r combinedPlot}
+df %>% 
+  mutate(utteranceVal=0.5) %>%
+  gather(topic, listenerTopicPosterior, c(t_distr1, t_distr2, t_distr3)) %>%
+  ggplot(aes(x=utteranceNum)) +
+    geom_line(aes(y=listenerTopicPosterior, col=topic), alpha=0.3, size=1.5) +
+    geom_jitter(aes(y=utteranceVal, col=utterance), height=0.1, alpha=0.7, size=2) +
+    ylim(0, 1) +
+    theme_few()
+```
+
+```{r}
+breaks <- seq(1, NUM_UTTERANCES, by=10)
+
+calcEntropy <- function(a) {
+  -1 * mean(sapply(a, function(x) {
+    log2(x) * x
+  }))
+}
+
+df %>%
+  mutate(bin=cut(utteranceNum+1, breaks=breaks)) %>%
+  group_by(bin, utterance) %>%
+  summarise(n=n(),
+            prob=n/10) %>%
+  ungroup() %>%
+  group_by(bin) %>%
+  summarise(entropy=calcEntropy(prob)) %>%
+  ggplot(aes(x=bin, y=entropy)) +
+    geom_line(group=1) +
+    theme_few()
+```
+
+
+# Parallelize runs
+```{r runPar}
+no_cores <- detectCores() - 1
+cl <- makeCluster(no_cores, type='FORK')
+registerDoParallel(cl)
+
+ptm <- proc.time()
+nSims <- 100
+sims <- foreach(i=seq(1, nSims), .packages=c('dplyr', 'rwebppl'), .combine=rbind) %dopar% runFn(i)
+stopCluster(cl)
+etm <- proc.time() - ptm
+cat("runtime: ", etm[3] / 60)
+
+```
+
+**Caution** this plot is slow running...
+```{r convergencePar, val=FALSE}
+# sims %>% 
+#   mutate(utteranceNum=utteranceNum+1) %>%
+#   gather(topic, listenerTopicPosterior, c(t_distr1, t_distr2, t_distr3)) %>%
+#   group_by(utteranceNum, topic) %>%
+#   summarise(avgListenerPost=mean(listenerTopicPosterior),
+#             sdListenerPost=sd(listenerTopicPosterior),
+#             lowerListenerPost=avgListenerPost-2*sdListenerPost,
+#             upperListenerPost=avgListenerPost+2*sdListenerPost) %>%
+#   ggplot(aes(x=utteranceNum, y=avgListenerPost, col=topic)) +
+#     geom_line() +
+#     theme_few()
+
+# CAUTION (BP): Slow running!
+sims %>% 
+  mutate(utteranceNum=utteranceNum+1) %>%
+  gather(topic, listenerTopicPosterior, c(t_distr1, t_distr2, t_distr3)) %>%
+  ggplot(aes(x=utteranceNum, y=listenerTopicPosterior, col=topic)) +
+    stat_smooth(method='loess', se=TRUE) +
+    theme_few()
+```
+
+```{r entropyParPlot}
+breaks <- seq(0, NUM_UTTERANCES, by=10)
+
+calcEntropy <- function(a) {
+  -1 * mean(sapply(a, function(x) {
+    log2(x) * x
+  }))
+}
+
+# sims %>%
+#   mutate(utteranceNum=(utteranceNum+1)) %>%
+#   mutate(bin=cut(utteranceNum, breaks=breaks)) %>%
+#   group_by(runNum, bin, utterance) %>%
+#   summarise(n=n(),
+#             prob=n/10) %>%
+#   ungroup %>%
+#   group_by(runNum, bin) %>%
+#   summarise(entropy=calcEntropy(prob))
+#   ungroup %>%
+#   group_by(bin) %>%
+#   summarise(avgEntropy=mean(entropy),
+#             sdEntropy=sd(entropy),
+#             lowerEntropy=avgEntropy - 2*sdEntropy,
+#             upperEntropy=avgEntropy + 2*sdEntropy)
+  
+
+
+bin_levels <- levels(df_sims$bin)
+df_sims <- sims %>%
+  mutate(utteranceNum=(utteranceNum+1)) %>%
+  mutate(bin=cut(utteranceNum, breaks=breaks))
+df_sims$binVal <- match(df_sims$bin, bin_levels)
+
+df_sims %>%
+  group_by(runNum, binVal, utterance) %>%
+  summarise(n=n(),
+            prob=n/10) %>%
+  ungroup %>%
+  group_by(runNum, binVal) %>%
+  summarise(entropy=calcEntropy(prob)) %>%
+  ggplot(aes(x=binVal, y=entropy)) +
+    geom_smooth(method='loess') +
+    theme_few()
+  
+```
+
