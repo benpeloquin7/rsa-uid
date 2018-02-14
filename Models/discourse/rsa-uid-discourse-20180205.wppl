@@ -26,16 +26,16 @@ var d2 = ['a', 'b', 'b', 'b', 'a', 'b', 'b', 'b']
 
 // Topics
 var topicNames = ['t_distr1', 't_distr2', 't_distr3']
-var topicNamesDistr = Categorical({vs:topicNames, ps:[0.01, 1, 10]})
+var topicNamesDistr = Categorical({vs:topicNames, ps:[0.01, 0.1, 1]})
 var topicNamesPrior = function() { 
   return sample(topicNamesDistr)
 }
 
 // Worlds cond. on topics
 var W = ['a', 'b', 'c']
-var t_distr1 = Categorical({vs:W, ps:[6, 2, 1]})
-var t_distr2 = Categorical({vs:W, ps:[4, 2, 1]}) 
-var t_distr3 = Categorical({vs:W, ps:[1, 1, 1]})
+var t_distr1 = Categorical({vs:W, ps:[4, 2, 1]})
+var t_distr2 = Categorical({vs:W, ps:[6, 2, 1]}) 
+var t_distr3 = Categorical({vs:W, ps:[1, 1, 2]})
 var topicDistr = {
   't_distr1': t_distr1,
   't_distr2': t_distr2,
@@ -213,6 +213,7 @@ var processUtterances = function(speakerData, listenerInferences) {
 // Returns
 // --------
 // List of dicts
+//
 var runFn = function(resultType) {
   if (resultType == 'contextAwareSpeaker') {
     var contextAwareSpeaker = speakerRecurse([], nUtterances)
