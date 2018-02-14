@@ -1,0 +1,234 @@
+// Globals
+//var rData = [{'nUtterances':200, 'alpha':1, 'resultType':'baseline'}]
+
+var getNUtterances = function(rData) {
+  var data = rData[0]
+  return data['nUtterances']
+}
+
+var getResultType = function(rData) {
+  var data = rData[0]
+  return data['resultType']
+}
+
+var getAlpha = function(rData) {
+  var data = rData[0]
+  return data['alpha']
+}
+
+var nUtterances = getNUtterances(rData)
+var resultType = getResultType(rData)
+var alpha = getAlpha(rData)
+
+var d0 = ['a']
+var d1 = ['a', 'b', 'b']
+var d2 = ['a', 'b', 'b', 'b', 'a', 'b', 'b', 'b']
+
+// Topics
+var topicNames = ['t_distr1', 't_distr2', 't_distr3']
+var topicNamesDistr = Categorical({vs:topicNames, ps:[0.01, 1, 10]})
+var topicNamesPrior = function() { 
+  return sample(topicNamesDistr)
+}
+
+// Worlds cond. on topics
+var W = ['a', 'b', 'c']
+var t_distr1 = Categorical({vs:W, ps:[6, 2, 1]})
+var t_distr2 = Categorical({vs:W, ps:[4, 2, 1]}) 
+var t_distr3 = Categorical({vs:W, ps:[1, 1, 1]})
+var topicDistr = {
+  't_distr1': t_distr1,
+  't_distr2': t_distr2,
+  't_distr3': t_distr3
+}
+var getTopicNameDistr = function(topicName) {
+  return topicDistr[topicName]
+}
+
+// Utterances
+var U = ['a', 'b']
+
+var litMeaning = function(w1, w2) {
+  return w1 == w2
+}
+
+// Observed data
+var observedData0 = ['a']
+var observedData1 = ['a', 'a', 'b']
+var observedData2 = ['a', 'a', 'b', 'a', 'a', 'b', 'a']
+
+var sampleFromTopic = function(topicName) {
+  return function() {
+    if (topicName == 't_distr1') {
+      return sample(t_distr1)
+    } 
+    else if (topicName == 't_distr2') { 
+      return sample(t_distr2)
+    } 
+    else if (topicName == 't_distr3') { 
+      return sample(t_distr3)
+    } 
+    else {
+      error('Error')
+    }
+  }
+}
+
+var listenerTopicDistrPosterior = cache(function(observedData) {
+  return Infer({method: 'enumerate'}, function() {
+    var topicDistrName = topicNamesPrior()
+    var utteranceMaker = sampleFromTopic(topicDistrName)
+    if (observedData != []) {
+      var obsFn = function(datum){condition(datum == utteranceMaker())}
+      mapData({data: observedData}, obsFn)
+    }
+    return topicDistrName
+  })
+})
+
+var Listener = cache(function(u, data) {
+  Infer({
+    model() {
+      // Sample a topic distr given prev utterances (data)
+      var estTopicDistrName = sample(listenerTopicDistrPosterior(data))
+      // Given est. topic distribution sample an utterance
+      var est_m = sampleFromTopic(estTopicDistrName)()
+      var meaning = litMeaning(u, est_m)
+      factor(meaning ? 0 : -Infinity)
+      return estTopicDistrName
+    }
+  })
+})
+
+var Speaker = cache(function(T_, data) {
+  Infer({
+    model() {
+      var w = sampleFromTopic(T_)()
+      var L = Listener(w, data)
+      factor(alpha * L.score(T_))
+      return w
+    }
+  })
+})
+
+//
+// Speaker utterance generation
+//
+var d = []
+var speakerFn = function(d) {
+  return d.concat([sample(Speaker('t_distr1', d))])
+}
+
+var speakerRecurse = function(d, n) {
+  if (n == 0) {
+    return d
+  } else {
+    return speakerRecurse(speakerFn(d.slice(0, d.length)), n-1)
+  }
+}
+
+//
+// Data
+//
+// Run speaker for nUtterances
+// var contextAwareSpeaker = speakerRecurse([], nUtterances)
+
+// speaker baseline1 - speaker talks without being aware of listener updates
+// var contextUnawareSpeaker = repeat(nUtterances, (function(x) {sample(Speaker('t_distr1', []))}))
+
+// non-speaker baseline2 - sample directly from distribution
+// var baseline = repeat(nUtterances, (function(x) {sample(t_distr1)}))
+
+
+//
+// Helpers
+//
+// Generate a sequence of numbers
+var plusOne = function(n) {
+  return n + 1
+}
+
+var range_ = function(start, end) {
+  if (start == end) {
+    return end
+  } else {
+    return [start].concat(range_(start+1, end))
+  }
+}
+var range = function(start, end) {
+  var res = range_(start, end)
+  return res.slice(0, res.length-1)
+}
+
+// Listener probability assignment to topic "t_distr1"
+var getDataSizes = function(n) {
+  return range(0, n)
+}
+// List of slice sizes
+var dataSizes = getDataSizes(nUtterances)
+// A context slice is the size of the preceding words (e.g. 0-3, 0-10, 0-n)
+var contextSlices = map(function(x) {return [0, x]}, dataSizes)
+
+// getListenerInferences
+// =====================
+// Given a slice of speaker utterance data, return listeners state of belief
+// about the intended topic distribution.
+//
+var getListenerInferences = function(utterances) {
+  var res = map(function(x) {
+    return {
+      "t_distr1": Math.exp(Listener('a', utterances.slice(x[0], x[1])).score("t_distr1")),
+      "t_distr2": Math.exp(Listener('a', utterances.slice(x[0], x[1])).score("t_distr2")),
+      "t_distr3": Math.exp(Listener('a', utterances.slice(x[0], x[1])).score("t_distr3"))}
+  }, contextSlices)
+  return res
+}
+
+// processUtterances
+// =================
+// Return a list of dictionaries containing speaker utterance data
+// and corresponding state of listener inferences about topics
+//
+var processUtterances = function(speakerData, listenerInferences) {
+  var dMap = map(function(x) {
+    return {
+      'utteranceNum': x, 
+      'utterance': speakerData[x], 
+      't_distr1': listenerInferences[x]['t_distr1'],
+      't_distr2': listenerInferences[x]['t_distr2'],
+      't_distr3': listenerInferences[x]['t_distr3']}
+  }, dataSizes)
+  return dMap
+}
+
+// runFn
+// =====
+// Return data of speaker utterances / listener inferences
+//
+// Parameters
+// ----------
+// resultType : str
+//   One of (contextAwareSpeaker, contextUnawareSpeaker, baseline)
+//
+// Returns
+// --------
+// List of dicts
+var runFn = function(resultType) {
+  if (resultType == 'contextAwareSpeaker') {
+    var contextAwareSpeaker = speakerRecurse([], nUtterances)
+    var listenerInferences = getListenerInferences(contextAwareSpeaker)
+    return processUtterances(contextAwareSpeaker, listenerInferences)
+  } else if (resultType == 'contextUnawareSpeaker') {
+    var contextUnawareSpeaker = repeat(nUtterances, (function(x) {sample(Speaker('t_distr1', []))}))
+    var listenerInferences = getListenerInferences(contextUnawareSpeaker)
+    return processUtterances(contextUnawareSpeaker, listenerInferences)
+  } else if (resultType == 'baseline') {
+    var baseline = repeat(nUtterances, (function(x) {sample(t_distr1)}))
+    var listenerInferences = getListenerInferences(baseline)
+    return processUtterances(baseline, listenerInferences)
+  } else {
+    error('Bad resultType:', resultType)
+  }
+}
+
+runFn(resultType)

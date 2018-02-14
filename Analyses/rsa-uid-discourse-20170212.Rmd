@@ -6,6 +6,8 @@ output: html_document
 ---
 
 ```{r libraries, message=FALSE, warning=FALSE}
+rm(list = ls())  # clear workspace
+
 library(doParallel)
 library(dplyr)
 library(ggplot2)
@@ -16,58 +18,102 @@ source("run-helpers.R")
 ```
 
 ```{r}
-fPath <- '/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/rsa-uid-discourse-20180205.wppl'
+fPath <- '/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/discourse/rsa-uid-discourse-20180205.wppl'
 m <- getModelFile(fPath)
 ```
 
 ```{r runFn}
-NUM_UTTERANCES <- 200
+NUM_UTTERANCES <- 300
 run <- createRunFn(m)
-runFn <- function(i) {
-  dTemp <- data.frame(nUtterances=NUM_UTTERANCES)
+runFn <- function(i, nUtterances, resultType, alpha) {
+  dTemp <- data.frame(nUtterances=nUtterances, resultType=resultType, alpha=alpha)
   df <- run(dTemp) %>%
-    mutate(runNum=i)
+    mutate(runNum=i, alpha=alpha, resultType=resultType)
   df
 }
 ```
 
 ```{r singleRun}
-df <- runFn(1)
+ALPHA <- 3
+df_baseline <- runFn(1, NUM_UTTERANCES, 'baseline', ALPHA)
+df_contextUnwareSpeaker <- runFn(1, NUM_UTTERANCES, 'contextUnawareSpeaker', ALPHA)
+df_contextAwareSpeaker <- runFn(1, NUM_UTTERANCES, 'contextAwareSpeaker', ALPHA)
+
+df_agg <- rbind(df_baseline, df_contextUnwareSpeaker, df_contextAwareSpeaker)
+```
+
+```{r preprocess}
+df_agg <- df_agg %>%
+  group_by(resultType) %>%
+  mutate(targetDistrPreferred=((t_distr1 > t_distr2) & (t_distr1 > t_distr3)),
+         pos=which.max(targetDistrPreferred)) %>%
+  ungroup
 ```
 
 
-```{r topicPlot}
-df %>% 
-  gather(topic, listenerTopciPosterior, c(t_distr1, t_distr2, t_distr3)) %>%
-  ggplot(aes(x=utteranceNum, y=listenerTopciPosterior, col=topic)) +
+### Listener convergence as a function of speaker...
+```{r listenerInferencePlot}
+df_agg %>% 
+  gather(topic, listenerTopicPosterior, c(t_distr1, t_distr2, t_distr3)) %>%
+  ggplot(aes(x=utteranceNum, y=listenerTopicPosterior, col=topic)) +
     geom_line() +
-    theme_few()
+    geom_vline(data=df_agg %>% select(resultType, pos) %>% unique, aes(xintercept=pos), lty=2)+
+    theme_few() +
+    facet_grid(resultType~.)
 ```
 
-
-```{r utterancePlot}
-df %>%
+### Speaker utterances over time
+```{r inspectingUtterancePlot}
+df_agg %>%
   mutate(utteranceVal=ifelse(utterance=='a', 1, ifelse(utterance=='b', 1, 1))) %>%
   ggplot(aes(x=utteranceNum, y=utteranceVal, col=utterance), alpha=0.6) +
-    # geom_point() +
+    geom_vline(data=df_agg %>% select(resultType, pos) %>% unique, aes(xintercept=pos), lty=2) +
     geom_jitter(height=0.05) +
     ylim(0.75, 1.25) +
-    theme_few()
+    theme_few() +
+    facet_grid(~resultType)
 ```
 
-```{r combinedPlot}
-df %>% 
+```{r combinedPlot, eval=FALSE}
+df_agg %>% 
   mutate(utteranceVal=0.5) %>%
   gather(topic, listenerTopicPosterior, c(t_distr1, t_distr2, t_distr3)) %>%
   ggplot(aes(x=utteranceNum)) +
+    geom_vline(data=df_agg %>% select(resultType, pos) %>% unique, aes(xintercept=pos), lty=2) +
     geom_line(aes(y=listenerTopicPosterior, col=topic), alpha=0.3, size=1.5) +
     geom_jitter(aes(y=utteranceVal, col=utterance), height=0.1, alpha=0.7, size=2) +
     ylim(0, 1) +
+    theme_few() +
+    facet_grid(~resultType)
+```
+
+How do speaker choices change as a function of listener beliefs?
+```{r speakerChoicePreProcess}
+binSize <- 20
+breaks <- seq(0, NUM_UTTERANCES, by=binSize)
+
+df_agg <- df_agg %>%
+  mutate(bin=cut(utteranceNum+1, breaks=breaks))
+bin_levels <- levels(df_agg$bin)
+df_agg$binVal <- match(df_agg$bin, bin_levels)
+df_agg <- df_agg %>% 
+  mutate(posBin=floor(pos/binSize))
+```
+
+```{r speakerChoicePlot}
+df_agg %>%
+  group_by(resultType, binVal, utterance) %>%
+  summarise(n=n(),
+            prob=n/20) %>%
+  ggplot(aes(x=binVal, y=prob, fill=utterance)) +
+    geom_vline(data=df_agg %>% select(resultType, posBin) %>% unique, aes(xintercept=posBin), lty=2) +
+    geom_area(alpha=0.5) +
+    facet_grid(~resultType) +
     theme_few()
 ```
 
-```{r}
-breaks <- seq(1, NUM_UTTERANCES, by=10)
+```{r entropy1}
+breaks <- seq(1, NUM_UTTERANCES, by=binSize)
 
 calcEntropy <- function(a) {
   -1 * mean(sapply(a, function(x) {
@@ -75,34 +121,113 @@ calcEntropy <- function(a) {
   }))
 }
 
-df %>%
+df_agg %>%
   mutate(bin=cut(utteranceNum+1, breaks=breaks)) %>%
-  group_by(bin, utterance) %>%
+  group_by(resultType, bin, utterance) %>%
   summarise(n=n(),
             prob=n/10) %>%
   ungroup() %>%
-  group_by(bin) %>%
+  group_by(resultType, bin) %>%
   summarise(entropy=calcEntropy(prob)) %>%
   ggplot(aes(x=bin, y=entropy)) +
     geom_line(group=1) +
-    theme_few()
+    theme_few() +
+    facet_grid(~resultType)
 ```
 
 
-# Parallelize runs
-```{r runPar}
+Thinking about entropy
+```{r eval=FALSE}
+# A priori the listener doesn't know the world were in so p(a)==p(b)=p(c)
+
+counts2Entropy <- function(empA, empB, empC, pA=0.333, pB=0.333, pC=0.333) {
+  empiricals <- c(empA, empB, empC)
+  total <- sum(empiricals)
+  props <- empiricals / total
+  sum(pA * empA)
+}
+
+counts2Entropy(0, 3, 7)
+
+df_agg %>%
+  mutate(bin=cut(utteranceNum+1, breaks=breaks)) %>%
+  group_by(bin, utterance) %>%
+  summarise(n=n(),
+            prob=n/10)
+```
+
+
+# `Context aware speaker` parallelize runs
+
+```{r runParContextAware}
 no_cores <- detectCores() - 1
 cl <- makeCluster(no_cores, type='FORK')
 registerDoParallel(cl)
 
 ptm <- proc.time()
 nSims <- 100
-sims <- foreach(i=seq(1, nSims), .packages=c('dplyr', 'rwebppl'), .combine=rbind) %dopar% runFn(i)
+sims <- foreach(i=seq(1, nSims), .packages=c('dplyr', 'rwebppl'), .combine=rbind) %dopar% runFn(i, NUM_UTTERANCES, 'contextAwareSpeaker',  ALPHA)
 stopCluster(cl)
 etm <- proc.time() - ptm
 cat("runtime: ", etm[3] / 60)
+```
+
+
+```{r}
+df_sims <- sims %>%
+  mutate(utteranceNum=(utteranceNum+1)) %>%
+  mutate(bin=cut(utteranceNum, breaks=breaks))
+bin_levels <- levels(df_sims$bin)
+df_sims$binVal <- match(df_sims$bin, bin_levels)
+
+df_sims %>%
+  group_by(runNum, binVal, utterance) %>%
+  summarise(n=n(),
+            prob=n/binSize) %>%
+  ungroup %>%
+  group_by(runNum, binVal) %>%
+  summarise(entropy=calcEntropy(prob)) %>%
+  ggplot(aes(x=binVal, y=entropy)) +
+    geom_smooth(method='loess') +
+    theme_few()
 
 ```
+
+
+# `Context unaware speaker` parallelize runs
+```{r runParContexUnaware}
+no_cores <- detectCores() - 1
+cl <- makeCluster(no_cores, type='FORK')
+registerDoParallel(cl)
+
+ptm <- proc.time()
+nSims <- 100
+sims <- foreach(i=seq(1, nSims), .packages=c('dplyr', 'rwebppl'), .combine=rbind) %dopar% runFn(i, NUM_UTTERANCES, 'contextUnawareSpeaker',  ALPHA)
+stopCluster(cl)
+etm <- proc.time() - ptm
+cat("runtime: ", etm[3] / 60)
+```
+
+
+```{r}
+df_sims_unawareSpeaker <- sims %>%
+  mutate(utteranceNum=(utteranceNum+1)) %>%
+  mutate(bin=cut(utteranceNum, breaks=breaks))
+bin_levels <- levels(df_sims_unawareSpeaker$bin)
+df_sims_unawareSpeaker$binVal <- match(df_sims_unawareSpeaker$bin, bin_levels)
+
+df_sims_unawareSpeaker %>%
+  group_by(runNum, binVal, utterance) %>%
+  summarise(n=n(),
+            prob=n/binSize) %>%
+  ungroup %>%
+  group_by(runNum, binVal) %>%
+  summarise(entropy=calcEntropy(prob)) %>%
+  ggplot(aes(x=binVal, y=entropy)) +
+    geom_smooth(method='loess') +
+    theme_few()
+```
+
 
 **Caution** this plot is slow running...
 ```{r convergencePar, val=FALSE}
@@ -154,10 +279,11 @@ calcEntropy <- function(a) {
   
 
 
-bin_levels <- levels(df_sims$bin)
+
 df_sims <- sims %>%
   mutate(utteranceNum=(utteranceNum+1)) %>%
   mutate(bin=cut(utteranceNum, breaks=breaks))
+bin_levels <- levels(df_sims$bin)
 df_sims$binVal <- match(df_sims$bin, bin_levels)
 
 df_sims %>%
