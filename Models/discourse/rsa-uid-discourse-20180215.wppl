@@ -1,5 +1,5 @@
 // Globals
-var rData = [{'nUtterances':200, 'alpha':4, 'resultType':'contextAwareSpeaker', 'theta':0.1}]
+//var rData = [{'nUtterances':200, 'alpha':4, 'resultType':'contextAwareSpeaker', 'theta':0.1}]
 
 var getNUtterances = function(rData) {
   var data = rData[0]
@@ -21,38 +21,49 @@ var getTheta = function(rData) {
   return data['theta']
 }
 
+var getReverseResults = function(rData) {
+  var data = rData[0]
+  return data['reverseResults'] == 'true'
+}
+
 var nUtterances = getNUtterances(rData)
 var resultType = getResultType(rData)
 var alpha = getAlpha(rData)
 var theta = getTheta(rData)
+var targetDistr = 't_distr1'
+var runReverse = getReverseResults(rData)
 
-var d0 = ['a']
-var d1 = ['a', 'b', 'b']
-var d2 = ['a', 'b', 'b', 'b', 'a', 'b', 'b', 'b']
 
 // Topics
 var topicNames = ['t_distr1', 't_distr2', 't_distr3']
-var topicNamesDistr = Categorical({vs:topicNames, ps:[0.01, 0.1, 1]})
+var topicNamesDistr = Categorical({vs:topicNames, ps:[1, 1, 1]})
 var topicNamesPrior = function() { 
   return sample(topicNamesDistr)
 }
 
 // Worlds
-var worlds = [{d:'a'}, {d:'b'}, {d:'c'}]
-var wordsDistr = Categorical({vs:worlds, ps:[1, 1, 1]})
+var worlds = [{d:'a'}, {d:'b'}, {d:'c'}, {d:'d'}, {d:'e'}, {d:'f'}, {d:'g'}]
+var wordsDistr = Categorical({vs:worlds, ps:[1, 1, 1, 1, 1, 1, 1]})
 var worldsPrior = function() {return sample(wordsDistr)}
 
 // Utterances
 // var utterances = ['a', 'b', 'c', 'X a', 'X b', 'X c']
-var utterances = ['a', 'b', 'c']
+var utterances = ['a', 'b', 'c', 'd', 'e', 'f', 'g']
 // var utterancesDistr = Categorical({vs:utterances, ps:[1, 1, 1, 0.5, 0.5, 0.5]})
-var utterancesDistr = Categorical({vs:utterances, ps:[1, 1, 1]})
+var utterancesDistr = Categorical({vs:utterances, ps:[1, 1, 1, 1, 1]})
 var utterancesPrior = function() {return sample(utterancesDistr)}
 
 // Worlds cond. on topics
-var t_distr1 = Categorical({vs:worlds, ps:[4, 2, 1]})
-var t_distr2 = Categorical({vs:worlds, ps:[6, 2, 1]}) 
-var t_distr3 = Categorical({vs:worlds, ps:[1, 1, 2]})
+// equal variance, different mode
+var t_distr1 = Categorical({vs:worlds, ps:[2, 4, 4, 2, 1, 1, 1]})
+var t_distr2 = Categorical({vs:worlds, ps:[2, 4, 2, 4, 1, 1, 1]}) 
+var t_distr3 = Categorical({vs:worlds, ps:[2, 2, 4, 4, 1, 1, 1]})
+
+// unequal variance, same mode
+//var t_distr1 = Categorical({vs:worlds, ps:[4, 3, 2, 1]})
+//var t_distr2 = Categorical({vs:worlds, ps:[5, 3, 2, 1]}) 
+//var t_distr3 = Categorical({vs:worlds, ps:[6, 3, 2, 1]})
+
 var topicDistr = {
   't_distr1': t_distr1,
   't_distr2': t_distr2,
@@ -62,16 +73,10 @@ var getTopicNameDistr = function(topicName) {
   return topicDistr[topicName]
 }
 
-// Utterances
 
 var litMeaning = function(utterance, world) {
   return utterance == world['d']
 }
-
-// Observed data
-var observedData0 = ['a']
-var observedData1 = ['a', 'a', 'b']
-var observedData2 = ['a', 'a', 'b', 'a', 'a', 'b', 'a']
 
 var utteranceMeaning = function(utterance) {
   if (utterance == '') {
@@ -86,7 +91,14 @@ var utteranceMeaning = function(utterance) {
     return 'c'
   } else if (utterance.includes('d')) {
     return 'd'
-  }else {
+  } else if (utterance.includes('e')) {
+    return 'e'
+  } else if (utterance.includes('f')) {
+    return 'f'
+  } else if (utterance.includes('g')) {
+    return 'g'
+  } 
+  else {
     console.log("Error on", utterance)
   }
 }
@@ -103,7 +115,7 @@ var sampleWorldFromTopic = function(topicName) {
       return sample(t_distr3)
     } 
     else {
-      error('Error')
+      error('No topic: ', topicName)
     }
   }
 }
@@ -160,7 +172,7 @@ var decode = cache(function(utteranceProduced, noiseModel) {
 })
 
 
-var L0 = function(utterance) {
+var L0 = cache(function(utterance) {
   Infer({
     model() {
       var world = worldsPrior()
@@ -169,21 +181,21 @@ var L0 = function(utterance) {
       return world
     }
   })
-}
+})
 
-var S1 = function(topic) {
+var S1 = cache(function(topic) {
   Infer({
     model(){
       var world = sampleWorldFromTopic(topic)()
       var utterance = utterancesPrior()
       var L = L0(utterance)
-      factor(alpha * L.score(world))
+      factor(1 * L.score(world))
       return utterance
     }
   })
-}
+})
 
-var listenerTopicDistrPosterior = function(observedData) {
+var listenerTopicDistrPosterior = cache(function(observedData) {
   return Infer({method: 'enumerate'}, function() {
     var topicDistrName = topicNamesPrior()
     if (observedData != []) {
@@ -192,7 +204,7 @@ var listenerTopicDistrPosterior = function(observedData) {
     }
     return topicDistrName
   })
-}
+})
 
 var L1 = cache(function(utterance, data) {
   Infer({
@@ -230,31 +242,17 @@ var S2 = cache(function(T, data) {
 // Speaker utterance generation
 //
 var d = []
-var speakerFn = function(d) {
-  var T = 't_distr1'
-//   var w = sampleWorldFromTopic(T)()
-  return d.concat([sample(Speaker(T, d))['producedUtterance']])
+var speakerFn = function(T, d) {
+  return d.concat([sample(S2(T, d))['utterance']])
 }
 
-var speakerRecurse = function(d, n) {
+var speakerRecurse = function(T, d, n) {
   if (n == 0) {
     return d
   } else {
-    return speakerRecurse(speakerFn(d.slice(0, d.length)), n-1)
+    return speakerRecurse(T, speakerFn(T, d), n-1)
   }
 }
-
-//
-// Data
-//
-// Run speaker for nUtterances
-// var contextAwareSpeaker = speakerRecurse([], nUtterances)
-
-// speaker baseline1 - speaker talks without being aware of listener updates
-// var contextUnawareSpeaker = repeat(nUtterances, (function(x) {sample(Speaker('t_distr1', []))}))
-
-// non-speaker baseline2 - sample directly from distribution
-// var baseline = repeat(nUtterances, (function(x) {sample(t_distr1)}))
 
 
 //
@@ -294,12 +292,13 @@ var contextSlices = map(function(x) {return [0, x]}, dataSizes)
 var getListenerInferences = function(utterances) {
   var res = map(function(x) {
     return {
-      "t_distr1": Math.exp(Listener('a', utterances.slice(x[0], x[1])).score([{d:'a'}, "t_distr1"])),
-      "t_distr2": Math.exp(Listener('a', utterances.slice(x[0], x[1])).score([{d:'a'}, "t_distr2"])),
-      "t_distr3": Math.exp(Listener('a', utterances.slice(x[0], x[1])).score([{d:'a'}, "t_distr3"]))}
+      "t_distr1": Math.exp(listenerTopicDistrPosterior(utterances.slice(x[0], x[1])).score("t_distr1")),
+      "t_distr2": Math.exp(listenerTopicDistrPosterior(utterances.slice(x[0], x[1])).score("t_distr2")),
+      "t_distr3": Math.exp(listenerTopicDistrPosterior(utterances.slice(x[0], x[1])).score("t_distr3"))}
   }, contextSlices)
   return res
 }
+
 
 // processUtterances
 // =================
@@ -331,38 +330,30 @@ var processUtterances = function(speakerData, listenerInferences) {
 // --------
 // List of dicts
 //
-var runFn = function(resultType) {
-  if (resultType == 'contextAwareSpeaker') {
-    var contextAwareSpeaker = speakerRecurse([], nUtterances)
-    var listenerInferences = getListenerInferences(contextAwareSpeaker)
-    return processUtterances(contextAwareSpeaker, listenerInferences)
-  } else if (resultType == 'contextUnawareSpeaker') {
-    var contextUnawareSpeaker = repeat(nUtterances, (function(x) {
-      var T = 't_distr1'
-      var world = sampleWorldFromTopic(t)()
-      sample(Speaker(T, []))}))
-    var listenerInferences = getListenerInferences(contextUnawareSpeaker)
-    return processUtterances(contextUnawareSpeaker, listenerInferences)
-  } else if (resultType == 'baseline') {
-    var baseline = repeat(nUtterances, (function(x) {utterancesPrior()}))
-    var listenerInferences = getListenerInferences(baseline)
-    return processUtterances(baseline, listenerInferences)
-  } else {
+var targetDistr = 't_distr2'
+var runFn = function(resultType, runReverse) {
+  if (resultType == 'contextAwareS2') {
+    var utteranceList = speakerRecurse(targetDistr, [], nUtterances)
+    var listenerInferences = getListenerInferences(utteranceList)
+    return processUtterances(utteranceList, listenerInferences)
+  } 
+  else if (resultType == 'contextUnawareS2') {
+    var utteranceList = repeat(nUtterances, function(x) { sample(S2(targetDistr, []))['utterance']})
+    var listenerInferences = getListenerInferences(utteranceList)
+    return processUtterances(utteranceList, listenerInferences)
+  } 
+  else if (resultType == 'S1') {
+    var utteranceList = repeat(nUtterances, (function(x) { return sample(S1(targetDistr))}))
+    var listenerInferences = getListenerInferences(utteranceList)
+    return processUtterances(utteranceList, listenerInferences)
+  }
+  else if (resultType == 'baseline') {
+    var utteranceList = repeat(nUtterances, (function(x) {utterancesPrior()}))
+    var listenerInferences = getListenerInferences(utteranceList)
+    return processUtterances(utteranceList, listenerInferences)
+  } 
+  else {
     error('Bad resultType:', resultType)
   }
 }
-
-
-listenerTopicDistrPosterior([])
-// listenerTopicDistrPosterior(['a', 'a', 'a', 'a', 'a', 'a', 'a', 'a'])
-
-// viz.table(Listener('a', []))
-// viz.table(Listener('X', []))
-// viz.table(Listener('b', []))
-// viz.table(Listener('c', []))
-
-
-
-// marginalize(Speaker('t_distr1', []), function(x) {return x.producedUtterance})
-// L1('a', ['a', 'b', 'c', 'b', 'b', 'a', 'c'])
-S2('t_distr1', ['a', 'a', 'a', 'a', 'a', 'a', 'a', 'a'])
+runFn(resultType)
