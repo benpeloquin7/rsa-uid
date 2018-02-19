@@ -26,11 +26,16 @@ var getReverseResults = function(rData) {
   return data['reverseResults'] == 'true'
 }
 
+var getTargetDistr = function(rData) {
+  var data = rData[0]
+  return data['targetDistr']
+}
+
 var nUtterances = getNUtterances(rData)
 var resultType = getResultType(rData)
 var alpha = getAlpha(rData)
 var theta = getTheta(rData)
-var targetDistr = 't_distr1'
+var targetDistr = getTargetDistr(rData)
 var runReverse = getReverseResults(rData)
 
 
@@ -42,37 +47,53 @@ var topicNamesPrior = function() {
 }
 
 // Worlds
-var worlds = [{d:'a'}, {d:'b'}, {d:'c'}, {d:'d'}, {d:'e'}, {d:'f'}, {d:'g'}]
-var wordsDistr = Categorical({vs:worlds, ps:[1, 1, 1, 1, 1, 1, 1]})
+var worlds = [{d:'a'}, {d:'b'}, {d:'c'}]
+var wordsDistr = Categorical({vs:worlds, ps:[1, 1, 1]})
 var worldsPrior = function() {return sample(wordsDistr)}
 
 // Utterances
-// var utterances = ['a', 'b', 'c', 'X a', 'X b', 'X c']
-var utterances = ['a', 'b', 'c', 'd', 'e', 'f', 'g']
-// var utterancesDistr = Categorical({vs:utterances, ps:[1, 1, 1, 0.5, 0.5, 0.5]})
-var utterancesDistr = Categorical({vs:utterances, ps:[1, 1, 1, 1, 1]})
+var utterances = ['a', 'b', 'c']
+var utterancesDistr = Categorical({vs:utterances, ps:[1, 1, 1]})
 var utterancesPrior = function() {return sample(utterancesDistr)}
 
-// Worlds cond. on topics
-// equal variance, different mode
-var t_distr1 = Categorical({vs:worlds, ps:[2, 4, 4, 2, 1, 1, 1]})
-var t_distr2 = Categorical({vs:worlds, ps:[2, 4, 2, 4, 1, 1, 1]}) 
-var t_distr3 = Categorical({vs:worlds, ps:[2, 2, 4, 4, 1, 1, 1]})
+// Scenario 1: Equillibrium1
+//var t_distr1 = Categorical({vs:worlds, ps:[0.4, 0.4, 0.2]})
+//var t_distr2 = Categorical({vs:worlds, ps:[0.4, 0.2, 0.4]}) 
+//var t_distr3 = Categorical({vs:worlds, ps:[0.2, 0.4, 0.4]})
 
-// unequal variance, same mode
-//var t_distr1 = Categorical({vs:worlds, ps:[4, 3, 2, 1]})
-//var t_distr2 = Categorical({vs:worlds, ps:[5, 3, 2, 1]}) 
-//var t_distr3 = Categorical({vs:worlds, ps:[6, 3, 2, 1]})
+// Scenario 2: shared mode, unequal variance
+//var t_distr1 = Categorical({vs:worlds, ps:[0.6, 0.25, 0.15]})
+//var t_distr2 = Categorical({vs:worlds, ps:[0.6, 0.15, 0.25]}) 
+//var t_distr3 = Categorical({vs:worlds, ps:[0.25, 0.6, 0.15]})
+
+// Scenario 3: equal mode, unequal variance -- this is vary hard
+// in fact, we see that the uncond. entropy decreases...
+//var t_distr1 = Categorical({vs:worlds, ps:[0.6, 0.25, 0.15]})
+//var t_distr2 = Categorical({vs:worlds, ps:[0.5, 0.30, 0.20]}) 
+//var t_distr3 = Categorical({vs:worlds, ps:[0.7, 0.20, 0.10]})
+
+// Scenario 4: expanded set
+//var t_distr1 = Categorical({vs:worlds, ps:[0.6, 0.25, 0.15, 0.15, 0.1, 0.1]})
+//var t_distr2 = Categorical({vs:worlds, ps:[0.6, 0.15, 0.25, 0.1, 0.15, 0.1]}) 
+//var t_distr3 = Categorical({vs:worlds, ps:[0.25, 0.6, 0.15, 0.1, 0.1, 0.15]})
+//var t_distr4 = Categorical({vs:worlds, ps:[0.25, 0.1, 0.6, 0.15, 0.1, 0.15]})
+
+// Scenario 5: Equillibrium1
+var t_distr1 = Categorical({vs:worlds, ps:[0.33, 0.33, 0.33]})
+var t_distr2 = Categorical({vs:worlds, ps:[0.4, 0.2, 0.4]}) 
+var t_distr3 = Categorical({vs:worlds, ps:[0.2, 0.4, 0.4]})
+
 
 var topicDistr = {
   't_distr1': t_distr1,
   't_distr2': t_distr2,
-  't_distr3': t_distr3
+  't_distr3': t_distr3,
+  //'t_distr4': t_distr4
 }
+
 var getTopicNameDistr = function(topicName) {
   return topicDistr[topicName]
 }
-
 
 var litMeaning = function(utterance, world) {
   return utterance == world['d']
@@ -113,6 +134,9 @@ var sampleWorldFromTopic = function(topicName) {
     } 
     else if (topicName == 't_distr3') { 
       return sample(t_distr3)
+    } 
+    else if (topicName == 't_distr4') { 
+      return sample(t_distr4)
     } 
     else {
       error('No topic: ', topicName)
@@ -189,7 +213,7 @@ var S1 = cache(function(topic) {
       var world = sampleWorldFromTopic(topic)()
       var utterance = utterancesPrior()
       var L = L0(utterance)
-      factor(1 * L.score(world))
+      factor(alpha * L.score(world))
       return utterance
     }
   })
@@ -212,8 +236,6 @@ var L1 = cache(function(utterance, data) {
       // Sample a topic distr given prev utterances (data)
       var estTopicDistrName = sample(listenerTopicDistrPosterior(data))
       var estWorld = sampleWorldFromTopic(estTopicDistrName)()
-      // Given est. topic distribution sample an utterance
-//       var intendedUtterance = sample(decode(utterance, deleteNoiseModel))
       var meaning = litMeaning(utteranceMeaning(utterance), estWorld)
       factor(meaning ? 0 : -Infinity)
       // Listener jointly reasons about (meaning, topic)
@@ -227,12 +249,8 @@ var S2 = cache(function(T, data) {
     model() {
       var world = sampleWorldFromTopic(T)()
       var utterance = utterancesPrior()
-//       var intendedUtterance = utterancesPrior()
-//       var producedUtterance = deleteNoiseModel(intendedUtterance)
       var L = L1(utterance, data)
       factor(alpha * (L.score({'estWorld': world, 'estTopicDistrName': T}) - cost(utterance)/10))
-      // Note: the speaker likely shouldn't reasons explicitly about thhe
-      // produced utterance
       return {'utterance': utterance}
     }
   })
@@ -294,7 +312,8 @@ var getListenerInferences = function(utterances) {
     return {
       "t_distr1": Math.exp(listenerTopicDistrPosterior(utterances.slice(x[0], x[1])).score("t_distr1")),
       "t_distr2": Math.exp(listenerTopicDistrPosterior(utterances.slice(x[0], x[1])).score("t_distr2")),
-      "t_distr3": Math.exp(listenerTopicDistrPosterior(utterances.slice(x[0], x[1])).score("t_distr3"))}
+      "t_distr3": Math.exp(listenerTopicDistrPosterior(utterances.slice(x[0], x[1])).score("t_distr3")),
+      "t_distr4": Math.exp(listenerTopicDistrPosterior(utterances.slice(x[0], x[1])).score("t_distr4"))}
   }, contextSlices)
   return res
 }
@@ -312,7 +331,8 @@ var processUtterances = function(speakerData, listenerInferences) {
       'utterance': speakerData[x], 
       't_distr1': listenerInferences[x]['t_distr1'],
       't_distr2': listenerInferences[x]['t_distr2'],
-      't_distr3': listenerInferences[x]['t_distr3']}
+      't_distr3': listenerInferences[x]['t_distr3'],
+      't_distr4': listenerInferences[x]['t_distr4']}
   }, dataSizes)
   return dMap
 }
@@ -330,7 +350,6 @@ var processUtterances = function(speakerData, listenerInferences) {
 // --------
 // List of dicts
 //
-var targetDistr = 't_distr2'
 var runFn = function(resultType, runReverse) {
   if (resultType == 'contextAwareS2') {
     var utteranceList = speakerRecurse(targetDistr, [], nUtterances)
