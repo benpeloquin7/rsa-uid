@@ -40,20 +40,20 @@ var runReverse = getReverseResults(rData)
 
 
 // Topics
-var topicNames = ['t_distr1', 't_distr2', 't_distr3']
-var topicNamesDistr = Categorical({vs:topicNames, ps:[1, 1, 1]})
+var topicNames = ['t_distr1', 't_distr2', 't_distr3', 't_distr4']
+var topicNamesDistr = Categorical({vs:topicNames, ps:[0.1, 1, 1, 1]})
 var topicNamesPrior = function() { 
   return sample(topicNamesDistr)
 }
 
 // Worlds
-var worlds = [{d:'a'}, {d:'b'}, {d:'c'}]
-var wordsDistr = Categorical({vs:worlds, ps:[1, 1, 1]})
+var worlds = [{d:'a'}, {d:'b'}, {d:'c'}, {d:'d'}, {d:'e'}, {d:'f'}]
+var wordsDistr = Categorical({vs:worlds, ps:[1, 1, 1, 1, 1, 1]})
 var worldsPrior = function() {return sample(wordsDistr)}
 
 // Utterances
-var utterances = ['a', 'b', 'c']
-var utterancesDistr = Categorical({vs:utterances, ps:[1, 1, 1]})
+var utterances = ['a', 'b', 'c', 'd', 'e', 'f']
+var utterancesDistr = Categorical({vs:utterances, ps:[1, 1, 1, 1, 1, 1]})
 var utterancesPrior = function() {return sample(utterancesDistr)}
 
 // Scenario 1: Equillibrium1
@@ -73,22 +73,22 @@ var utterancesPrior = function() {return sample(utterancesDistr)}
 //var t_distr3 = Categorical({vs:worlds, ps:[0.7, 0.20, 0.10]})
 
 // Scenario 4: expanded set
-//var t_distr1 = Categorical({vs:worlds, ps:[0.6, 0.25, 0.15, 0.15, 0.1, 0.1]})
-//var t_distr2 = Categorical({vs:worlds, ps:[0.6, 0.15, 0.25, 0.1, 0.15, 0.1]}) 
-//var t_distr3 = Categorical({vs:worlds, ps:[0.25, 0.6, 0.15, 0.1, 0.1, 0.15]})
-//var t_distr4 = Categorical({vs:worlds, ps:[0.25, 0.1, 0.6, 0.15, 0.1, 0.15]})
+var t_distr1 = Categorical({vs:worlds, ps:[0.6, 0.25, 0.15, 0.15, 0.1, 0.1]})
+var t_distr2 = Categorical({vs:worlds, ps:[0.6, 0.15, 0.25, 0.1, 0.15, 0.1]}) 
+var t_distr3 = Categorical({vs:worlds, ps:[0.25, 0.6, 0.15, 0.1, 0.1, 0.15]})
+var t_distr4 = Categorical({vs:worlds, ps:[0.25, 0.1, 0.6, 0.15, 0.1, 0.15]})
 
 // Scenario 5: Equillibrium1
-var t_distr1 = Categorical({vs:worlds, ps:[0.33, 0.33, 0.33]})
-var t_distr2 = Categorical({vs:worlds, ps:[0.4, 0.2, 0.4]}) 
-var t_distr3 = Categorical({vs:worlds, ps:[0.2, 0.4, 0.4]})
+//var t_distr1 = Categorical({vs:worlds, ps:[0.33, 0.33, 0.33]})
+//var t_distr2 = Categorical({vs:worlds, ps:[0.4, 0.2, 0.4]}) 
+//var t_distr3 = Categorical({vs:worlds, ps:[0.2, 0.4, 0.4]})
 
 
 var topicDistr = {
   't_distr1': t_distr1,
   't_distr2': t_distr2,
   't_distr3': t_distr3,
-  //'t_distr4': t_distr4
+  't_distr4': t_distr4
 }
 
 var getTopicNameDistr = function(topicName) {
