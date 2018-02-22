@@ -1,0 +1,363 @@
+// Globals
+//var rData = [{'nUtterances':5, 
+//              'alpha':10, 
+//              'resultType':'contextAwareSpeaker', 
+//              'theta':0.1, 
+//              'utterancesData':'a b a a b'}]
+
+var getUtterancesData = function(rData) {
+  var data = rData[0]
+  return data['utterancesData'].split(' ')
+}
+
+var getNUtterances = function(rData) {
+  var data = rData[0]
+  return data['nUtterances']
+}
+
+var getResultType = function(rData) {
+  var data = rData[0]
+  return data['resultType']
+}
+
+var getAlpha = function(rData) {
+  var data = rData[0]
+  return data['alpha']
+}
+
+var getTheta = function(rData) {
+  var data = rData[0]
+  return data['theta']
+}
+
+var getReverseResults = function(rData) {
+  var data = rData[0]
+  return data['reverseResults'] == 'true'
+}
+
+var getTargetDistr = function(rData) {
+  var data = rData[0]
+  return data['targetDistr']
+}
+
+var nUtterances = getNUtterances(rData)
+var resultType = getResultType(rData)
+var alpha = getAlpha(rData)
+var theta = getTheta(rData)
+var targetDistr = getTargetDistr(rData)
+var runReverse = getReverseResults(rData)
+var utterancesData = getUtterancesData(rData)
+
+
+// Topics
+var topicNames = ['t_distr1', 't_distr2', 't_distr3', 't_distr4']
+var topicNamesDistr = Categorical({vs:topicNames, ps:[0.1, 1, 1, 1]})
+var topicNamesPrior = function() { 
+  return sample(topicNamesDistr)
+}
+
+// Worlds
+var worlds = [{d:'a'}, {d:'b'}, {d:'c'}, {d:'d'}, {d:'e'}, {d:'f'}]
+var wordsDistr = Categorical({vs:worlds, ps:[1, 1, 1, 1, 1, 1]})
+var worldsPrior = function() {return sample(wordsDistr)}
+
+// Utterances
+var utterances = ['a', 'b', 'c', 'd', 'e', 'f']
+var utterancesDistr = Categorical({vs:utterances, ps:[1, 1, 1, 1, 1, 1]})
+var utterancesPrior = function() {return sample(utterancesDistr)}
+
+// Scenario 1: Equillibrium1
+//var t_distr1 = Categorical({vs:worlds, ps:[0.4, 0.4, 0.2]})
+//var t_distr2 = Categorical({vs:worlds, ps:[0.4, 0.2, 0.4]}) 
+//var t_distr3 = Categorical({vs:worlds, ps:[0.2, 0.4, 0.4]})
+
+// Scenario 2: shared mode, unequal variance
+//var t_distr1 = Categorical({vs:worlds, ps:[0.6, 0.25, 0.15]})
+//var t_distr2 = Categorical({vs:worlds, ps:[0.6, 0.15, 0.25]}) 
+//var t_distr3 = Categorical({vs:worlds, ps:[0.25, 0.6, 0.15]})
+
+// Scenario 3: equal mode, unequal variance -- this is vary hard
+// in fact, we see that the uncond. entropy decreases...
+//var t_distr1 = Categorical({vs:worlds, ps:[0.6, 0.25, 0.15]})
+//var t_distr2 = Categorical({vs:worlds, ps:[0.5, 0.30, 0.20]}) 
+//var t_distr3 = Categorical({vs:worlds, ps:[0.7, 0.20, 0.10]})
+
+// Scenario 4: expanded set
+var t_distr1 = Categorical({vs:worlds, ps:[0.6, 0.25, 0.15, 0.15, 0.1, 0.1]})
+var t_distr2 = Categorical({vs:worlds, ps:[0.6, 0.15, 0.25, 0.1, 0.15, 0.1]}) 
+var t_distr3 = Categorical({vs:worlds, ps:[0.25, 0.6, 0.15, 0.1, 0.1, 0.15]})
+var t_distr4 = Categorical({vs:worlds, ps:[0.25, 0.1, 0.6, 0.15, 0.1, 0.15]})
+
+// Scenario 5: Equillibrium1
+//var t_distr1 = Categorical({vs:worlds, ps:[0.33, 0.33, 0.33]})
+//var t_distr2 = Categorical({vs:worlds, ps:[0.4, 0.2, 0.4]}) 
+//var t_distr3 = Categorical({vs:worlds, ps:[0.2, 0.4, 0.4]})
+
+
+var topicDistr = {
+  't_distr1': t_distr1,
+  't_distr2': t_distr2,
+  't_distr3': t_distr3,
+  't_distr4': t_distr4
+}
+
+var getTopicNameDistr = function(topicName) {
+  return topicDistr[topicName]
+}
+
+var litMeaning = function(utterance, world) {
+  return utterance == world['d']
+}
+
+var utteranceMeaning = function(utterance) {
+  if (utterance == '') {
+    console.log("Error on", utterance)
+  }
+  var lastCharIndex = utterance.length - 1
+  if (utterance.includes('a')) {
+    return 'a'
+  } else if (utterance.includes('b')) {
+    return 'b'
+  } else if (utterance.includes('c')) {
+    return 'c'
+  } else if (utterance.includes('d')) {
+    return 'd'
+  } else if (utterance.includes('e')) {
+    return 'e'
+  } else if (utterance.includes('f')) {
+    return 'f'
+  } else if (utterance.includes('g')) {
+    return 'g'
+  } 
+  else {
+    console.log("Error on", utterance)
+  }
+}
+
+var sampleWorldFromTopic = function(topicName) {
+  return function() {
+    if (topicName == 't_distr1') {
+      return sample(t_distr1)
+    } 
+    else if (topicName == 't_distr2') { 
+      return sample(t_distr2)
+    } 
+    else if (topicName == 't_distr3') { 
+      return sample(t_distr3)
+    } 
+    else if (topicName == 't_distr4') { 
+      return sample(t_distr4)
+    } 
+    else {
+      error('No topic: ', topicName)
+    }
+  }
+}
+
+var utteranceMaker = function(topicDistrName) {
+  var world = sampleWorldFromTopic(topicDistrName)
+  var utterance = utterancesPrior()
+  return utterance
+}
+
+var cost = function(utterance) {
+  return utterance.split(' ').length
+}
+
+//
+// Noise
+//
+var _removeEmptyItems = function(arr) {
+  filter(function(x) {return x != ''}, arr)
+}
+
+var replaceIndex = function(arr, index, replacement) {
+  return arr.slice(0, index).concat([replacement]).concat(arr.slice(index + 1, arr.length))
+}
+var transformUtterance = function(transformFn) {
+  return function(utterance) {
+      var tokens = utterance.split(' ')
+      var index = sample(RandomInteger({n:tokens.length}))
+      var replacement = transformFn(index)
+      return _removeEmptyItems(replaceIndex(tokens, index, replacement)).join(' ')
+  }  
+}
+var _deleteFn = function(s) {
+  return ''
+}
+var deleteTransform = transformUtterance(_deleteFn)
+
+var vacuousNoiseModel = function(utterance) {
+  return utterance
+}
+var deleteNoiseModel = function(utterance) {
+  return flip(theta) ? deleteTransform(utterance) : utterance
+}
+
+var decode = cache(function(utteranceProduced, noiseModel) {
+  Infer({
+    model() {
+      var utteranceIntended = utterancesPrior()
+      var noisyUtterance = noiseModel(utteranceIntended, theta)
+      factor(utteranceProduced == noisyUtterance ? 0 : -Infinity)
+      return utteranceIntended
+    }
+  })
+})
+
+
+var L0 = cache(function(utterance) {
+  Infer({
+    model() {
+      var world = worldsPrior()
+      var meaning = litMeaning(utteranceMeaning(utterance), world)
+      factor(meaning ? 0 : -Infinity)
+      return world
+    }
+  })
+})
+
+var S1 = cache(function(topic) {
+  Infer({
+    model(){
+      var world = sampleWorldFromTopic(topic)()
+      var utterance = utterancesPrior()
+      var L = L0(utterance)
+      factor(alpha * L.score(world))
+      return utterance
+    }
+  })
+})
+
+var listenerTopicDistrPosterior = cache(function(observedData) {
+  return Infer({method: 'enumerate'}, function() {
+    var topicDistrName = topicNamesPrior()
+    if (observedData != []) {
+      var obsFn = function(datum){condition(datum == sample(S1(topicDistrName)))}
+      mapData({data: observedData}, obsFn)
+    }
+    return topicDistrName
+  })
+})
+
+var L1 = cache(function(utterance, data) {
+  Infer({
+    model() {
+      // Sample a topic distr given prev utterances (data)
+      var estTopicDistrName = sample(listenerTopicDistrPosterior(data))
+      var estWorld = sampleWorldFromTopic(estTopicDistrName)()
+      var meaning = litMeaning(utteranceMeaning(utterance), estWorld)
+      factor(meaning ? 0 : -Infinity)
+      // Listener jointly reasons about (meaning, topic)
+      return {'estWorld': estWorld, 'estTopicDistrName': estTopicDistrName}
+    }
+  })
+})
+
+var S2 = cache(function(T, data) {
+  Infer({
+    model() {
+      var world = sampleWorldFromTopic(T)()
+      var utterance = utterancesPrior()
+      var L = L1(utterance, data)
+      factor(alpha * (L.score({'estWorld': world, 'estTopicDistrName': T}) - cost(utterance)/10))
+      return {'utterance': utterance}
+    }
+  })
+})
+
+//
+// Speaker utterance generation
+//
+var d = []
+var speakerFn = function(T, d) {
+  return d.concat([sample(S2(T, d))['utterance']])
+}
+
+var speakerRecurse = function(T, d, n) {
+  if (n == 0) {
+    return d
+  } else {
+    return speakerRecurse(T, speakerFn(T, d), n-1)
+  }
+}
+
+
+//
+// Helpers
+//
+// Generate a sequence of numbers
+var plusOne = function(n) {
+  return n + 1
+}
+
+var range_ = function(start, end) {
+  if (start == end) {
+    return end
+  } else {
+    return [start].concat(range_(start+1, end))
+  }
+}
+var range = function(start, end) {
+  var res = range_(start, end)
+  return res.slice(0, res.length-1)
+}
+
+// Listener probability assignment to topic "t_distr1"
+var getDataSizes = function(n) {
+  return range(0, n)
+}
+
+if (utterancesData.length != nUtterances) {
+  console.log("here!!!!")
+}
+
+// List of slice sizes
+var dataSizes = getDataSizes(nUtterances)
+// A context slice is the size of the preceding words (e.g. 0-3, 0-10, 0-n)
+var contextSlices = map(function(x) {return [0, x]}, dataSizes)
+
+// getListenerInferences
+// =====================
+// Given a slice of speaker utterance data, return listeners state of belief
+// about the intended topic distribution.
+//
+var getListenerInferences = function(utterances, slices) {
+  var res = map(function(x) {
+    return {
+      "t_distr1": Math.exp(listenerTopicDistrPosterior(utterances.slice(x[0], x[1])).score("t_distr1")),
+      "t_distr2": Math.exp(listenerTopicDistrPosterior(utterances.slice(x[0], x[1])).score("t_distr2")),
+      "t_distr3": Math.exp(listenerTopicDistrPosterior(utterances.slice(x[0], x[1])).score("t_distr3")),
+      "t_distr4": Math.exp(listenerTopicDistrPosterior(utterances.slice(x[0], x[1])).score("t_distr4"))}
+  }, slices)
+  return res
+}
+
+
+// processUtterances
+// =================
+// Return a list of dictionaries containing speaker utterance data
+// and corresponding state of listener inferences about topics
+//
+var processUtterances = function(speakerData, listenerInferences) {
+  var dMap = map(function(x) {
+    return {
+      'utteranceNum': x, 
+      'utterance': speakerData[x], 
+      't_distr1': listenerInferences[x]['t_distr1'],
+      't_distr2': listenerInferences[x]['t_distr2'],
+      't_distr3': listenerInferences[x]['t_distr3'],
+      't_distr4': listenerInferences[x]['t_distr4']}
+  }, dataSizes)
+  return dMap
+}
+
+var getTopicPosteriorUpdates = function(utteranceList, slices) {
+  var listenerInferences = getListenerInferences(utteranceList, slices)
+  return listenerInferences
+}
+
+var indices = range(0, nUtterances)
+map2(function(x, y) {return {'distrs':x, 'index':y}}, 
+  getTopicPosteriorUpdates(utterancesData, contextSlices), indices)
+
