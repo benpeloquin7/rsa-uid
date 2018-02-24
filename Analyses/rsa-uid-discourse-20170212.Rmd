@@ -98,8 +98,34 @@ firstN <- as.list(df_agg %>%
   filter(resultType=='contextAwareS2', utteranceNum < N) %>%
   select(utterance))$utterance
 
+nOptimalOrderings <- 5
+optimalOrderings <- sapply(seq(1, nOptimalOrderings), FUN=function(X) {sample(firstN)}, simplify=FALSE)
+
 fPath <- '/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/discourse/rsa-uid-discourse-optimal-ordering-20180221.wppl'
 mOrdering <- getModelFile(fPath)
+
+
+df_optimal_orderings <- data.frame()
+for (utteranceList in optimalOrderings) {
+  curr_df <- runOrderingFn(1, N, utteranceList, 10)
+  df_optimal_orderings <- rbind(df_optimal_orderings, curr_df)
+}
+df_optimal_orderings %>%
+  group_by(utterances) %>%
+  gather(type, val, c(distrs.t_distr1, distrs.t_distr2, distrs.t_distr3, distrs.t_distr4)) %>%
+  ggplot(aes(x=index, y=val, col=utterances)) +
+    geom_path(alpha=0.5, size=0.75) +
+    theme_few() +
+    theme(legend.position="none") +
+    facet_grid(~type)
+
+# Is there an optimal ordering???
+df_optimal_orderings %>%
+  filter(index==24)
+```
+
+
+```{r non-optimal-orderings}
 
 runOrdering <- createRunFn(mOrdering)
 runOrderingFn <- function(i, nUtterances, utterancesData, alpha) {
