@@ -28,7 +28,7 @@ m <- getModelFile(fPath)
 ```
 
 ```{r runFn}
-NUM_UTTERANCES <- 120
+NUM_UTTERANCES <- 180
 run <- createRunFn(m)
 runFn <- function(i, targetDistr, nUtterances, resultType, alpha, reverseResults) {
   dTemp <- data.frame(targetDistr=targetDistr, nUtterances=nUtterances, resultType=resultType, alpha=alpha, reverseResults=reverseResults)
@@ -92,41 +92,9 @@ df_agg %>%
 ```
 
 # Optimal ordering
-```{r optimalOrderingAnalysis}
-N <- 25
-firstN <- as.list(df_agg %>%
-  filter(resultType=='contextAwareS2', utteranceNum < N) %>%
-  select(utterance))$utterance
 
-nOptimalOrderings <- 5
-optimalOrderings <- sapply(seq(1, nOptimalOrderings), FUN=function(X) {sample(firstN)}, simplify=FALSE)
-
-fPath <- '/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/discourse/rsa-uid-discourse-optimal-ordering-20180221.wppl'
-mOrdering <- getModelFile(fPath)
-
-
-df_optimal_orderings <- data.frame()
-for (utteranceList in optimalOrderings) {
-  curr_df <- runOrderingFn(1, N, utteranceList, 10)
-  df_optimal_orderings <- rbind(df_optimal_orderings, curr_df)
-}
-df_optimal_orderings %>%
-  group_by(utterances) %>%
-  gather(type, val, c(distrs.t_distr1, distrs.t_distr2, distrs.t_distr3, distrs.t_distr4)) %>%
-  ggplot(aes(x=index, y=val, col=utterances)) +
-    geom_path(alpha=0.5, size=0.75) +
-    theme_few() +
-    theme(legend.position="none") +
-    facet_grid(~type)
-
-# Is there an optimal ordering???
-df_optimal_orderings %>%
-  filter(index==24)
-```
-
-
-```{r non-optimal-orderings}
-
+Orderings helpers
+```{r runOrderingFns}
 runOrdering <- createRunFn(mOrdering)
 runOrderingFn <- function(i, nUtterances, utterancesData, alpha) {
   # dTemp <- data.frame(nUtterances=rep(nUtterances, n), utterances=utterances, alpha=rep(alpha, n))
@@ -136,44 +104,144 @@ runOrderingFn <- function(i, nUtterances, utterancesData, alpha) {
     mutate(nUtterances=nUtterances, utterances=utterancesDataStr, alpha=alpha)
   df
 }
+```
 
-numSamples <- 10
+50 samples using "optimal" ordering chosen by model
+```{r optimalOrderingSetup}
+N <- 50
+firstN <- as.list(df_agg %>%
+  filter(resultType=='contextAwareS2', utteranceNum < N) %>%
+  select(utterance))$utterance
+theoreticallyPossibleOrderings <- length(letters[seq(1:6)])^N
+
+nOptimalOrderings <- 10
+optimalOrderings <- sapply(seq(1, nOptimalOrderings), FUN=function(X) {sample(firstN)}, simplify=FALSE)
+optimalOrderings[[length(optimalOrderings)+1]] <- firstN
+
+fPath <- '/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/discourse/rsa-uid-discourse-optimal-ordering-20180221.wppl'
+mOrdering <- getModelFile(fPath)
+```
+
+Run optimal orderings
+```{r optimalOrderings-run}
+alpha <- 20
+df_optimal_orderings <- data.frame()
+for (utteranceList in optimalOrderings) {
+  curr_df <- runOrderingFn(1, N, utteranceList, alpha) %>%
+    mutate(isUsed=utterances==paste(firstN, collapse=" "))
+  df_optimal_orderings <- rbind(df_optimal_orderings, curr_df)
+}
+```
+
+```{r optimalOrderings-plot}
+df_optimal_orderings %>%
+  group_by(utterances) %>%
+  gather(type, val, c(distrs.t_distr1, distrs.t_distr2, distrs.t_distr3, distrs.t_distr4)) %>%
+  ggplot(aes(x=index, y=val, col=utterances)) +
+    geom_line(size=0.75, aes(alpha=ifelse(isUsed, 1, 0.95))) +
+    theme_few() +
+    theme(legend.position="none") +
+    facet_grid(~type)
+
+# Is there an optimal ordering???
+# firstN
+# df_optimal_orderings %>%
+#   filter(index==N-1) %>%
+#   select(distrs.t_distr1, utterances)
+```
+While they all roughly converge at the same time, at any point in the first 50 utterances, one ordering may be better than the others.
+
+# How does optimal ordering vary with alpha
+```{r check-alpha-effect-run}
+df_optimalS2_16 <-  runFn(1, TOPIC, NUM_UTTERANCES, 'contextAwareS2', 16, 'false')
+df_optimalS2_8 <-  runFn(1, TOPIC, NUM_UTTERANCES, 'contextAwareS2', 8, 'false')
+df_optimalS2_2 <-  runFn(1, TOPIC, NUM_UTTERANCES, 'contextAwareS2', 2, 'false')
+```
+
+```{r check-alpha-effect-preprocess}
+fPath <- '/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/discourse/rsa-uid-discourse-optimal-ordering-20180221.wppl'
+mOrdering <- getModelFile(fPath)
+
+dfs <- list(df_optimalS2_16, df_optimalS2_8, df_optimalS2_2)
+res_df <- data.frame()
+for (df in dfs) {
+  N <- 50
+  firstN <- as.list(df %>%
+                      filter(utteranceNum < N) %>%
+                      select(utterance))$utterance
+
+  # Get orderings
+  nOptimalOrderings <- 10
+  optimalOrderings <- sapply(seq(1, nOptimalOrderings), FUN=function(X) {sample(firstN)}, simplify=FALSE)
+  optimalOrderings[[length(optimalOrderings)+1]] <- firstN
+  
+  # Run orderings
+  agg_df <- data.frame()
+  for (utteranceList in optimalOrderings) {
+    curr_df <- runOrderingFn(1, N, utteranceList, unique(df$alpha)) %>%
+      mutate(isUsed=utterances==paste(firstN, collapse=" "))
+    agg_df <- rbind(agg_df, curr_df)
+  }
+  res_df <- rbind(res_df, agg_df)
+}
+```
+
+```{r check-alpha-effect-plot}
+res_df %>%
+  group_by(alpha, utterances) %>%
+  gather(type, val, c(distrs.t_distr1, distrs.t_distr2, distrs.t_distr3, distrs.t_distr4)) %>%
+  ggplot(aes(x=index, y=val, col=utterances)) +
+    geom_line(size=0.75, aes(alpha=ifelse(isUsed, 1, 0.95))) +
+    theme_few() +
+    theme(legend.position="none") +
+    facet_grid(alpha~type)
+```
+
+
+### Sub-optimal orderings
+```{r sub-optimal-orderings-run}
+numSamples <- 20
+possibleWords <- letters[seq(1, 6)]
 firstNStr <- paste(firstN, collapse=" ")
 possibleUtterances <- lapply(seq(1:numSamples), function(x) {paste(sample(possibleWords, N, replace=TRUE), collapse=' ')})
 possibleUtterances[[length(possibleUtterances)+1]] <- firstNStr
 
 df_orderings <- data.frame()
+alpha <- 20
 for (utteranceList in possibleUtterances) {
-  curr_df <- runOrderingFn(1, N, utteranceList, 10)
+  curr_df <- runOrderingFn(1, N, utteranceList, alpha)  %>%
+    mutate(isUsed=utterances==paste(firstN, collapse=" "))
   df_orderings <- rbind(df_orderings, curr_df)
 }
+```
+
+```{r sub-optimal-orderings-plot}
 df_orderings %>%
   group_by(utterances) %>%
   gather(type, val, c(distrs.t_distr1, distrs.t_distr2, distrs.t_distr3, distrs.t_distr4)) %>%
   ggplot(aes(x=index, y=val, col=utterances)) +
-    geom_path(alpha=0.5, size=0.75) +
+    geom_line(size=0.75, aes(alpha=ifelse(isUsed, 1, 0.4))) +
     theme_few() +
     theme(legend.position="none") +
     facet_grid(~type)
 ```
 
-
 ```{r first30UtterancesAnimate, eval=FALSE}
-d <- df_agg %>% 
-  mutate(utteranceVal=0.5) %>%
-  filter(utteranceNum < 30, resultType=='contextAwareS2') %>%
-  gather(topic, listenerTopicPosterior, c(t_distr1, t_distr2, t_distr3, t_distr4)) %>%
-  select(utteranceNum, utterance, listenerTopicPosterior, topic, utteranceVal)
-
-
-p <- ggplot(d, aes(col=topic, frame=utteranceNum)) +
-    # geom_line(aes(x=utteranceNum, y=listenerTopicPosterior, col=topic), alpha=0.3, size=1) +
-    geom_path(aes(x=utteranceNum, y=listenerTopicPosterior, col=topic), alpha=0.5, size=1) +
-    # geom_text(aes(x=utteranceNum, label=utterance, y=utteranceVal, col=utterance, frame=utteranceNum)) +
-    # geom_vline(data=df_agg %>% select(resultType, pos) %>% unique, aes(xintercept=pos), lty=2)+
-    theme_few()
-
-gganimate(p)
+# d <- df_agg %>% 
+#   mutate(utteranceVal=0.5) %>%
+#   filter(utteranceNum < 30, resultType=='contextAwareS2') %>%
+#   gather(topic, listenerTopicPosterior, c(t_distr1, t_distr2, t_distr3, t_distr4)) %>%
+#   select(utteranceNum, utterance, listenerTopicPosterior, topic, utteranceVal)
+# 
+# 
+# p <- ggplot(d, aes(col=topic, frame=utteranceNum)) +
+#     # geom_line(aes(x=utteranceNum, y=listenerTopicPosterior, col=topic), alpha=0.3, size=1) +
+#     geom_path(aes(x=utteranceNum, y=listenerTopicPosterior, col=topic), alpha=0.5, size=1) +
+#     # geom_text(aes(x=utteranceNum, label=utterance, y=utteranceVal, col=utterance, frame=utteranceNum)) +
+#     # geom_vline(data=df_agg %>% select(resultType, pos) %>% unique, aes(xintercept=pos), lty=2)+
+#     theme_few()
+# 
+# gganimate(p)
 ```
 
 
@@ -188,7 +256,7 @@ bin_levels <- levels(df_agg$bin)
 df_agg$binVal <- match(df_agg$bin, bin_levels)
 ```
 
-# fill missing values
+### fill missing values
 ```{r preprocessFillMissingValues}
 # Get utterance counts
 df_utteranceTotals <- df_agg %>%
@@ -242,6 +310,7 @@ df_filled_uttProbs %>%
     theme(axis.text.x = element_text(angle = 90, hjust = 1))
 ```
 
+Single run entropy plot.
 ```{r entropy1}
 breaks <- seq(0, NUM_UTTERANCES, by=binSize)
 # Replace with entropy.empirical()
@@ -259,8 +328,6 @@ df_filled_uttProbs %>%
     theme_few() +
     facet_grid(~resultType)
 ```
-
-
 
 
 ##H(Y) = $H(X|L) - I(X|L, C)$
@@ -293,7 +360,7 @@ getEntropyData <- function(df, model, endPoints, actualProps) {
         summarise(cnt=sum(n)) %>%
         select(cnt))$cnt
     # entropy <- entropy(uncondEntropy, condEntropy, unit=c('log2'))
-    MI <- getMI(actualProps, uncondEntropy)
+    MI <- getMI(condEntropy, uncondEntropy)
     MI
     })
   
@@ -317,10 +384,6 @@ getEntropyData <- function(df, model, endPoints, actualProps) {
 }
 
 topicProps <- c(0.6, 0.25, 0.15, 0.15, 0.1, 0.1)
-# actualCnts <- c(4, 4, 10)
-# infotheo::mutinformation(round(norm_(actualCnts)*10), topicProps*10)
-# jointEntropy(topicProps, actualCnts)
-# jointEntropy(actualCnts, topicProps)
 
 # infotheo::mutinformation(topicProps*10, topicProps*1000)
 resultTypes <- c('contextAwareS2', 'contextUnawareS2', 'baseline', 'S1')
@@ -332,12 +395,12 @@ for (resultType_ in resultTypes) {
 }
 ```
 
-```{r}
+```{r plot-hY-by-type}
 df_entropies %>% 
   gather(type, val, c(uncondEntropy, MI, hY)) %>%
   ggplot(aes(x=endPoint, y=val, col=type)) +
     geom_point(alpha=0.7) +
-    geom_smooth(method='lm') +
+    geom_smooth(method='lm', se=FALSE) +
     theme_few() +
     facet_grid(~resultType)
 ```
@@ -392,13 +455,22 @@ df_bs_contextAwareS2 <- df_simscontextAwareSpeaker_utteranceTotals %>%
   group_by(runNum) %>%
   do(getEntropyData(., 'contextAwareS2', endPoints, topicProps))
 ```
+
 ```{r contextAwareBSPlot}
 df_bs_contextAwareS2 %>%
   gather(type,val, c(uncondEntropy, MI, hY)) %>%
   ggplot(aes(x=endPoint, y=val, col=type)) +
-    geom_jitter(alpha=0.2, width=0.25) +
+    # geom_jitter(alpha=0.2, width=0.25) +
     geom_smooth(method='loess', level=0.99) +
     theme_few()
+```
+
+```{r}
+df_bs_contextAwareS2 %>%
+  group_by(endPoint) %>%
+  summarise(avgUncondEntropy=median(uncondEntropy),
+            avgMI=median(MI),
+            avgHY=median(hY))
 ```
 
 
@@ -447,6 +519,7 @@ df_simscontextUnawareSpeaker_utteranceTotals %>%
     geom_smooth(method='loess') +
     theme_few()
 ```
+
 ```{r contextUAwareBSEntropyPreProcess}
 # Run contextAwareS2 on bootstrapped data
 df_bs_contextUnawareS2 <- df_simscontextUnawareSpeaker_utteranceTotals %>%
@@ -458,7 +531,7 @@ df_bs_contextUnawareS2 <- df_simscontextUnawareSpeaker_utteranceTotals %>%
 df_bs_contextUnawareS2 %>%
   gather(type,val, c(uncondEntropy, MI, hY)) %>%
   ggplot(aes(x=endPoint, y=val, col=type)) +
-    geom_jitter(alpha=0.2, width=0.25) +
+    # geom_jitter(alpha=0.2, width=0.25) +
     geom_smooth(method='loess', level=0.99) +
     theme_few()
 ```

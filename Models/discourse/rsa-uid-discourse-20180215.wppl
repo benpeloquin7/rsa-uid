@@ -41,7 +41,7 @@ var runReverse = getReverseResults(rData)
 
 // Topics
 var topicNames = ['t_distr1', 't_distr2', 't_distr3', 't_distr4']
-var topicNamesDistr = Categorical({vs:topicNames, ps:[0.1, 1, 1, 1]})
+var topicNamesDistr = Categorical({vs:topicNames, ps:[1, 1, 1, 1]})
 var topicNamesPrior = function() { 
   return sample(topicNamesDistr)
 }
@@ -213,7 +213,7 @@ var S1 = cache(function(topic) {
       var world = sampleWorldFromTopic(topic)()
       var utterance = utterancesPrior()
       var L = L0(utterance)
-      factor(alpha * L.score(world))
+      factor(1 * L.score(world))
       return utterance
     }
   })
