@@ -45,7 +45,7 @@ var getSpeakerInput = function(rData) {
   return {d: data['speakerInput']}
 }
 
-var rData = [{'alpha':5, 'lambda':1, 'modelName':'S1', 'theta':0.4, 'n':10000}]
+var rData = [{'alpha':10, 'lambda':1, 'modelName':'S1', 'theta':0.23, 'n':10000}]
 
 var LAMBDA = getLambda(rData)
 var ALPHA = getAlpha(rData)
@@ -59,14 +59,14 @@ var utterancesDistr = Categorical({vs:utterances, ps:utteranceProbs})
 var utterancesPrior = function() {return sample(utterancesDistr)}
 
 var worlds = [{d:'a'}, {d:'b'}, {d:'c'}]
-var worldProbs = [0.2, 0.5, 1]
+var worldProbs = [1, 1, 1]
 var worldsDistr = Categorical({vs:worlds, ps:worldProbs})
 var worldsPrior = function() {return sample(worldsDistr)}
 
 var topicDistr = Categorical({vs:['T1', 'T2', 'T3'], ps:[1, 1, 1]})
-var T1 = Categorical({vs:worlds, ps:[0.2, 0.5, 1]})
-var T2 = Categorical({vs:worlds, ps:[0.5, 1, 0.2]}) 
-var T3 = Categorical({vs:worlds, ps:[1, 0.2, 0.5]})
+var T1 = Categorical({vs:worlds, ps:[1, 0.5, 0.2]})
+var T2 = Categorical({vs:worlds, ps:[0.2, 1, 0.5]}) 
+var T3 = Categorical({vs:worlds, ps:[0.5, 0.2, 1]})
 var topics = {
   'T1': T1,
   'T2': T2,
@@ -139,28 +139,82 @@ var utteranceMeaning = function(utterance) {
   }
 }
 
-
 var meaning = function(utterance, world) {
   var worldDim = world['d']
   return utteranceMeaning(utterance) == worldDim
 }
 
 
-var L0 = cache(function(utterance, topic) {
+var cost = function(utterance) {
+  return utterance.split(' ').length
+}
+
+
+var L0 = function(producedUtterance, topic) {
   Infer({
     model() {
       var world = worldsGivenTopic(topic)
-      var intendedUtterance = sample(decode(utterance, deleteNoiseModel))
+      var intendedUtterance = sample(decode(producedUtterance, deleteNoiseModel))
       var meaning = meaning(utteranceMeaning(intendedUtterance), world)
       factor(meaning ? 0 : -Infinity)
       return world
     }
   })
+}
+
+
+var S0Meaning = cache(function(topic) {
+  Infer({
+    model() {
+      var estWorld = worldsGivenTopic(topic)
+      var intendedUtterance = utterancesPrior()
+      var producedUtterance = deleteNoiseModel(intendedUtterance)
+      var L = L0(producedUtterance, topic)
+      factor(ALPHA * (L.score(estWorld) - cost(intendedUtterance)/10))
+      return estWorld
+    }
+  })
 })
 
-var cost = function(utterance) {
-  return utterance.split(' ').length
-}
+var S0Utterance = cache(function(topic) {
+  Infer({
+    model() {
+      var estWorld = worldsGivenTopic(topic)
+      var intendedUtterance = utterancesPrior()
+      var producedUtterance = deleteNoiseModel(intendedUtterance)
+      var L = L0(producedUtterance, topic)
+      factor(ALPHA * (L.score(estWorld) - cost(intendedUtterance)/10))
+      return intendedUtterance
+    }
+  })
+})
+
+
+var topicDistrGivenMeaningData = cache(function(observedData) {
+  return Infer({method: 'enumerate'}, function() {
+    var topicDistrName = sample(topicDistr)
+    if (observedData != []) {
+      var obsFn = function(datum){
+        condition(datum['d'] == sample(S0Meaning(topicDistrName))['d'])
+      }
+      mapData({data: observedData}, obsFn)
+    }
+    return topicDistrName
+  })
+})
+
+var topicDistrGivenUtteranceData = cache(function(observedData) {
+  return Infer({method: 'enumerate'}, function() {
+    var topicDistrName = sample(topicDistr)
+    if (observedData != []) {
+      var obsFn = function(datum){
+        condition(datum == sample(S0Utterance(topicDistrName)))
+      }
+      mapData({data: observedData}, obsFn)
+    }
+    return topicDistrName
+  })
+})
 
 var S1 = cache(function(world, topic) {
   Infer({
@@ -168,62 +222,68 @@ var S1 = cache(function(world, topic) {
       var intendedUtterance = utterancesPrior()
       var producedUtterance = deleteNoiseModel(intendedUtterance)
       var L = L0(producedUtterance, topic)
-      factor(ALPHA*(L.score(world) - cost(intendedUtterance)/10))
-      return intendedUtterance
-    }
-  })
-})
-
-var topicSpeaker = cache(function(topic){
-  Infer({
-    model() {
-      var world = worldsGivenTopic(topic)
-      var intendedUtterance = utterancesPrior()
-      var L = L0(intendedUtterance, topic)
       factor(L.score(world))
       return intendedUtterance
     }
   })
 })
 
-var topicDistrGivenData = cache(function(observedData) {
-  return Infer({method: 'enumerate'}, function() {
-    var topicDistrName = sample(topicDistr)
-    if (observedData != []) {
-      var obsFn = function(datum){condition(datum == sample(topicSpeaker(topicDistrName)))}
-      mapData({data: observedData}, obsFn)
-    }
-    return topicDistrName
-  })
-})
-
-var L1 = cache(function(utterance, data) {
+var L1 = cache(function(producedUtterance, data) {
   Infer({
     model() {
-      var topic = sample(topicDistrGivenData(data))
-      var world = worldsGivenTopic(topic)
-      var intendedUtterance = sample(decode(utterance, deleteNoiseModel))
-      var S = S1(world, topic)
-      factor(20*(S.score(intendedUtterance)))
-      return [world, topic]
+      var estTopic = sample(topicDistrGivenUtteranceData(data))
+      var estWorld = worldsGivenTopic(estTopic)
+      var intendedUtterance = sample(decode(producedUtterance, deleteNoiseModel))
+      var meaning = meaning(utteranceMeaning(intendedUtterance), estWorld)
+      var S = S1(estWorld, estTopic)
+      factor(LAMBDA * S.score(intendedUtterance))
+      return {'world': estWorld, 'topic': estTopic}
     }
   })
 })
 
-var S2 = cache(function(world) {
+var S2 = cache(function(world, topic, data) {
   Infer({
     model() {
       var intendedUtterance = utterancesPrior()
       var producedUtterance = deleteNoiseModel(intendedUtterance)
-      var L = L1(producedUtterance)
-      factor(ALPHA*(L.score(world) - cost(intendedUtterance)/10))
-      return intendedUtterance
+      var L = L1(producedUtterance, data)
+      var res = {'world': world, 'topic': topic}
+      factor(ALPHA * (L.score(res)-cost(intendedUtterance)/10))
+      return {'utterance': intendedUtterance}
     }
   })
 })
 
-// var T1 = Categorical({vs:worlds, ps:[0.2, 0.5, 1]})
-// var T2 = Categorical({vs:worlds, ps:[0.5, 1, 0.2]}) 
-// var T3 = Categorical({vs:worlds, ps:[1, 0.2, 0.5]}
+//
+// Speaker utterance generation
+//
+var d = []
+var speakerFn = function(T, d) {
+  var world = worldsGivenTopic(T)
+  return d.concat([sample(S2(world, T, d))['utterance']])
+}
 
-L1('X a', ['a', 'b', 'a', 'a'])
+var speakerRecurse = function(T, d, n) {
+  if (n == 0) {
+    return d
+  } else {
+    return speakerRecurse(T, speakerFn(T, d), n-1)
+  }
+}
+
+// Things to show:
+// 1. Speaker should use marking to signal the topic early on
+speakerRecurse('T1', [], 10)
+
+// L1
+// viz.table(marginalize(L1('X a', [{d:'c'}, {d:'a'}]), 'topic'))
+// viz.table(marginalize(L1('a', [{d:'c'}, {d:'a'}]), 'topic'))
+// viz.table(marginalize(L1('X b', [{d:'c'}, {d:'a'}]), 'topic'))
+// viz.table(marginalize(L1('b', [{d:'c'}, {d:'a'}]), 'topic'))
+// viz.table(marginalize(L1('X c', [{d:'c'}, {d:'a'}]), 'topic'))
+// viz.table(marginalize(L1('c', [{d:'c'}, {d:'a'}]), 'topic'))
+
+// var T1 = Categorical({vs:worlds, ps:[1, 0.5, 0.2]})
+// var T2 = Categorical({vs:worlds, ps:[0.2, 1, 0.5]}) 
+// var T3 = Categorical({vs:worlds, ps:[0.5, 0.2, 1]})
