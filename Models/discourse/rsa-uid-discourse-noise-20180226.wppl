@@ -4,8 +4,9 @@
   alpha
   lambda
   theta
-  modelName
-  N
+  resultType
+  nUtterances
+  targetDistr
 
 ***/
 
@@ -14,6 +15,11 @@
 /******* SETUP *******/
 /*********************/
 /*********************/
+
+var getNUtterances = function(rData) {
+  var data = rData[0]
+  return data['nUtterances']
+}
 
 var getAlpha = function(rData) {
   var data = rData[0]
@@ -45,13 +51,34 @@ var getSpeakerInput = function(rData) {
   return {d: data['speakerInput']}
 }
 
-var rData = [{'alpha':10, 'lambda':1, 'modelName':'S1', 'theta':0.23, 'n':10000}]
+var getTargetDistr = function(rData) {
+  var data = rData[0]
+  return data['targetDistr']
+}
 
+var getResultType = function(rData) {
+  var data = rData[0]
+  return data['resultType']
+}
+
+var rData = [{'alpha':10, 
+              'lambda':20, 
+              'modelName':'S1', 
+              'theta':0.1, 
+              'n':10000, 
+              'targetDistr':'T1',
+              'nUtterances':180,
+              'resultType':'contextAwareS2'}]
+
+var nUtterances = getNUtterances(rData)
 var LAMBDA = getLambda(rData)
 var ALPHA = getAlpha(rData)
 var THETA = getTheta(rData)
 var N = getN(rData)
 var INPUT = getSpeakerInput(rData)
+var targetDistr = getTargetDistr(rData)
+var resultType = getResultType(rData)
+
 
 var utterances = ['X a', 'a', 'X b', 'b', 'X c', 'c']
 var utteranceProbs = [0.5, 1, 0.5, 1, 0.5, 1]
@@ -150,7 +177,7 @@ var cost = function(utterance) {
 }
 
 
-var L0 = function(producedUtterance, topic) {
+var L0 = cache(function(producedUtterance, topic) {
   Infer({
     model() {
       var world = worldsGivenTopic(topic)
@@ -160,7 +187,7 @@ var L0 = function(producedUtterance, topic) {
       return world
     }
   })
-}
+})
 
 
 var S0Meaning = cache(function(topic) {
@@ -255,6 +282,7 @@ var S2 = cache(function(world, topic, data) {
   })
 })
 
+
 //
 // Speaker utterance generation
 //
@@ -272,18 +300,120 @@ var speakerRecurse = function(T, d, n) {
   }
 }
 
-// Things to show:
-// 1. Speaker should use marking to signal the topic early on
-speakerRecurse('T1', [], 10)
 
-// L1
-// viz.table(marginalize(L1('X a', [{d:'c'}, {d:'a'}]), 'topic'))
-// viz.table(marginalize(L1('a', [{d:'c'}, {d:'a'}]), 'topic'))
-// viz.table(marginalize(L1('X b', [{d:'c'}, {d:'a'}]), 'topic'))
-// viz.table(marginalize(L1('b', [{d:'c'}, {d:'a'}]), 'topic'))
-// viz.table(marginalize(L1('X c', [{d:'c'}, {d:'a'}]), 'topic'))
-// viz.table(marginalize(L1('c', [{d:'c'}, {d:'a'}]), 'topic'))
+//
+// Helpers
+//
+// Generate a sequence of numbers
+var plusOne = function(n) {
+  return n + 1
+}
+
+var range_ = function(start, end) {
+  if (start == end) {
+    return end
+  } else {
+    return [start].concat(range_(start+1, end))
+  }
+}
+var range = function(start, end) {
+  var res = range_(start, end)
+  return res.slice(0, res.length-1)
+}
+
+// Listener probability assignment to topic "t_distr1"
+var getDataSizes = function(n) {
+  return range(0, n)
+}
+
+// List of slice sizes
+var dataSizes = getDataSizes(nUtterances)
+// A context slice is the size of the preceding words (e.g. 0-3, 0-10, 0-n)
+var contextSlices = map(function(x) {return [0, x]}, dataSizes)
+
+
+// getListenerInferences
+// =====================
+// Given a slice of speaker utterance data, return listeners state of belief
+// about the intended topic distribution.
+//
+var getListenerInferences = function(utterances) {
+  var res = map(function(x) {
+    return {
+      "T1": Math.exp(topicDistrGivenUtteranceData(utterances.slice(x[0], x[1])).score("T1")),
+      "T2": Math.exp(topicDistrGivenUtteranceData(utterances.slice(x[0], x[1])).score("T2")),
+      "T3": Math.exp(topicDistrGivenUtteranceData(utterances.slice(x[0], x[1])).score("T3"))}
+  }, contextSlices)
+  return res
+}
+
+
+// processUtterances
+// =================
+// Return a list of dictionaries containing speaker utterance data
+// and corresponding state of listener inferences about topics
+//
+var processUtterances = function(speakerData, listenerInferences) {
+  var dMap = map(function(x) {
+    return {
+      'utteranceNum': x, 
+      'utterance': speakerData[x], 
+      'T1': listenerInferences[x]['T1'],
+      'T2': listenerInferences[x]['T2'],
+      'T3': listenerInferences[x]['T3']}
+  }, dataSizes)
+  return dMap
+}
+
+// runFn
+// =====
+// Return data of speaker utterances / listener inferences
+//
+// Parameters
+// ----------
+// resultType : str
+//   One of (contextAwareSpeaker, contextUnawareSpeaker, baseline)
+//
+// Returns
+// --------
+// List of dicts
+//
+var runFn = function(resultType, runReverse) {
+  if (resultType == 'contextAwareS2') {
+    var utteranceList = speakerRecurse(targetDistr, [], nUtterances)
+    var listenerInferences = getListenerInferences(utteranceList)
+    return processUtterances(utteranceList, listenerInferences)
+  } 
+  else if (resultType == 'contextUnawareS2') {
+    var utteranceList = repeat(nUtterances, function(x) { sample(S2(targetDistr, []))['utterance']})
+    var listenerInferences = getListenerInferences(utteranceList)
+    return processUtterances(utteranceList, listenerInferences)
+  } 
+  else if (resultType == 'S1') {
+    var utteranceList = repeat(nUtterances, (function(x) { return sample(S1(targetDistr))}))
+    var listenerInferences = getListenerInferences(utteranceList)
+    return processUtterances(utteranceList, listenerInferences)
+  }
+  else if (resultType == 'baseline') {
+    var utteranceList = repeat(nUtterances, (function(x) {utterancesPrior()}))
+    var listenerInferences = getListenerInferences(utteranceList)
+    return processUtterances(utteranceList, listenerInferences)
+  } 
+  else {
+    error('Bad resultType:', resultType)
+  }
+}
+// runFn(resultType)
+var test1 = ['X a', 'b', 'c']
+var test2 = ['a', 'X b', 'c']
+var test3 = ['a', 'b', 'X c']
+var test4 = ['a', 'b', 'c']
+viz.table(topicDistrGivenUtteranceData(test1))
+viz.table(topicDistrGivenUtteranceData(test2))
+viz.table(topicDistrGivenUtteranceData(test3))
+viz.table(topicDistrGivenUtteranceData(test4))
 
 // var T1 = Categorical({vs:worlds, ps:[1, 0.5, 0.2]})
 // var T2 = Categorical({vs:worlds, ps:[0.2, 1, 0.5]}) 
 // var T3 = Categorical({vs:worlds, ps:[0.5, 0.2, 1]})
+runFn(resultType)
