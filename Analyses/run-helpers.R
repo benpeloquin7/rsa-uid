@@ -409,7 +409,7 @@ getMI <- function(x, y) {
 # data.frame()
 #   data.frame(endPoint=int, encondEntropy=numeric, MI=numeric)
 #
-getEntropyData <- function(df, model, endPoints, actualProps) {
+getEntropyData <- function(df, endPoints, actualProps) {
   
   MIs <- sapply(endPoints, function(x) {
     uncondEntropy <- as.list(
@@ -447,3 +447,73 @@ getEntropyData <- function(df, model, endPoints, actualProps) {
     mutate(hY=uncondEntropy-MI)
   res_df
 }
+
+# runParVaryingAlpha
+# ==================
+# Run runFn in parrallel. This is good for getting bootstrapped estimates of speaker utterance chains.
+# Utterance chains can be used in entropy estimtes, etc.
+#
+# Parameters 
+# ----------
+# 
+# Returns
+# --------
+# 
+runParVaryingAlpha <- function(runFn,
+                               targetDistr='T1', 
+                               nUtterances=120, 
+                               resultType='contextAwareS2', 
+                               alpha=10, 
+                               nSims=100,
+                               binSize=20) {
+  # Parallelization setup
+  no_cores <- detectCores() - 1
+  cl <- makeCluster(no_cores, type='FORK')
+  registerDoParallel(cl)
+  
+  # Run sims
+  ptm <- proc.time()
+  sims <- foreach(i=seq(1, nSims), .packages=c('dplyr', 'rwebppl'), .combine=rbind) %dopar% 
+    runFn(i, targetDistr, nUtterances, resultType, alpha, 'false')
+  stopCluster(cl)
+  etm <- proc.time() - ptm
+  cat("runtime: ", etm[3] / 60)
+  
+  # Process sims
+  breaks <- seq(0, nUtterances, by=binSize)
+  df_sims <- sims %>%
+    mutate(utteranceNum=(utteranceNum)) %>%
+    mutate(bin=cut(utteranceNum, breaks=breaks, right=FALSE, include.lowest=TRUE))
+  bin_levels <- levels(df_sims$bin)
+  df_sims$binVal <- match(df_sims$bin, bin_levels)
+  
+  # Get utterance totals
+  df_sims_utteranceTotals <- df_sims %>%
+    group_by(runNum, resultType, alpha, binVal, utterance) %>%
+    summarise(n=n()) %>%
+    ungroup
+  
+  # Create a data.frame to merge for place-hodlders
+  d_sims_fill <- data.frame(expand.grid(runNum=unique(df_sims_utteranceTotals$runNum),
+                                        resultType=unique(df_sims_utteranceTotals$resultType), 
+                                        alpha=unique(df_sims_utteranceTotals$alpha),
+                                        binVal=unique(df_sims_utteranceTotals$binVal),
+                                        utterance=unique(df_sims_utteranceTotals$utterance))) %>%
+    mutate(utterance=as.character(utterance),
+           n=0)
+  
+  # Run merge (see https://stackoverflow.com/questions/7735647/replacing-nas-with-latest-non-na-value)
+  df_filled <- merge(df_sims_utteranceTotals, 
+                     d_sims_fill, 
+                     by=c('runNum', 'resultType', 'alpha', 'binVal', 'utterance'), all=TRUE) %>%
+    select(runNum, resultType, alpha, binVal, utterance, resultType, n.x) %>%
+    mutate(n.x=ifelse(is.na(n.x), 0, n.x),
+           total=binSize) %>%
+    # runNum=na.locf(runNum, fromLast=TRUE),
+    # resultType=na.locf(resultType, fromLast=TRUE)) %>%
+    rename(n=n.x) %>%
+    mutate(prop=n/binSize)
+  
+  df_filled
+}
+# df_test_runParVaryingAlpha <- runParVaryingAlpha(nSims=10)
