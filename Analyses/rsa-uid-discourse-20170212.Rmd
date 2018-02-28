@@ -5,7 +5,12 @@ date: "2/12/2018"
 output: html_document
 ---
 
-Imagine that natural language is a succession of reference games. Success in each reference game is blind to the greater context. Ane yet
+# Contents:
+
+(1) Single run discourse model
+(2) Single run orderings models
+
+For boostrapped Entropy decomposition see `rsa-uid-discourse-20180226.Rmd`
 
 ```{r libraries, message=FALSE, warning=FALSE}
 rm(list = ls())  # clear workspace
@@ -28,7 +33,6 @@ m <- getModelFile(fPath)
 ```
 
 ```{r runFn}
-NUM_UTTERANCES <- 180
 run <- createRunFn(m)
 runFn <- function(i, targetDistr, nUtterances, resultType, alpha, reverseResults) {
   dTemp <- data.frame(targetDistr=targetDistr, nUtterances=nUtterances, resultType=resultType, alpha=alpha, reverseResults=reverseResults)
@@ -38,13 +42,37 @@ runFn <- function(i, targetDistr, nUtterances, resultType, alpha, reverseResults
 }
 ```
 
+# (1) Single run models
+
+Run functions.
 ```{r singleRun}
-ALPHA <- 10
-TOPIC <- 't_distr1'
-df_baseline <-        runFn(1, TOPIC, NUM_UTTERANCES, 'baseline', ALPHA, 'false')
-df_contextUnwareS2 <- runFn(1, TOPIC, NUM_UTTERANCES, 'contextUnawareS2', ALPHA, 'false')
-df_contextAwareS2 <-  runFn(1, TOPIC, NUM_UTTERANCES, 'contextAwareS2', ALPHA, 'false')
-df_S1 <-              runFn(1, TOPIC, NUM_UTTERANCES, 'S1', ALPHA, 'false')
+ALPHA <- 20
+TOPIC <- 'T1'
+NUM_UTTERANCES <- 120
+df_baseline <- runFn(1, 
+                     targetDistr=TOPIC, 
+                     nUtterances=NUM_UTTERANCES, 
+                     resultType='baseline', 
+                     alpha=ALPHA, 
+                     reverseResults='false')
+df_contextUnwareS2 <- runFn(1, 
+                            targetDistr=TOPIC, 
+                            nUtterances=NUM_UTTERANCES, 
+                            resultType='contextUnawareS2', 
+                            alpha=ALPHA, 
+                            reverseResults='false')
+df_contextAwareS2 <- runFn(1, 
+                           targetDistr=TOPIC, 
+                           nUtterances=NUM_UTTERANCES, 
+                           resultType='contextAwareS2', 
+                           alpha=ALPHA, 
+                           'false')
+df_S1 <- runFn(1, 
+               targetDistr=TOPIC, 
+               nUtterances=NUM_UTTERANCES, 
+               resultType='S1', 
+               alpha=ALPHA, 
+               reverseResults='false')
 # df_baselineReverse <- runFn(1, NUM_UTTERANCES, 'baseline', ALPHA, 'true')
 # df_contextUnwareS2Reverse <- runFn(1, NUM_UTTERANCES, 'contextUnawareS2', ALPHA, 'true')
 # df_contextAwareS2Reverse <- runFn(1, NUM_UTTERANCES, 'contextAwareS2', ALPHA, 'true')
@@ -53,10 +81,10 @@ df_S1 <-              runFn(1, TOPIC, NUM_UTTERANCES, 'S1', ALPHA, 'false')
 df_agg <- rbind(df_baseline, df_contextUnwareS2, df_contextAwareS2, df_S1)
 ```
 
-### Listener convergence as a function of speaker...
+Convergence plots by speaker type.
 ```{r listenerInferencePlot}
 df_agg %>% 
-  gather(topic, listenerTopicPosterior, c(t_distr1, t_distr2, t_distr3, t_distr4)) %>%
+  gather(topic, listenerTopicPosterior, c(T1, T2, T3, T4)) %>%
   mutate(topic=ifelse(topic==TOPIC, 'target', topic)) %>%
   ggplot(aes(x=utteranceNum, y=listenerTopicPosterior, col=topic)) +
     geom_line() +
@@ -65,7 +93,7 @@ df_agg %>%
     facet_grid(resultType~reverseResults)
 ```
 
-### Speaker utterances over time
+Speaker utterances plot.
 ```{r inspectingUtterancePlot}
 df_agg %>%
   mutate(utteranceVal=ifelse(utterance=='a', 1, ifelse(utterance=='b', 1, 1))) %>%
@@ -77,12 +105,12 @@ df_agg %>%
     facet_grid(resultType~reverseResults)
 ```
 
-## Close look -- good for inspecting small scenerios
+Zoom in on first 25 utterances.
 ```{r first30Utterances}
-df_agg %>% 
+df_agg %>%
   mutate(utteranceVal=0.5) %>%
   filter(utteranceNum < 25) %>%
-  gather(topic, listenerTopicPosterior, c(t_distr1, t_distr2, t_distr3)) %>%
+  gather(topic, listenerTopicPosterior, c(T1, T2, T3, T4)) %>%
   ggplot(aes(x=utteranceNum, y=listenerTopicPosterior, col=topic, frame=utteranceNum)) +
     geom_text(aes(x=utteranceNum, label=utterance, y=utteranceVal, col=utterance)) +
     geom_line(alpha=0.3, size=1) +
@@ -91,7 +119,91 @@ df_agg %>%
     facet_grid(resultType~reverseResults)
 ```
 
-# Optimal ordering
+Binning utterances.
+```{r speakerChoicePreProcess}
+binSize <- 20
+breaks <- seq(0, NUM_UTTERANCES, by=binSize)
+
+df_agg <- df_agg %>%
+  mutate(bin=cut(utteranceNum, breaks=breaks, right=FALSE, include.lowest=TRUE))
+bin_levels <- levels(df_agg$bin)
+df_agg$binVal <- match(df_agg$bin, bin_levels)
+```
+
+Preproceesing -- fill in missing values during binning.
+```{r preprocessFillMissingValues}
+# Get utterance counts
+df_utteranceTotals <- df_agg %>%
+  group_by(resultType, binVal, utterance) %>%
+  summarise(n=n()) %>%
+  ungroup
+
+# Create a data.frame to merge for place-hodlders
+d_fill <- data.frame(expand.grid(resultType=unique(df_utteranceTotals$resultType), 
+                                 utterance=unique(df_utteranceTotals$utterance), 
+                                 binVal=unique(df_utteranceTotals$binVal))) %>%
+  mutate(utterance=as.character(utterance),
+         n=0)
+
+# Run merge (see https://stackoverflow.com/questions/7735647/replacing-nas-with-latest-non-na-value)
+df_agg_filled <- merge(df_utteranceTotals, d_fill, by=c('resultType', 'binVal', 'utterance'), all=TRUE) %>%
+  select(resultType, binVal, utterance, resultType, n.x) %>%
+  mutate(n.x=ifelse(is.na(n.x), 0, n.x),
+         resultType=na.locf(resultType, fromLast=TRUE)) %>%
+  rename(n=n.x)
+```
+
+Continued preprocessing.
+```{r utteranceProportionsPreProcess}
+# Get group totals, these are uneven, depending on cuts
+df_groupTotals <- df_agg_filled %>%
+  group_by(resultType, binVal) %>%
+  summarize(groupTotal=sum(n))
+
+
+# Create utterance proportions
+df_filled_uttProbs <- left_join(df_agg_filled, df_groupTotals, by=c('resultType', 'binVal')) %>%
+  mutate(prop=n/groupTotal)
+# Check props are calculated correctly
+# all(
+#   as.list(df_filled_uttProbs %>%
+#             group_by(resultType, binVal) %>%
+#             summarise(s=sum(prop)) %>%
+#             ungroup %>%
+#             select(s))$s)
+```
+
+Single run utterance proportions plot.
+```{r utteranceProportionsPlot}
+df_filled_uttProbs %>%
+  ggplot(aes(x=binVal, y=prop, fill=utterance)) +
+    # geom_vline(data=df_agg %>% select(resultType, posBin) %>% unique, aes(xintercept=posBin), lty=2) +
+    geom_bar(stat='identity', alpha=0.5) +
+    facet_grid(~resultType) +
+    theme_few() +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+Single run entropy plot.
+```{r entropy1}
+breaks <- seq(0, NUM_UTTERANCES, by=binSize)
+# Replace with entropy.empirical()
+# calcEntropy <- function(a) {
+#   -1 * sum(sapply(a, function(x) {
+#     log2(x) * x
+#   }))
+# }
+
+df_filled_uttProbs %>%
+  group_by(resultType, binVal) %>%
+  summarise(entropy=entropy.empirical(n, unit=c('log2'))) %>%
+  ggplot(aes(x=binVal, y=entropy)) +
+    geom_line(group=1) +
+    theme_few() +
+    facet_grid(~resultType)
+```
+
+# (2) Optimal orderings
 
 Orderings helpers
 ```{r runOrderingFns}
@@ -133,10 +245,11 @@ for (utteranceList in optimalOrderings) {
 }
 ```
 
+Plot optimal orderings.
 ```{r optimalOrderings-plot}
 df_optimal_orderings %>%
   group_by(utterances) %>%
-  gather(type, val, c(distrs.t_distr1, distrs.t_distr2, distrs.t_distr3, distrs.t_distr4)) %>%
+  gather(type, val, c(distrs.T1, distrs.T2, distrs.T3, distrs.T4)) %>%
   ggplot(aes(x=index, y=val, col=utterances)) +
     geom_line(size=0.75, aes(alpha=ifelse(isUsed, 1, 0.95))) +
     theme_few() +
@@ -151,10 +264,41 @@ df_optimal_orderings %>%
 ```
 While they all roughly converge at the same time, at any point in the first 50 utterances, one ordering may be better than the others.
 
-# How does optimal ordering vary with alpha
+### Sub-optimal orderings
+```{r sub-optimal-orderings-run, eval=FALSE}
+numSamples <- 20
+possibleWords <- letters[seq(1, 6)]
+firstNStr <- paste(firstN, collapse=" ")
+possibleUtterances <- lapply(seq(1:numSamples), function(x) {paste(sample(possibleWords, N, replace=TRUE), collapse=' ')})
+possibleUtterances[[length(possibleUtterances)+1]] <- firstNStr
+
+df_orderings <- data.frame()
+alpha <- 20
+for (utteranceList in possibleUtterances) {
+  curr_df <- runOrderingFn(1, N, utteranceList, alpha)  %>%
+    mutate(isUsed=utterances==paste(firstN, collapse=" "))
+  df_orderings <- rbind(df_orderings, curr_df)
+}
+```
+
+```{r sub-optimal-orderings-plot, eval=FALSE}
+df_orderings %>%
+  group_by(utterances) %>%
+  gather(type, val, c(distrs.T1, distrs.T2, distrs.T3, distrs.T4)) %>%
+  ggplot(aes(x=index, y=val, col=utterances)) +
+    geom_line(size=0.75, aes(alpha=ifelse(isUsed, 1, 0.4))) +
+    theme_few() +
+    theme(legend.position="none") +
+    facet_grid(~type)
+```
+
+
+# Optimal orderings varying alpha.
 ```{r check-alpha-effect-run}
+df_optimalS2_32 <-  runFn(1, TOPIC, NUM_UTTERANCES, 'contextAwareS2', 32, 'false')
 df_optimalS2_16 <-  runFn(1, TOPIC, NUM_UTTERANCES, 'contextAwareS2', 16, 'false')
 df_optimalS2_8 <-  runFn(1, TOPIC, NUM_UTTERANCES, 'contextAwareS2', 8, 'false')
+df_optimalS2_4 <-  runFn(1, TOPIC, NUM_UTTERANCES, 'contextAwareS2', 4, 'false')
 df_optimalS2_2 <-  runFn(1, TOPIC, NUM_UTTERANCES, 'contextAwareS2', 2, 'false')
 ```
 
@@ -162,7 +306,7 @@ df_optimalS2_2 <-  runFn(1, TOPIC, NUM_UTTERANCES, 'contextAwareS2', 2, 'false')
 fPath <- '/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/discourse/rsa-uid-discourse-optimal-ordering-20180221.wppl'
 mOrdering <- getModelFile(fPath)
 
-dfs <- list(df_optimalS2_16, df_optimalS2_8, df_optimalS2_2)
+dfs <- list(df_optimalS2_2, df_optimalS2_4, df_optimalS2_8, df_optimalS2_16, df_optimalS2_32)
 res_df <- data.frame()
 for (df in dfs) {
   N <- 50
@@ -189,430 +333,11 @@ for (df in dfs) {
 ```{r check-alpha-effect-plot}
 res_df %>%
   group_by(alpha, utterances) %>%
-  gather(type, val, c(distrs.t_distr1, distrs.t_distr2, distrs.t_distr3, distrs.t_distr4)) %>%
+  gather(type, val, c(distrs.T1, distrs.T2, distrs.T3, distrs.T4)) %>%
   ggplot(aes(x=index, y=val, col=utterances)) +
     geom_line(size=0.75, aes(alpha=ifelse(isUsed, 1, 0.95))) +
     theme_few() +
     theme(legend.position="none") +
     facet_grid(alpha~type)
-```
-
-
-### Sub-optimal orderings
-```{r sub-optimal-orderings-run}
-numSamples <- 20
-possibleWords <- letters[seq(1, 6)]
-firstNStr <- paste(firstN, collapse=" ")
-possibleUtterances <- lapply(seq(1:numSamples), function(x) {paste(sample(possibleWords, N, replace=TRUE), collapse=' ')})
-possibleUtterances[[length(possibleUtterances)+1]] <- firstNStr
-
-df_orderings <- data.frame()
-alpha <- 20
-for (utteranceList in possibleUtterances) {
-  curr_df <- runOrderingFn(1, N, utteranceList, alpha)  %>%
-    mutate(isUsed=utterances==paste(firstN, collapse=" "))
-  df_orderings <- rbind(df_orderings, curr_df)
-}
-```
-
-```{r sub-optimal-orderings-plot}
-df_orderings %>%
-  group_by(utterances) %>%
-  gather(type, val, c(distrs.t_distr1, distrs.t_distr2, distrs.t_distr3, distrs.t_distr4)) %>%
-  ggplot(aes(x=index, y=val, col=utterances)) +
-    geom_line(size=0.75, aes(alpha=ifelse(isUsed, 1, 0.4))) +
-    theme_few() +
-    theme(legend.position="none") +
-    facet_grid(~type)
-```
-
-```{r first30UtterancesAnimate, eval=FALSE}
-# d <- df_agg %>% 
-#   mutate(utteranceVal=0.5) %>%
-#   filter(utteranceNum < 30, resultType=='contextAwareS2') %>%
-#   gather(topic, listenerTopicPosterior, c(t_distr1, t_distr2, t_distr3, t_distr4)) %>%
-#   select(utteranceNum, utterance, listenerTopicPosterior, topic, utteranceVal)
-# 
-# 
-# p <- ggplot(d, aes(col=topic, frame=utteranceNum)) +
-#     # geom_line(aes(x=utteranceNum, y=listenerTopicPosterior, col=topic), alpha=0.3, size=1) +
-#     geom_path(aes(x=utteranceNum, y=listenerTopicPosterior, col=topic), alpha=0.5, size=1) +
-#     # geom_text(aes(x=utteranceNum, label=utterance, y=utteranceVal, col=utterance, frame=utteranceNum)) +
-#     # geom_vline(data=df_agg %>% select(resultType, pos) %>% unique, aes(xintercept=pos), lty=2)+
-#     theme_few()
-# 
-# gganimate(p)
-```
-
-
-How do speaker choices change as a function of listener beliefs?
-```{r speakerChoicePreProcess}
-binSize <- 12
-breaks <- seq(0, NUM_UTTERANCES, by=binSize)
-
-df_agg <- df_agg %>%
-  mutate(bin=cut(utteranceNum, breaks=breaks, right=TRUE, include.lowest=TRUE))
-bin_levels <- levels(df_agg$bin)
-df_agg$binVal <- match(df_agg$bin, bin_levels)
-```
-
-### fill missing values
-```{r preprocessFillMissingValues}
-# Get utterance counts
-df_utteranceTotals <- df_agg %>%
-  group_by(resultType, binVal, utterance) %>%
-  summarise(n=n()) %>%
-  ungroup
-
-# Create a data.frame to merge for place-hodlders
-d_fill <- data.frame(expand.grid(resultType=unique(df_utteranceTotals$resultType), 
-                                 utterance=unique(df_utteranceTotals$utterance), 
-                                 binVal=unique(df_utteranceTotals$binVal))) %>%
-  mutate(utterance=as.character(utterance),
-         n=0)
-
-# Run merge (see https://stackoverflow.com/questions/7735647/replacing-nas-with-latest-non-na-value)
-df_agg_filled <- merge(df_utteranceTotals, d_fill, by=c('resultType', 'binVal', 'utterance'), all=TRUE) %>%
-  select(resultType, binVal, utterance, resultType, n.x) %>%
-  mutate(n.x=ifelse(is.na(n.x), 0, n.x),
-         resultType=na.locf(resultType, fromLast=TRUE)) %>%
-  rename(n=n.x)
-```
-
-
-```{r utteranceProportionsPreProcess}
-# Get group totals, these are uneven, depending on cuts
-df_groupTotals <- df_agg_filled %>%
-  group_by(resultType, binVal) %>%
-  summarize(groupTotal=sum(n))
-
-
-# Create utterance proportions
-df_filled_uttProbs <- left_join(df_agg_filled, df_groupTotals, by=c('resultType', 'binVal')) %>%
-  mutate(prop=n/groupTotal)
-# Check props are calculated correctly
-# all(
-#   as.list(df_filled_uttProbs %>%
-#             group_by(resultType, binVal) %>%
-#             summarise(s=sum(prop)) %>%
-#             ungroup %>%
-#             select(s))$s)
-```
-
-
-```{r utteranceProportionsPlot}
-df_filled_uttProbs %>%
-  ggplot(aes(x=binVal, y=prop, fill=utterance)) +
-    # geom_vline(data=df_agg %>% select(resultType, posBin) %>% unique, aes(xintercept=posBin), lty=2) +
-    geom_bar(stat='identity', alpha=0.5) +
-    facet_grid(~resultType) +
-    theme_few() +
-    theme(axis.text.x = element_text(angle = 90, hjust = 1))
-```
-
-Single run entropy plot.
-```{r entropy1}
-breaks <- seq(0, NUM_UTTERANCES, by=binSize)
-# Replace with entropy.empirical()
-# calcEntropy <- function(a) {
-#   -1 * sum(sapply(a, function(x) {
-#     log2(x) * x
-#   }))
-# }
-
-df_filled_uttProbs %>%
-  group_by(resultType, binVal) %>%
-  summarise(entropy=entropy.empirical(n, unit=c('log2'))) %>%
-  ggplot(aes(x=binVal, y=entropy)) +
-    geom_line(group=1) +
-    theme_few() +
-    facet_grid(~resultType)
-```
-
-
-##H(Y) = $H(X|L) - I(X|L, C)$
-
-```{r}
-# Helpers
-norm_ <- function(x) {
-  x / sum(x)
-}
-getMI <- function(x, y) {
-  entropy::entropy(norm_(x), unit=c('log2')) + entropy::entropy(norm_(y), unit=c('log2')) -
-      entropy::entropy(c(norm_(x), norm_(y)), unit=c('log2'))
-}
-
-end <- length(breaks)-1
-endPoints <- seq(1, end)
-getEntropyData <- function(df, model, endPoints, actualProps) {
-  
-  MIs <- sapply(endPoints, function(x) {
-    uncondEntropy <- as.list(
-      df %>%
-        # Note (BP): Think about the slices here.
-        filter(resultType==model, binVal %in% seq(x, x, by=1)) %>%
-        select(n))$n
-    condEntropy <- as.list(
-      df %>%
-        # Note (BP): Think about the slices here.
-        filter(resultType==model, binVal %in% seq(1, x, by=1)) %>%
-        group_by(utterance) %>%
-        summarise(cnt=sum(n)) %>%
-        select(cnt))$cnt
-    # entropy <- entropy(uncondEntropy, condEntropy, unit=c('log2'))
-    MI <- getMI(condEntropy, uncondEntropy)
-    MI
-    })
-  
-  uncondEntropies <- sapply(endPoints, function(x) {
-    empCnts <- as.list(
-      df %>%
-        # Note (BP): Think about the slices here.
-        filter(resultType==model, binVal %in% seq(x, x, by=1)) %>%
-        group_by(utterance) %>%
-        summarise(cnt=sum(n)) %>%
-        select(cnt))$cnt
-    ent <- entropy::entropy(norm_(empCnts), unit=c('log2'))
-    ent
-  })
-
-  res_df <- data.frame(endPoint=endPoints, 
-                       uncondEntropy=uncondEntropies,
-                       MI=MIs) %>%
-    mutate(hY=uncondEntropy-MI)
-  res_df
-}
-
-topicProps <- c(0.6, 0.25, 0.15, 0.15, 0.1, 0.1)
-
-# infotheo::mutinformation(topicProps*10, topicProps*1000)
-resultTypes <- c('contextAwareS2', 'contextUnawareS2', 'baseline', 'S1')
-df_entropies <- data.frame()
-for (resultType_ in resultTypes) {
-  currDf <- getEntropyData(df_filled_uttProbs, resultType_, endPoints, topicProps) %>%
-    mutate(resultType=resultType_)
-  df_entropies <- rbind(df_entropies, currDf)
-}
-```
-
-```{r plot-hY-by-type}
-df_entropies %>% 
-  gather(type, val, c(uncondEntropy, MI, hY)) %>%
-  ggplot(aes(x=endPoint, y=val, col=type)) +
-    geom_point(alpha=0.7) +
-    geom_smooth(method='lm', se=FALSE) +
-    theme_few() +
-    facet_grid(~resultType)
-```
-
-
-# `Context aware speaker` parallelize runs
-
-```{r runParContextAware}
-no_cores <- detectCores() - 1
-cl <- makeCluster(no_cores, type='FORK')
-registerDoParallel(cl)
-
-ptm <- proc.time()
-nSims <- 100
-sims_contextAwareSpeaker <- foreach(i=seq(1, nSims), .packages=c('dplyr', 'rwebppl'), .combine=rbind) %dopar% 
-  runFn(i, TOPIC, NUM_UTTERANCES, 'contextAwareS2', ALPHA, 'false')
-stopCluster(cl)
-etm <- proc.time() - ptm
-cat("runtime: ", etm[3] / 60)
-```
-
-```{r entropyPreprocessContextAware}
-df_simscontextAwareSpeaker <- sims_contextAwareSpeaker %>%
-  mutate(utteranceNum=(utteranceNum)) %>%
-  mutate(bin=cut(utteranceNum, breaks=breaks, right=TRUE, include.lowest=TRUE))
-bin_levels <- levels(df_simscontextAwareSpeaker$bin)
-df_simscontextAwareSpeaker$binVal <- match(df_simscontextAwareSpeaker$bin, bin_levels)
-
-# Get utterance counts
-df_simscontextAwareSpeaker_utteranceTotals <- df_simscontextAwareSpeaker %>%
-  group_by(runNum, resultType, binVal, utterance) %>%
-  summarise(n=n()) %>%
-  ungroup
-```
-
-```{r entropyPlotContextAware}
-df_simscontextAwareSpeaker_utteranceTotals %>%
-  group_by(runNum, binVal) %>%
-  summarise(entropy=entropy::entropy(norm_(n), unit=c('log2'))) %>%
-  ggplot(aes(x=binVal, y=entropy)) +
-    # geom_jitter(alpha=0.2, width=0.05, height=0) +
-    geom_smooth(method='loess') +
-    theme_few()
-```
-
-
-## Boostrapped H(Y) = H(X|L) - I(X,C|L)
-
-```{r contextAwareBSPreprocess}
-# Run contextAwareS2 on bootstrapped data
-df_bs_contextAwareS2 <- df_simscontextAwareSpeaker_utteranceTotals %>%
-  group_by(runNum) %>%
-  do(getEntropyData(., 'contextAwareS2', endPoints, topicProps))
-```
-
-```{r contextAwareBSPlot}
-df_bs_contextAwareS2 %>%
-  gather(type,val, c(uncondEntropy, MI, hY)) %>%
-  ggplot(aes(x=endPoint, y=val, col=type)) +
-    # geom_jitter(alpha=0.2, width=0.25) +
-    geom_smooth(method='loess', level=0.99) +
-    theme_few()
-```
-
-```{r}
-df_bs_contextAwareS2 %>%
-  group_by(endPoint) %>%
-  summarise(avgUncondEntropy=median(uncondEntropy),
-            avgMI=median(MI),
-            avgHY=median(hY))
-```
-
-
-```{r lm-model}
-d <- df_simscontextAwareSpeaker_utteranceTotals %>%
-  group_by(runNum, binVal) %>%
-  summarise(entropy=entropy.empirical(n, unit=c('log2')))
-
-summary(lm(entropy~poly(binVal, 2), data=d))
-```
-
-# `Context unaware speaker` parallelize runs
-```{r runParContexUnaware}
-no_cores <- detectCores() - 1
-cl <- makeCluster(no_cores, type='FORK')
-registerDoParallel(cl)
-
-ptm <- proc.time()
-nSims <- 100
-sims_contextUnawareSpeaker <- foreach(i=seq(1, nSims), .packages=c('dplyr', 'rwebppl'), .combine=rbind) %dopar% 
-  runFn(i, TOPIC, NUM_UTTERANCES, 'contextUnawareS2',  ALPHA, 'false')
-stopCluster(cl)
-etm <- proc.time() - ptm
-cat("runtime: ", etm[3] / 60)
-```
-
-```{r entropyContextUnawareBS-preproces}
-df_simscontextUnawareSpeaker <- sims_contextUnawareSpeaker %>%
-  mutate(utteranceNum=(utteranceNum)) %>%
-  mutate(bin=cut(utteranceNum, breaks=breaks, right=TRUE, include.lowest=TRUE))
-bin_levels <- levels(df_simscontextUnawareSpeaker$bin)
-df_simscontextUnawareSpeaker$binVal <- match(df_simscontextUnawareSpeaker$bin, bin_levels)
-
-# Get utterance counts
-df_simscontextUnawareSpeaker_utteranceTotals <- df_simscontextUnawareSpeaker %>%
-  group_by(runNum, resultType, binVal, utterance) %>%
-  summarise(n=n()) %>%
-  ungroup
-```
-
-```{r entropyContextUnawareBS-plot}
-df_simscontextUnawareSpeaker_utteranceTotals %>%
-  group_by(runNum, binVal) %>%
-  summarise(entropy=entropy::entropy(norm_(n), unit=c('log2'))) %>%
-  ggplot(aes(x=binVal, y=entropy)) +
-    geom_smooth(method='loess') +
-    theme_few()
-```
-
-```{r contextUAwareBSEntropyPreProcess}
-# Run contextAwareS2 on bootstrapped data
-df_bs_contextUnawareS2 <- df_simscontextUnawareSpeaker_utteranceTotals %>%
-  group_by(runNum) %>%
-  do(getEntropyData(., 'contextUnawareS2', endPoints, topicProps))
-```
-
-```{r contextUAwareBSEntropyPlot}
-df_bs_contextUnawareS2 %>%
-  gather(type,val, c(uncondEntropy, MI, hY)) %>%
-  ggplot(aes(x=endPoint, y=val, col=type)) +
-    # geom_jitter(alpha=0.2, width=0.25) +
-    geom_smooth(method='loess', level=0.99) +
-    theme_few()
-```
-
-
-```{r runParS1}
-no_cores <- detectCores() - 1
-cl <- makeCluster(no_cores, type='FORK')
-registerDoParallel(cl)
-
-ptm <- proc.time()
-nSims <- 100
-sims_S1 <- foreach(i=seq(1, nSims), .packages=c('dplyr', 'rwebppl'), .combine=rbind) %dopar% runFn(i, TOPIC, NUM_UTTERANCES, 'S1',  ALPHA, 'false')
-stopCluster(cl)
-etm <- proc.time() - ptm
-cat("runtime: ", etm[3] / 60)
-```
-
-```{r entropyS1BS-preproces}
-df_simsS1 <- sims_S1 %>%
-  mutate(utteranceNum=(utteranceNum)) %>%
-  mutate(bin=cut(utteranceNum, breaks=breaks, right=TRUE, include.lowest=TRUE))
-bin_levels <- levels(df_simsS1$bin)
-df_simsS1$binVal <- match(df_simsS1$bin, bin_levels)
-
-# Get utterance counts
-df_simsS1_utteranceTotals <- df_simsS1 %>%
-  group_by(runNum, resultType, binVal, utterance) %>%
-  summarise(n=n()) %>%
-  ungroup
-```
-
-```{r entropyS1BS-plot}
-df_simsS1_utteranceTotals %>%
-  group_by(runNum, binVal) %>%
-  summarise(entropy=entropy::entropy(norm_(n), unit=c('log2'))) %>%
-  ggplot(aes(x=binVal, y=entropy)) +
-    geom_smooth(method='loess') +
-    theme_few()
-```
-
-```{r contextUAwareBSEntropyPreProcess}
-# Run contextAwareS2 on bootstrapped data
-df_bs_S1 <- df_simsS1_utteranceTotals %>%
-  group_by(runNum) %>%
-  do(getEntropyData(., 'S1', endPoints, topicProps))
-```
-
-```{r contextUAwareBSEntropyPlot}
-df_bs_S1 %>%
-  gather(type,val, c(uncondEntropy, MI, hY)) %>%
-  ggplot(aes(x=endPoint, y=val, col=type)) +
-    geom_jitter(alpha=0.2, width=0.25) +
-    geom_smooth(method='loess', level=0.99) +
-    theme_few()
-```
-
-
-RSA and optimal orderings
-```{r}
-t1 <- c(0.6, 0.25, 0.15)
-t2 <- c(0.6, 0.15, 0.25)
-t3 <- c(0.25, 0.6, 0.15)
-t1 <- c(0.4, 0.4, 0.2)
-t2 <- c(0.4, 0.2, 0.4)
-t3 <- c(0.2, 0.4, 0.4)
-m <- matrix(c(t1, t2, t3), nrow=3)
-
-reason <- function(m, n=1) {
-  new_m <- m
-  if (n==0) {return(new_m)}
-  for (i in 1:n) {c
-    new_m <- sweep(t(new_m), 2, colSums(t(new_m)), FUN="/")
-  }
-  new_m
-}
-
-iters <- seq(1, 10)
-res <- sapply(iters, function(x) {reason(m, n=x)[1,1]})
-data.frame(iters=iters, res=res) %>%
-  ggplot(aes(x=iters, y=res)) +
-    geom_line()
 ```
 
