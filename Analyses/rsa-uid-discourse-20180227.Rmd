@@ -5,6 +5,11 @@ date: "2/27/2018"
 output: html_document
 ---
 
+# Contents:
+
+(1) Bootstrapped entropy decomposition comparing `contextAwareS2` to `baseline`
+(2) Bootstrapped entropy decomposition with `contextAwareS2` varying alphas
+
 ```{r libraries, message=FALSE, warning=FALSE}
 rm(list = ls())  # clear workspace
 
@@ -33,223 +38,116 @@ runFn <- function(i, targetDistr, nUtterances, resultType, alpha, reverseResults
     mutate(runNum=i, targetDistr=targetDistr, alpha=alpha, resultType=resultType, reverseResults=reverseResults)
   df
 }
-# test_rnFn <- runFn(1, 't_distr1', 100, 'contextAwareS2', 10, FALSE)
+# test_rnFn <- runFn(1, 'T1', 100, 'contextAwareS2', 10, FALSE)
 ```
 
-```{r run-par-sims-helper}
-# runParVaryingAlpha
-# ------------------
-# Run runFn in parrallel. This is good for getting bootstrapped estimates of speaker utterance chains.
-# Utterance chains can be used in entropy estimtes, etc.
-#
-runParVaryingAlpha <- function(targetDistr='t_distr1', 
-                               nUtterances=80, 
-                               resultType='contextAwareS2', 
-                               alpha=10, 
-                               nSims=80,
-                               binSize=10) {
-  no_cores <- detectCores() - 1
-  cl <- makeCluster(no_cores, type='FORK')
-  registerDoParallel(cl)
-  
-  ptm <- proc.time()
-  sims <- foreach(i=seq(1, nSims), .packages=c('dplyr', 'rwebppl'), .combine=rbind) %dopar% 
-    runFn(i, targetDistr, nUtterances, resultType, alpha, 'false')
-  stopCluster(cl)
-  etm <- proc.time() - ptm
-  cat("runtime: ", etm[3] / 60)
-  
-  # Process sims
-  breaks <- seq(0, numUtterances, by=binSize)
-  df_sims <- sims %>%
-    mutate(utteranceNum=(utteranceNum)) %>%
-    mutate(bin=cut(utteranceNum, breaks=breaks, right=FALSE, include.lowest=TRUE))
-  bin_levels <- levels(df_sims$bin)
-  df_sims$binVal <- match(df_sims$bin, bin_levels)
-  
-  # Get utterance totals
-  df_sims_utteranceTotals <- df_sims %>%
-    group_by(runNum, resultType, alpha, binVal, utterance) %>%
-    summarise(n=n()) %>%
-    ungroup
-  
-  # Create a data.frame to merge for place-hodlders
-  d_sims_fill <- data.frame(expand.grid(runNum=unique(df_sims_utteranceTotals$runNum),
-                                        resultType=unique(df_sims_utteranceTotals$resultType), 
-                                        alpha=unique(df_sims_utteranceTotals$alpha),
-                                        binVal=unique(df_sims_utteranceTotals$binVal),
-                                        utterance=unique(df_sims_utteranceTotals$utterance))) %>%
-    mutate(utterance=as.character(utterance),
-           n=0)
-  
-  # Run merge (see https://stackoverflow.com/questions/7735647/replacing-nas-with-latest-non-na-value)
-  df_filled <- merge(df_sims_utteranceTotals, d_sims_fill, by=c('runNum', 'resultType', 'alpha', 'binVal', 'utterance'), all=TRUE) %>%
-    select(runNum, resultType, alpha, binVal, utterance, resultType, n.x) %>%
-    mutate(n.x=ifelse(is.na(n.x), 0, n.x),
-           total=binSize) %>%
-           # runNum=na.locf(runNum, fromLast=TRUE),
-           # resultType=na.locf(resultType, fromLast=TRUE)) %>%
-    rename(n=n.x) %>%
-    mutate(prop=n/binSize)
-  
-  df_filled
-}
-# df_test_runParVaryingAlpha <- runParVaryingAlpha(nSims=10)
-```
-
-```{r}
-nUtterances <- 100
+# (1) Bootstrapped entropy decomposition comparing `contextAwareS2` to `baseline`
+```{r contextAwareS2-vs-baseline-alpha20-compare}
+nUtterances <- 120
 binSize <- 20
-df80 <- runParVaryingAlpha(alpha=20, nUtterances=nUtterances, binSize=binSize)
+df10_contextAware <- runParVaryingAlpha(runFn,
+                                       targetDistr='T1',
+                                       resultType='contextAwareS2',
+                                       alpha=10, 
+                                       nUtterances=nUtterances, 
+                                       binSize=binSize)
+
+df10_baseline <- runParVaryingAlpha(runFn,
+                                   targetDistr='T1', 
+                                   resultType='baseline',
+                                   alpha=10, 
+                                   nUtterances=nUtterances, 
+                                   binSize=binSize)
 ```
+
+```{r preprocess-contextAwareS2-vs-baseline-alpha20-compare}
+df10_join <- rbind(df10_contextAware, df10_baseline)
+```
+
 
 Check proportions
-```{r}
-df80 %>%
-  filter(runNum %in% seq(1, 10)) %>%
+```{r plot-proportions-contextAwareS2-vs-baseline-alpha20-compare}
+df10_join %>%
+  filter(runNum %in% seq(1, 4)) %>%
   ggplot(aes(x=binVal, y=prop, fill=utterance)) +
     # geom_vline(data=df_agg %>% select(resultType, posBin) %>% unique, aes(xintercept=posBin), lty=2) +
     geom_bar(stat='identity', alpha=0.5) +
     facet_grid(~resultType) +
     theme_few() +
     theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
-    facet_wrap(~runNum, ncol=2)
-```
-
-
-```{r entropy-helpers}
-# Helpers
-
-# ====
-# norm
-# ====
-# normalize a vecotr
-#
-# Parameters
-# ----------
-# x : vector
-#
-# Returns
-# -------
-# vector
-#   vector of probabilities
-#
-norm_ <- function(x) {
-  x / sum(x)
-}
-
-# =====
-# getMI
-# =====
-# Get Mutual Information of two probability distributions
-#
-# Parameters
-# ----------
-# x : vector
-#   Distribution 1.
-# y: vector
-#   Distribution 2.
-#
-# Returns
-# -------
-# numeric
-#   MI of two distributions (H(d1) + H(d2) - H(d1, d2))
-#
-getMI <- function(x, y) {
-  entropy::entropy(norm_(x), unit=c('log2')) + entropy::entropy(norm_(y), unit=c('log2')) -
-      entropy::entropy(c(norm_(x), norm_(y)), unit=c('log2'))
-}
-
-# ==============
-# getEntropyData
-# ==============
-# Calculate H(y) = H(X|L) - I(X,C|L)
-#
-# Parameters
-# ----------
-# df : data.frame()
-#   Descr. needed.
-# model: str
-#   Result-type (e.g. 'contextAwareS2')
-# endPoints: vector of int
-#   Endpoints for binning.
-# actualProps: vector of numeric
-#   True Probability distribution (C)
-#
-# Returns
-# -------
-# data.frame()
-#   data.frame(endPoint=int, encondEntropy=numeric, MI=numeric)
-#
-getEntropyData <- function(df, model, endPoints, actualProps) {
-  
-  MIs <- sapply(endPoints, function(x) {
-    uncondEntropy <- as.list(
-      df %>%
-        # Note (BP): Think about the slices here.
-        filter(resultType==model, binVal %in% seq(x, x, by=1)) %>%
-        select(n))$n
-    condEntropy <- as.list(
-      df %>%
-        # Note (BP): Think about the slices here.
-        filter(resultType==model, binVal %in% seq(1, x, by=1)) %>%
-        group_by(utterance) %>%
-        summarise(cnt=sum(n)) %>%
-        select(cnt))$cnt
-    # entropy <- entropy(uncondEntropy, condEntropy, unit=c('log2'))
-    MI <- getMI(condEntropy, actualProps)
-    MI
-    })
-  
-  uncondEntropies <- sapply(endPoints, function(x) {
-    empCnts <- as.list(
-      df %>%
-        # Note (BP): Think about the slices here.
-        filter(resultType==model, binVal %in% seq(x, x, by=1)) %>%
-        group_by(utterance) %>%
-        summarise(cnt=sum(n)) %>%
-        select(cnt))$cnt
-    ent <- entropy::entropy(norm_(empCnts), unit=c('log2'))
-    ent
-  })
-
-  res_df <- data.frame(endPoint=endPoints, 
-                       uncondEntropy=uncondEntropies,
-                       MI=MIs) %>%
-    mutate(hY=uncondEntropy-MI)
-  res_df
-}
+    facet_wrap(resultType~runNum, nrow=2)
 ```
 
 Check entropy
-```{r}
-df80 %>%
-  group_by(runNum, binVal) %>%
+```{r plot-unconditional-entropy-contextAwareS2-vs-baseline-alpha20-compare}
+df10_join %>%
+  group_by(resultType, runNum, binVal) %>%
   summarise(entropy=entropy::entropy(norm_(n), unit=c('log2'))) %>%
   ggplot(aes(x=binVal, y=entropy)) +
     # geom_jitter(alpha=0.2, width=0.05, height=0) +
     geom_smooth(method='loess') +
-    theme_few()
+    theme_few() +
+    facet_grid(~resultType)
 ```
 
-```{r}
-breaks <- seq(0, numUtterances, by=binSize)
+Populate entropy data...
+```{r run-hy-factorization-contextAwareS2-vs-basline-compare}
+breaks <- seq(0, nUtterances, by=binSize)
 end <- length(breaks)-1
 endPoints <- seq(1, end)
 topicProps <- c(0.6, 0.25, 0.15, 0.15, 0.1, 0.1)
 
-df80_bs <- df80 %>%
-  group_by(runNum) %>%
-  do(getEntropyData(., 'contextAwareS2', endPoints, topicProps))
+df10_join_bs <- df10_join %>%
+  group_by(resultType, runNum) %>%
+  do(getEntropyData(., endPoints, topicProps))
 ```
 
-
-```{r}
-df80_bs %>%
+Plot.
+```{r plot-hy-factorization-contextAwareS2-vs-basline-compare}
+df10_join_bs %>%
   gather(type,val, c(uncondEntropy, MI, hY)) %>%
   ggplot(aes(x=endPoint, y=val, col=type)) +
     # geom_jitter(alpha=0.2, width=0.25) +
     geom_smooth(method='loess', level=0.99) +
-    theme_few()
+    theme_few() +
+    facet_grid(~resultType)
 ```
 
+(2) Bootstrapped entropy decomposition with `contextAwareS2` varying alphas
+```{r run-bootstrapped-contextAware-varying-alpha}
+# Settings
+nUtterances <- 120
+binSize <- 20
+
+# Run alphas
+alphas <- c(2, 4, 8, 16, 32)
+df_agg <- data.frame()
+for (alpha_ in alphas) {
+  cat("\nrunning alpha: ", alpha_, " ")
+  curr_df <- runParVaryingAlpha(runFn, targetDistr='T1', alpha=alpha_, nUtterances=nUtterances, binSize=binSize)
+  df_agg <- rbind(df_agg, curr_df)
+}
+```
+
+Populate entropy data...
+```{r run-entropy-bootstrapped-contextAware-varying-alpha}
+breaks <- seq(0, nUtterances, by=binSize)
+end <- length(breaks)-1
+endPoints <- seq(1, end)
+topicProps <- c(0.6, 0.25, 0.15, 0.15, 0.1, 0.1)
+
+df_agg_bs <- df_agg %>%
+  group_by(alpha, runNum) %>%
+  do(getEntropyData(., endPoints, topicProps))
+```
+
+Plot.
+```{r plot-entropy-bootstrapped-contextAware-varying-alpha}
+df_agg_bs %>%
+  gather(type,val, c(uncondEntropy, MI, hY)) %>%
+    ggplot(aes(x=endPoint, y=val, col=type)) +
+      # geom_jitter(alpha=0.2, width=0.25) +
+      geom_smooth(method='loess', level=0.99) +
+      theme_few() +
+      facet_wrap(~alpha)
+```
