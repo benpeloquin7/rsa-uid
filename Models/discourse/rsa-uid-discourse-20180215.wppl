@@ -40,8 +40,8 @@ var runReverse = getReverseResults(rData)
 
 
 // Topics
-var topicNames = ['t_distr1', 't_distr2', 't_distr3', 't_distr4']
-var topicNamesDistr = Categorical({vs:topicNames, ps:[1, 1, 1, 1]})
+var topicNames = ['T1', 'T2', 'T3', 'T4']
+var topicNamesDistr = Categorical({vs:topicNames, ps:[0.1, 1, 1, 1]})
 var topicNamesPrior = function() { 
   return sample(topicNamesDistr)
 }
@@ -56,39 +56,39 @@ var utterances = ['a', 'b', 'c', 'd', 'e', 'f']
 var utterancesDistr = Categorical({vs:utterances, ps:[1, 1, 1, 1, 1, 1]})
 var utterancesPrior = function() {return sample(utterancesDistr)}
 
-// Scenario 1: Equillibrium1
-//var t_distr1 = Categorical({vs:worlds, ps:[0.4, 0.4, 0.2]})
-//var t_distr2 = Categorical({vs:worlds, ps:[0.4, 0.2, 0.4]}) 
-//var t_distr3 = Categorical({vs:worlds, ps:[0.2, 0.4, 0.4]})
+//var T1 = Categorical({vs:worlds, ps:[0.4, 0.3, 0.2, 0.1, 0.3]})
+//var T2 = Categorical({vs:worlds, ps:[0.3, 0.2, 0.1, 0.4]}) 
+//var T3 = Categorical({vs:worlds, ps:[0.2, 0.1, 0.4, 0.3]})
+//var T4 = Categorical({vs:worlds, ps:[0.1, 0.4, 0.3, 0.2]})
 
 // Scenario 2: shared mode, unequal variance
-//var t_distr1 = Categorical({vs:worlds, ps:[0.6, 0.25, 0.15]})
-//var t_distr2 = Categorical({vs:worlds, ps:[0.6, 0.15, 0.25]}) 
-//var t_distr3 = Categorical({vs:worlds, ps:[0.25, 0.6, 0.15]})
+//var T1 = Categorical({vs:worlds, ps:[0.6, 0.25, 0.15]})
+//var T2 = Categorical({vs:worlds, ps:[0.6, 0.15, 0.25]}) 
+//var T3 = Categorical({vs:worlds, ps:[0.25, 0.6, 0.15]})
 
 // Scenario 3: equal mode, unequal variance -- this is vary hard
 // in fact, we see that the uncond. entropy decreases...
-//var t_distr1 = Categorical({vs:worlds, ps:[0.6, 0.25, 0.15]})
-//var t_distr2 = Categorical({vs:worlds, ps:[0.5, 0.30, 0.20]}) 
-//var t_distr3 = Categorical({vs:worlds, ps:[0.7, 0.20, 0.10]})
+//var T1 = Categorical({vs:worlds, ps:[0.6, 0.25, 0.15]})
+//var T2 = Categorical({vs:worlds, ps:[0.5, 0.30, 0.20]}) 
+//var T3 = Categorical({vs:worlds, ps:[0.7, 0.20, 0.10]})
 
 // Scenario 4: expanded set
-var t_distr1 = Categorical({vs:worlds, ps:[0.6, 0.25, 0.15, 0.15, 0.1, 0.1]})
-var t_distr2 = Categorical({vs:worlds, ps:[0.6, 0.15, 0.25, 0.1, 0.15, 0.1]}) 
-var t_distr3 = Categorical({vs:worlds, ps:[0.25, 0.6, 0.15, 0.1, 0.1, 0.15]})
-var t_distr4 = Categorical({vs:worlds, ps:[0.25, 0.1, 0.6, 0.15, 0.1, 0.15]})
+var T1 = Categorical({vs:worlds, ps:[0.6, 0.25, 0.15, 0.15, 0.1, 0.1]})
+var T2 = Categorical({vs:worlds, ps:[0.6, 0.15, 0.25, 0.1, 0.15, 0.1]}) 
+var T3 = Categorical({vs:worlds, ps:[0.25, 0.6, 0.15, 0.1, 0.1, 0.15]})
+var T4 = Categorical({vs:worlds, ps:[0.25, 0.1, 0.6, 0.15, 0.1, 0.15]})
 
 // Scenario 5: Equillibrium1
-//var t_distr1 = Categorical({vs:worlds, ps:[0.33, 0.33, 0.33]})
-//var t_distr2 = Categorical({vs:worlds, ps:[0.4, 0.2, 0.4]}) 
-//var t_distr3 = Categorical({vs:worlds, ps:[0.2, 0.4, 0.4]})
+//var T1 = Categorical({vs:worlds, ps:[0.33, 0.33, 0.33]})
+//var T2 = Categorical({vs:worlds, ps:[0.4, 0.2, 0.4]}) 
+//var T3 = Categorical({vs:worlds, ps:[0.2, 0.4, 0.4]})
 
 
 var topicDistr = {
-  't_distr1': t_distr1,
-  't_distr2': t_distr2,
-  't_distr3': t_distr3,
-  't_distr4': t_distr4
+  'T1': T1,
+  'T2': T2,
+  'T3': T3,
+  'T4': T4
 }
 
 var getTopicNameDistr = function(topicName) {
@@ -126,17 +126,17 @@ var utteranceMeaning = function(utterance) {
 
 var sampleWorldFromTopic = function(topicName) {
   return function() {
-    if (topicName == 't_distr1') {
-      return sample(t_distr1)
+    if (topicName == 'T1') {
+      return sample(T1)
     } 
-    else if (topicName == 't_distr2') { 
-      return sample(t_distr2)
+    else if (topicName == 'T2') { 
+      return sample(T2)
     } 
-    else if (topicName == 't_distr3') { 
-      return sample(t_distr3)
+    else if (topicName == 'T3') { 
+      return sample(T3)
     } 
-    else if (topicName == 't_distr4') { 
-      return sample(t_distr4)
+    else if (topicName == 'T4') { 
+      return sample(T4)
     } 
     else {
       error('No topic: ', topicName)
@@ -293,7 +293,7 @@ var range = function(start, end) {
   return res.slice(0, res.length-1)
 }
 
-// Listener probability assignment to topic "t_distr1"
+// Listener probability assignment to topic "T1"
 var getDataSizes = function(n) {
   return range(0, n)
 }
@@ -310,10 +310,10 @@ var contextSlices = map(function(x) {return [0, x]}, dataSizes)
 var getListenerInferences = function(utterances) {
   var res = map(function(x) {
     return {
-      "t_distr1": Math.exp(listenerTopicDistrPosterior(utterances.slice(x[0], x[1])).score("t_distr1")),
-      "t_distr2": Math.exp(listenerTopicDistrPosterior(utterances.slice(x[0], x[1])).score("t_distr2")),
-      "t_distr3": Math.exp(listenerTopicDistrPosterior(utterances.slice(x[0], x[1])).score("t_distr3")),
-      "t_distr4": Math.exp(listenerTopicDistrPosterior(utterances.slice(x[0], x[1])).score("t_distr4"))}
+      "T1": Math.exp(listenerTopicDistrPosterior(utterances.slice(x[0], x[1])).score("T1")),
+      "T2": Math.exp(listenerTopicDistrPosterior(utterances.slice(x[0], x[1])).score("T2")),
+      "T3": Math.exp(listenerTopicDistrPosterior(utterances.slice(x[0], x[1])).score("T3")),
+      "T4": Math.exp(listenerTopicDistrPosterior(utterances.slice(x[0], x[1])).score("T4"))}
   }, contextSlices)
   return res
 }
@@ -329,10 +329,10 @@ var processUtterances = function(speakerData, listenerInferences) {
     return {
       'utteranceNum': x, 
       'utterance': speakerData[x], 
-      't_distr1': listenerInferences[x]['t_distr1'],
-      't_distr2': listenerInferences[x]['t_distr2'],
-      't_distr3': listenerInferences[x]['t_distr3'],
-      't_distr4': listenerInferences[x]['t_distr4']}
+      'T1': listenerInferences[x]['T1'],
+      'T2': listenerInferences[x]['T2'],
+      'T3': listenerInferences[x]['T3'],
+      'T4': listenerInferences[x]['T4']}
   }, dataSizes)
   return dMap
 }
