@@ -350,3 +350,100 @@ corpus_run_fn <- function(modelFile, modelName, alpha, lambda, theta, nUtterance
   df_summary <- run_corpus_analysis(df_lm)
   df_summary
 }
+
+# norm
+# ====
+# normalize a vecotr
+#
+# Parameters
+# ----------
+# x : vector
+#
+# Returns
+# -------
+# vector
+#   vector of probabilities
+#
+norm_ <- function(x) {
+  x / sum(x)
+}
+
+# getMI
+# =====
+# Get Mutual Information of two probability distributions
+#
+# Parameters
+# ----------
+# x : vector
+#   Distribution 1.
+# y: vector
+#   Distribution 2.
+#
+# Returns
+# -------
+# numeric
+#   MI of two distributions (H(d1) + H(d2) - H(d1, d2))
+#
+getMI <- function(x, y) {
+  entropy::entropy(norm_(x), unit=c('log2')) + entropy::entropy(norm_(y), unit=c('log2')) -
+    entropy::entropy(c(norm_(x), norm_(y)), unit=c('log2'))
+}
+
+# getEntropyData
+# ==============
+# Calculate H(y) = H(X|L) - I(X,C|L)
+# Note as of 20170227 we no longer pass in the resultType directly because
+# it is redundant.
+#
+# Parameters
+# ----------
+# df : data.frame()
+#   Descr. needed.
+# endPoints: vector of int
+#   Endpoints for binning.
+# actualProps: vector of numeric
+#   True Probability distribution (C)
+#
+# Returns
+# -------
+# data.frame()
+#   data.frame(endPoint=int, encondEntropy=numeric, MI=numeric)
+#
+getEntropyData <- function(df, model, endPoints, actualProps) {
+  
+  MIs <- sapply(endPoints, function(x) {
+    uncondEntropy <- as.list(
+      df %>%
+        # Note (BP): Think about the slices here.
+        filter(binVal %in% seq(x, x, by=1)) %>%
+        select(n))$n
+    condEntropy <- as.list(
+      df %>%
+        # Note (BP): Think about the slices here.
+        filter(binVal %in% seq(1, x, by=1)) %>%
+        group_by(utterance) %>%
+        summarise(cnt=sum(n)) %>%
+        select(cnt))$cnt
+    # entropy <- entropy(uncondEntropy, condEntropy, unit=c('log2'))
+    MI <- getMI(condEntropy, actualProps)
+    MI
+  })
+  
+  uncondEntropies <- sapply(endPoints, function(x) {
+    empCnts <- as.list(
+      df %>%
+        # Note (BP): Think about the slices here.
+        filter(binVal %in% seq(x, x, by=1)) %>%
+        group_by(utterance) %>%
+        summarise(cnt=sum(n)) %>%
+        select(cnt))$cnt
+    ent <- entropy::entropy(norm_(empCnts), unit=c('log2'))
+    ent
+  })
+  
+  res_df <- data.frame(endPoint=endPoints, 
+                       uncondEntropy=uncondEntropies,
+                       MI=MIs) %>%
+    mutate(hY=uncondEntropy-MI)
+  res_df
+}
