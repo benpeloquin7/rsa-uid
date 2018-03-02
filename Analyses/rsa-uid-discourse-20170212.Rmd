@@ -96,18 +96,35 @@ df_agg %>%
     facet_wrap(~resultType, ncol=1)
 ```
 
+
 Zoom in on first 25 utterances.
 ```{r first30Utterances}
-df_agg %>%
+p <- df_agg %>%
   mutate(utteranceVal=0.5) %>%
   filter(utteranceNum < 25) %>%
   gather(topic, listenerTopicPosterior, c(T1, T2, T3, T4)) %>%
   ggplot(aes(x=utteranceNum, y=listenerTopicPosterior, col=topic, frame=utteranceNum)) +
     geom_text(aes(x=utteranceNum, label=utterance, y=utteranceVal, col=utterance)) +
-    geom_line(alpha=0.3, size=1) +
+    geom_path(alpha=0.3, size=1) +
     # geom_vline(data=df_agg %>% select(resultType, pos) %>% unique, aes(xintercept=pos), lty=2)+
     theme_few() +
     facet_wrap(~resultType)
+p
+```
+
+```{r animate}
+p <- df_agg %>%
+  mutate(utteranceVal=0.5) %>%
+  filter(utteranceNum < 25, resultType=='contextAwareS2') %>%
+  gather(topic, listenerTopicPosterior, c(T1, T2, T3, T4)) %>%
+  ggplot(aes(x=utteranceNum, y=listenerTopicPosterior, col=topic, cumulative=TRUE)) +
+    geom_text(aes(x=utteranceNum, label=utterance, y=utteranceVal, col=utterance)) +
+    geom_path(aes(x=utteranceNum, y=listenerTopicPosterior, col=topic, frame=utteranceNum), alpha=0.3, size=1) +
+    # geom_vline(data=df_agg %>% select(resultType, pos) %>% unique, aes(xintercept=pos), lty=2)+
+    theme_few() +
+    theme(legend.position='none')
+
+gganimate(p)
 ```
 
 Binning utterances.
