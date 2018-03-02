@@ -425,7 +425,7 @@ getEntropyData <- function(df, endPoints, actualProps) {
         summarise(cnt=sum(n)) %>%
         select(cnt))$cnt
     # entropy <- entropy(uncondEntropy, condEntropy, unit=c('log2'))
-    MI <- getMI(condEntropy, actualProps)
+    MI <- getMI(uncondEntropy, actualProps)
     MI
   })
   
@@ -466,6 +466,17 @@ runParVaryingAlpha <- function(runFn,
                                alpha=10, 
                                nSims=100,
                                binSize=20) {
+  # Debugging...
+  cat("\ntargetDistr:\t", targetDistr)
+  cat("\nnUtterances:\t", nUtterances)
+  cat("\nresultType:\t", resultType)
+  cat("\nalpha:\t\t", alpha)
+  cat("\nnSims:\t\t", nSims)
+  cat("\nbinSize:\t", binSize)
+  
+  # Check for appropriate bin size
+  assertthat::assert_that(nUtterances %% binSize == 0)
+  
   # Parallelization setup
   no_cores <- detectCores() - 1
   cl <- makeCluster(no_cores, type='FORK')
@@ -474,7 +485,7 @@ runParVaryingAlpha <- function(runFn,
   # Run sims
   ptm <- proc.time()
   sims <- foreach(i=seq(1, nSims), .packages=c('dplyr', 'rwebppl'), .combine=rbind) %dopar% 
-    runFn(i, targetDistr, nUtterances, resultType, alpha, 'false')
+    runFn(i, targetDistr=targetDistr, nUtterances=nUtterances, resultType=resultType, alpha=alpha)
   stopCluster(cl)
   etm <- proc.time() - ptm
   cat("runtime: ", etm[3] / 60)
@@ -482,10 +493,9 @@ runParVaryingAlpha <- function(runFn,
   # Process sims
   breaks <- seq(0, nUtterances, by=binSize)
   df_sims <- sims %>%
-    mutate(utteranceNum=(utteranceNum)) %>%
     mutate(bin=cut(utteranceNum, breaks=breaks, right=FALSE, include.lowest=TRUE))
-  bin_levels <- levels(df_sims$bin)
-  df_sims$binVal <- match(df_sims$bin, bin_levels)
+  binLevels <- levels(df_sims$bin)
+  df_sims$binVal <- match(df_sims$bin, binLevels)
   
   # Get utterance totals
   df_sims_utteranceTotals <- df_sims %>%
