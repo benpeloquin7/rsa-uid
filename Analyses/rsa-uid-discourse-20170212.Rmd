@@ -34,10 +34,10 @@ m <- getModelFile(fPath)
 
 ```{r runFn}
 run <- createRunFn(m)
-runFn <- function(i, targetDistr, nUtterances, resultType, alpha, reverseResults) {
-  dTemp <- data.frame(targetDistr=targetDistr, nUtterances=nUtterances, resultType=resultType, alpha=alpha, reverseResults=reverseResults)
+runFn <- function(i, targetDistr, nUtterances, resultType, alpha) {
+  dTemp <- data.frame(targetDistr=targetDistr, nUtterances=nUtterances, resultType=resultType, alpha=alpha)
   df <- run(dTemp) %>%
-    mutate(runNum=i, targetDistr=targetDistr, alpha=alpha, resultType=resultType, reverseResults=reverseResults)
+    mutate(runNum=i, targetDistr=targetDistr, alpha=alpha, resultType=resultType)
   df
 }
 ```
@@ -53,32 +53,23 @@ df_baseline <- runFn(1,
                      targetDistr=TOPIC, 
                      nUtterances=NUM_UTTERANCES, 
                      resultType='baseline', 
-                     alpha=ALPHA, 
-                     reverseResults='false')
+                     alpha=ALPHA)
 df_contextUnwareS2 <- runFn(1, 
                             targetDistr=TOPIC, 
                             nUtterances=NUM_UTTERANCES, 
                             resultType='contextUnawareS2', 
-                            alpha=ALPHA, 
-                            reverseResults='false')
+                            alpha=ALPHA)
 df_contextAwareS2 <- runFn(1, 
                            targetDistr=TOPIC, 
                            nUtterances=NUM_UTTERANCES, 
                            resultType='contextAwareS2', 
-                           alpha=ALPHA, 
-                           'false')
-df_S1 <- runFn(1, 
-               targetDistr=TOPIC, 
-               nUtterances=NUM_UTTERANCES, 
-               resultType='S1', 
-               alpha=ALPHA, 
-               reverseResults='false')
+                           alpha=ALPHA)
 # df_baselineReverse <- runFn(1, NUM_UTTERANCES, 'baseline', ALPHA, 'true')
 # df_contextUnwareS2Reverse <- runFn(1, NUM_UTTERANCES, 'contextUnawareS2', ALPHA, 'true')
 # df_contextAwareS2Reverse <- runFn(1, NUM_UTTERANCES, 'contextAwareS2', ALPHA, 'true')
 # df_S1Reverse <- runFn(1, NUM_UTTERANCES, 'S1', ALPHA, 'true')
 
-df_agg <- rbind(df_baseline, df_contextUnwareS2, df_contextAwareS2, df_S1)
+df_agg <- rbind(df_baseline, df_contextUnwareS2, df_contextAwareS2)
 ```
 
 Convergence plots by speaker type.
@@ -90,7 +81,7 @@ df_agg %>%
     geom_line() +
     # geom_vline(data=df_agg %>% select(resultType, pos) %>% unique, aes(xintercept=pos), lty=2)+
     theme_few() +
-    facet_grid(resultType~reverseResults)
+    facet_grid(~resultType)
 ```
 
 Speaker utterances plot.
@@ -102,7 +93,7 @@ df_agg %>%
     geom_text(aes(x=utteranceNum, label=utterance, y=utteranceVal, col=utterance)) +
     ylim(0.75, 1.25) +
     theme_few() +
-    facet_grid(resultType~reverseResults)
+    facet_wrap(~resultType, ncol=1)
 ```
 
 Zoom in on first 25 utterances.
@@ -116,7 +107,7 @@ df_agg %>%
     geom_line(alpha=0.3, size=1) +
     # geom_vline(data=df_agg %>% select(resultType, pos) %>% unique, aes(xintercept=pos), lty=2)+
     theme_few() +
-    facet_grid(resultType~reverseResults)
+    facet_wrap(~resultType)
 ```
 
 Binning utterances.

@@ -32,10 +32,10 @@ m <- getModelFile(fPath)
 
 ```{r runFn}
 run <- createRunFn(m)
-runFn <- function(i, targetDistr, nUtterances, resultType, alpha, reverseResults) {
-  dTemp <- data.frame(targetDistr=targetDistr, nUtterances=nUtterances, resultType=resultType, alpha=alpha, reverseResults=reverseResults)
+runFn <- function(i, targetDistr, nUtterances, resultType, alpha) {
+  dTemp <- data.frame(targetDistr=targetDistr, nUtterances=nUtterances, resultType=resultType, alpha=alpha)
   df <- run(dTemp) %>%
-    mutate(runNum=i, targetDistr=targetDistr, alpha=alpha, resultType=resultType, reverseResults=reverseResults)
+    mutate(runNum=i, targetDistr=targetDistr, alpha=alpha, resultType=resultType, nUtterances=nUtterances)
   df
 }
 # test_rnFn <- runFn(1, 'T1', 100, 'contextAwareS2', 10, FALSE)
@@ -59,6 +59,8 @@ df10_baseline <- runParVaryingAlpha(runFn,
                                    nUtterances=nUtterances, 
                                    binSize=binSize)
 ```
+
+
 
 ```{r preprocess-contextAwareS2-vs-baseline-alpha20-compare}
 df10_join <- rbind(df10_contextAware, df10_baseline)
