@@ -36,8 +36,6 @@ var resultType = getResultType(rData)
 var alpha = getAlpha(rData)
 var theta = getTheta(rData)
 var targetDistr = getTargetDistr(rData)
-var runReverse = getReverseResults(rData)
-
 
 // Topics
 var topicNames = ['T1', 'T2', 'T3', 'T4']
@@ -212,7 +210,7 @@ var S1 = cache(function(world) {
     model(){
       var utterance = utterancesPrior()
       var L = L0(utterance)
-      factor(1 * L.score(world))
+      factor(alpha * L.score(world))
       return utterance
     }
   })
@@ -223,7 +221,7 @@ var listenerTopicDistrPosterior = cache(function(observedData) {
     var topicDistrName = topicNamesPrior()
     if (observedData != []) {
       var obsFn = function(datum){
-        var world = sampleWorldFromTopic(topic)()
+        var world = sampleWorldFromTopic(topicDistrName)()
         condition(datum == sample(S1(world)))}
       mapData({data: observedData}, obsFn)
     }
@@ -234,17 +232,36 @@ var listenerTopicDistrPosterior = cache(function(observedData) {
 var L1 = cache(function(utterance, data) {
   Infer({
     model() {
-      // Sample a topic distr given prev utterances (data)
+      // Sample a topic distr given prev utterances (data).
       var estTopicDistrName = sample(listenerTopicDistrPosterior(data))
+      // Sample world given topic.
       var estWorld = sampleWorldFromTopic(estTopicDistrName)()
+      // Literal meaning may not be necesrray depending on our factor statement.
       var meaning = litMeaning(utteranceMeaning(utterance), estWorld)
-      factor(meaning ? 0 : -Infinity)
+      var S = S1(estWorld)
+      // Alternatively, continue the speaker reasoning here -- I tend to like this a little more
+      // Than the litera meaning factorization.
+      // factor(S.score(utterance))
+      factor(S.score(utterance))
       // Listener jointly reasons about (meaning, topic)
       return {'estWorld': estWorld, 'estTopicDistrName': estTopicDistrName}
     }
   })
 })
 
+// S2
+// ==
+// S2 speaker samples utterance given topic
+// 
+// Paramters
+// ----------
+// T: str
+//    topic.
+// 
+// Returns
+// -------
+// utterance
+//
 var S2 = cache(function(T, data) {
   Infer({
     model() {
@@ -258,8 +275,9 @@ var S2 = cache(function(T, data) {
 })
 
 //
-// Speaker utterance generation
-//
+// Discourse speaker
+// Note (BP): Would be interseting to think about this as a speaker agent
+// 
 var d = []
 var speakerFn = function(T, d) {
   return d.concat([sample(S2(T, d))['utterance']])
@@ -277,11 +295,13 @@ var speakerRecurse = function(T, d, n) {
 //
 // Helpers
 //
+
 // Generate a sequence of numbers
 var plusOne = function(n) {
   return n + 1
 }
 
+// Return a sequence of numbers
 var range_ = function(start, end) {
   if (start == end) {
     return end
