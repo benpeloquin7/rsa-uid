@@ -1,0 +1,172 @@
+// Globals
+// var rData = [{
+//   'targetFreq':2,   // semantic probabilities
+//   'alt1Freq':1,     // semantic probabilities
+//   'alt2Freq':1,     // semantic probabilities
+//   'alt3Freq':1,     // semantic probabilities
+//   'mumbleFreq':100, // semantic probabilities
+//   'alpha':4,
+//   'lambda': 4,
+//   'theta':0.0001,
+//   'model': 'S1',
+//   'input': 'obj1',
+//   'inputType': 'object'
+// }]
+
+var getRData = function(key) {
+  var data = rData[0]
+  return data[key]
+}
+
+var createInput = function(input, inputType) {
+  if (inputType == 'object') {
+    return {d:input}
+  } else {
+    return input
+  }
+}
+
+var getWorldProbs = function(rData) {
+  var data = rData[0]
+  return [data['targetFreq'], 
+          data['alt2Freq'], 
+          data['alt3Freq'], 
+          data['mumbleFreq']]
+}
+
+var alpha = getRData('alpha')
+var lambda = getRdata('lambda')
+var theta = getRData('theta')
+var model = getRData('model')
+var input = createInput(getRData('input'), getRData('inputType'))
+var worldProbs = getWorldProbs(rData)
+
+// Worlds
+var worlds = [{d:'obj1'}, {d:'obj2'}, {d:'obj3'}, {d:'X'}]
+var wordsDistr = Categorical({vs:worlds, ps:worldProbs})
+var worldsPrior = function() {return sample(wordsDistr)}
+
+// Utterances
+var utterances = ['the obj1', 'the obj2', 'the obj3', 'pr', '']
+var utterancesDistr = Categorical({vs:utterances, ps:[1, 1, 1, 1, 1]})
+var utterancesPrior = function() {return sample(utterancesDistr)}
+
+
+var litMeaning = function(utterance, world) {
+  return utterance == world['d']
+}
+
+var utteranceMeaning = function(utterance) {
+  if (utterance.includes('obj1')) {
+    return 'obj1'
+  } else if (utterance.includes('obj2')) {
+    return 'obj2'
+  } else if (utterance.includes('obj3')) {
+    return 'obj3'
+  } else if (utterance == 'pr') {
+    return uniformDraw(['obj1', 'obj2', 'obj3'])
+  } else {
+    return worldsPrior()['d']
+  }
+}
+
+var cost = cache(function(utterance) {
+  if (utterance == 'the obj1' | utterance == 'the obj2' | utterance == 'the obj3') {
+    return 2
+  } else if (utterance == 'pr') {
+    return 1
+  } else {
+    return 0
+  }
+})
+
+//
+// Noise
+//
+var _removeEmptyItems = function(arr) {
+  filter(function(x) {return x != ''}, arr)
+}
+
+var replaceIndex = function(arr, index, replacement) {
+  return arr.slice(0, index).concat([replacement]).concat(arr.slice(index + 1, arr.length))
+}
+var transformUtterance = function(transformFn) {
+  return function(utterance) {
+      var tokens = utterance.split(' ')
+      var index = sample(RandomInteger({n:tokens.length}))
+      var replacement = transformFn(index)
+      return _removeEmptyItems(replaceIndex(tokens, index, replacement)).join(' ')
+  }  
+}
+var _deleteFn = function(s) {
+  return ''
+}
+var deleteTransform = transformUtterance(_deleteFn)
+
+var vacuousNoiseModel = function(utterance) {
+  return utterance
+}
+var deleteNoiseModel = mem(function(utterance) {
+  return flip(theta) ? deleteTransform(utterance) : utterance
+})
+
+var decode = mem(function(utteranceProduced, noiseModel) {
+  Infer({
+    model() {
+      var utteranceIntended = utterancesPrior()
+      var noisyUtterance = noiseModel(utteranceIntended, theta)
+      factor(utteranceProduced == noisyUtterance ? 0 : -Infinity)
+      return utteranceIntended
+    }
+  })
+})
+
+
+var L0 = mem(function(producedUtterance) {
+  Infer({
+    model() {
+      var world = worldsPrior()
+      var intendedUtterance = sample(decode(producedUtterance, deleteNoiseModel))
+      var meaning = litMeaning(utteranceMeaning(intendedUtterance), world)
+      factor(meaning ? 0 : -Infinity)
+      return world
+    }
+  })
+})
+
+var S1 = mem(function(world) {
+  Infer({
+    model(){
+      var intendedUtterance = utterancesPrior()
+      var producedUtterance = deleteNoiseModel(intendedUtterance)
+      var L = L0(producedUtterance)
+      factor(alpha * (L.score(world) - cost(intendedUtterance)))
+      return intendedUtterance
+    }
+  })
+})
+
+var L1 = mem(function(producedUtterance) {
+  Infer({
+    model() {
+      var world = worldsPrior()
+      var intendedUtterance = sample(decode(producedUtterance, deleteNoiseModel))
+      var S = S1(world)
+      factor(S.score(intendedUtterance))
+      return world
+    }
+  })
+})
+
+var getModel = function(modelName) {
+  var models = {
+    'L0': L0,
+    'S1': S1,
+    'L1': L1
+  }
+  return models[modelName]
+}
+
+
+var model = getModel(getRData('model'))
+model(input)

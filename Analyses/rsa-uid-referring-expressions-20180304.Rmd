@@ -1,0 +1,171 @@
+---
+title: "rsa-uid-referring-expession-20180304"
+author: "Ben"
+date: "3/4/2018"
+output: html_document
+---
+
+# Contents:
+
+(1) Single run pronoun model
+
+```{r libraries, message=FALSE, warning=FALSE}
+rm(list = ls())  # clear workspace
+
+library(doParallel)
+library(dplyr)
+library(entropy)
+library(gganimate)
+library(ggplot2)
+library(ggthemes)
+library(tidyr)
+library(zoo)
+
+source("run-helpers.R")
+```
+
+```{r getModel}
+fPath <- '/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/rsa-uid-referring-expression-20180304.wppl'
+m <- getModelFile(fPath)
+```
+
+```{r runFn}
+run <- createRunFn(m)
+runFn <- function(i, targetFreq, alt1Freq, alt2Freq, alt3Freq, mumbleFreq, alpha, theta, model, input, inputType) {
+  dTemp <- data.frame(targetFreq=targetFreq, 
+                      alt1Freq=alt1Freq, 
+                      alt2Freq=alt2Freq, 
+                      alt3Freq=alt3Freq, 
+                      mumbleFreq=mumbleFreq, 
+                      alpha=alpha, theta=theta, 
+                      model=model, input=input, inputType=inputType)
+  df <- run(dTemp) %>%
+    mutate(runNum=i, 
+           targetFreq=targetFreq, 
+           alt1Freq=alt1Freq, 
+           alt2Freq=alt2Freq, 
+           alt3Freq=alt3Freq, 
+           mumbleFreq=mumbleFreq, 
+           alpha=alpha, theta=theta, 
+           model=model, input=input, inputType=inputType)
+  df
+}
+```
+
+# Speaker behavior
+```{r run-speaker-test}
+ALPHA <- 4
+THETA <- 0.1
+df_test <- runFn(1, 
+                 targetFreq=1,
+                 alt1Freq=1,
+                 alt2Freq=1,
+                 alt3Freq=1,
+                 mumbleFreq=100,
+                 alpha=ALPHA,
+                 theta=THETA,
+                 model='S1',
+                 input='obj1',
+                 inputType='object')
+```
+```{r plot-speaker-test}
+df_test %>%
+  ggplot(aes(x=support, y=prob)) +
+    geom_bar(stat='identity', position='dodge') +
+    theme_few()
+```
+
+```{r run-speaker-varying-theta-weight}
+ALPHA <- 4
+thetas <- seq(0.1, 0.9, by=0.1)
+targetWeights <- c(1, 2, 4, 8, 16)
+
+df_speaker_agg <- data.frame()
+for (targetWeight in targetWeights) {
+  for (theta in thetas) {
+    cat('\nRunning theta: ', theta, ' targetWeight ', targetWeight)
+    curr_df <- runFn(1, 
+                     targetFreq=targetWeight,
+                     alt1Freq=1,
+                     alt2Freq=1,
+                     alt3Freq=1,
+                     mumbleFreq=100,
+                     alpha=ALPHA,
+                     theta=theta,
+                     model='S1',
+                     input='obj1',
+                     inputType='object')
+    df_speaker_agg <- rbind(df_speaker_agg, curr_df)
+  }
+}
+```
+
+```{r plot}
+df_speaker_agg %>%
+  mutate(support=ifelse(support=='', 'silent', as.character(support))) %>%
+  ggplot(aes(x=theta, y=prob, col=support)) +
+    geom_line() +
+    theme_few() +
+    facet_grid(~targetFreq)
+```
+
+# Listener inferences
+
+Test one listener run
+```{r run-listener-test}
+ALPHA <- 4
+THETA <- 0.1
+df_listener_test <- runFn(1, 
+                 targetFreq=2,
+                 alt1Freq=1,
+                 alt2Freq=1,
+                 alt3Freq=1,
+                 mumbleFreq=100,
+                 alpha=ALPHA,
+                 theta=THETA,
+                 model='L1',
+                 input='pr',
+                 inputType='utterance')
+```
+
+```{r plot-listener-test}
+df_listener_test %>%
+  ggplot(aes(x=d, y=prob)) +
+    geom_bar(stat='identity', position='dodge') +
+    theme_few()
+```
+
+Run listener varying theta and target weight.
+```{r run-listener-varying-theta-weight}
+ALPHA <- 4
+thetas <- seq(0.1, 0.9, by=0.1)
+targetWeights <- c(1, 2, 4, 8, 16)
+
+df_listener_agg <- data.frame()
+for (targetWeight in targetWeights) {
+  for (theta in thetas) {
+    cat('\nRunning theta: ', theta, ' targetWeight ', targetWeight)
+    curr_df <- runFn(1, 
+                     targetFreq=targetWeight,
+                     alt1Freq=1,
+                     alt2Freq=1,
+                     alt3Freq=1,
+                     mumbleFreq=100,
+                     alpha=ALPHA,
+                     theta=theta,
+                     model='L1',
+                     input='pr',
+                     inputType='utterance')
+    df_listener_agg <- rbind(df_listener_agg, curr_df)
+  }
+}
+```
+```{r plot-listener-varying-theta-weight}
+df_listener_agg %>%
+  ggplot(aes(x=theta, y=prob, col=d)) +
+    geom_line(size=2, alpha=0.75) +
+    theme_few() +
+    facet_grid(~targetFreq)
+```
+
+
