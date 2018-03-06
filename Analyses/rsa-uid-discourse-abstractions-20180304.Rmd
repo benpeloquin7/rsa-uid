@@ -7,7 +7,8 @@ output: html_document
 
 # Contents:
 
-(1) Single run discourse abstractions model
+(1) Single run discourse abstractions model.
+(2) Bootstrapped simulations.
 
 
 ```{r libraries, message=FALSE, warning=FALSE}
@@ -25,11 +26,13 @@ library(zoo)
 source("run-helpers.R")
 ```
 
+Load model.
 ```{r getModel}
 fPath <- '/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/discourse/rsa-uid-discourse-abstraction-20180304.wppl'
 m <- getModelFile(fPath)
 ```
 
+Setup.
 ```{r runFn}
 run <- createRunFn(m)
 runFn <- function(i, targetDistr, nUtterances, resultType, alpha) {
@@ -42,7 +45,7 @@ runFn <- function(i, targetDistr, nUtterances, resultType, alpha) {
 
 # (1) Single run models
 
-Run functions.
+Single model runs -- contrast `contexUnawareS2` and `contextAwareS2`.
 ```{r singleRun}
 ALPHA <- 10
 TOPIC <- 'T1'
@@ -80,6 +83,7 @@ Convergence plots by speaker type.
 #     facet_grid(~resultType)
 ```
 
+S2 speaker more likely to use ambiguous utterance `x` when listener is confident in the (correct) topic.
 ```{r}
 df_agg %>%
   mutate(xHere=ifelse(utterance == 'x', 1, 0)) %>%
@@ -90,6 +94,10 @@ df_agg %>%
     facet_grid(~resultType)
 ```
 
+
+# (2) Bootstrapped simulations.
+
+Run sims.
 ```{r run-sims}
 nSims <- 100
 
@@ -115,6 +123,7 @@ cat("runtime: ", etm[3] / 60)
 #                              binSize=1)
 ```
 
+Plot utterances along listener posterior probabilyt of (correct) topic. We expect more red (and yellow) points in later positions.
 ```{r plot-sims}
 sims %>%
   mutate(`P(Topic|Utterances)`=ifelse(utterance=='x', 0.5, ifelse(utterance=='y', 0.75, 0)),
@@ -129,6 +138,7 @@ sims %>%
     theme(plot.title=element_text(hjust = 0.5))
 ```
 
+Empirical probability of ambiguous utterance as a function of utterance position.
 ```{r}
 sims %>%
   mutate(isX=utterance=='x',

@@ -6,11 +6,16 @@
 //   'targetDistr': 'T1'
 // }]
 
+
+// getRData
+// ========
+// Get data passed from R. See corresponding runFn in .rmd
+//
 var getRData = function(key) {
   return rData[0][key]
 }
 
-
+// Env data
 var nUtterances = getRData('nUtterances')
 var resultType = getRData('resultType')
 var alpha = getRData('alpha')
@@ -90,9 +95,9 @@ var utteranceMeaning = function(utterance) {
     return 'c'
   } else if (utterance.includes('d')) {
     return 'd'
-  } else if (utterance.includes('x')) {
+  } else if (utterance.includes('x')) { // x is ambiguous between 'a' and 'd'
     return uniformDraw(['a', 'd'])
-  } else if (utterance.includes('y')) {
+  } else if (utterance.includes('y')) { // y is ambiguous between 'a' and 'd'
     return uniformDraw(['b', 'c'])
   }
   else {
@@ -120,12 +125,6 @@ var sampleWorldFromTopic = function(topicName) {
   }
 }
 
-var utteranceMaker = function(topicDistrName) {
-  var world = sampleWorldFromTopic(topicDistrName)
-  var utterance = utterancesPrior()
-  return utterance
-}
-
 var cost = function(utterance) {
   var costs = {
     'a': 0.2,
@@ -139,47 +138,8 @@ var cost = function(utterance) {
 }
 
 //
-// Noise
+// RSA agents
 //
-var _removeEmptyItems = function(arr) {
-  filter(function(x) {return x != ''}, arr)
-}
-
-var replaceIndex = function(arr, index, replacement) {
-  return arr.slice(0, index).concat([replacement]).concat(arr.slice(index + 1, arr.length))
-}
-var transformUtterance = function(transformFn) {
-  return function(utterance) {
-      var tokens = utterance.split(' ')
-      var index = sample(RandomInteger({n:tokens.length}))
-      var replacement = transformFn(index)
-      return _removeEmptyItems(replaceIndex(tokens, index, replacement)).join(' ')
-  }  
-}
-var _deleteFn = function(s) {
-  return ''
-}
-var deleteTransform = transformUtterance(_deleteFn)
-
-var vacuousNoiseModel = function(utterance) {
-  return utterance
-}
-var deleteNoiseModel = function(utterance) {
-  return flip(theta) ? deleteTransform(utterance) : utterance
-}
-
-var decode = cache(function(utteranceProduced, noiseModel) {
-  Infer({
-    model() {
-      var utteranceIntended = utterancesPrior()
-      var noisyUtterance = noiseModel(utteranceIntended, theta)
-      factor(utteranceProduced == noisyUtterance ? 0 : -Infinity)
-      return utteranceIntended
-    }
-  })
-})
-
-
 var L0 = cache(function(utterance) {
   Infer({
     model() {
@@ -202,6 +162,12 @@ var S1 = cache(function(world) {
   })
 })
 
+// listenerTopicDistrPosterior
+// ===========================
+// Get posterior probability over topics given data (utterances)
+// Note (BP): this function can be problematic when sampling
+// from S1 is exponential in the number of utterances.
+//
 var listenerTopicDistrPosterior = cache(function(observedData) {
   return Infer({method: 'enumerate'}, function() {
     var topicDistrName = topicNamesPrior()
@@ -235,19 +201,6 @@ var L1 = cache(function(utterance, data) {
   })
 })
 
-// S2
-// ==
-// S2 speaker samples utterance given topic
-// 
-// Paramters
-// ----------
-// T: str
-//    topic.
-// 
-// Returns
-// -------
-// utterance
-//
 var S2 = cache(function(T, data) {
   Infer({
     model() {
@@ -329,7 +282,7 @@ var getListenerInferences = function(utterances) {
 // processUtterances
 // =================
 // Return a list of dictionaries containing speaker utterance data
-// and corresponding state of listener inferences about topics
+// and corresponding state of listener inferences about topics.
 //
 var processUtterances = function(speakerData, listenerInferences) {
   var dMap = map(function(x) {
@@ -346,7 +299,7 @@ var processUtterances = function(speakerData, listenerInferences) {
 
 // runFn
 // =====
-// Return data of speaker utterances / listener inferences
+// Return data of speaker utterances / listener inferences.
 //
 // Parameters
 // ----------
@@ -383,4 +336,8 @@ var runFn = function(resultType, runReverse) {
   }
 }
 
+
+// 
+// run
+//
 runFn(resultType)
