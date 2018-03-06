@@ -97,7 +97,7 @@ var utteranceMeaning = function(utterance) {
     return 'd'
   } else if (utterance.includes('x')) { // x is ambiguous between 'a' and 'd'
     return uniformDraw(['a', 'd'])
-  } else if (utterance.includes('y')) { // y is ambiguous between 'a' and 'd'
+  } else if (utterance.includes('y')) { // y is ambiguous between 'b' and 'c'
     return uniformDraw(['b', 'c'])
   }
   else {
