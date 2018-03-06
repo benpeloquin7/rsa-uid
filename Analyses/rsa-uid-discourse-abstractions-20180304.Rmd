@@ -1,0 +1,167 @@
+---
+title: "rsa-uid-discourse-abstractions-20180304"
+author: "Ben"
+date: "3/4/2018"
+output: html_document
+---
+
+# Contents:
+
+(1) Single run discourse abstractions model
+
+
+```{r libraries, message=FALSE, warning=FALSE}
+rm(list = ls())  # clear workspace
+
+library(doParallel)
+library(dplyr)
+library(entropy)
+library(gganimate)
+library(ggplot2)
+library(ggthemes)
+library(tidyr)
+library(zoo)
+
+source("run-helpers.R")
+```
+
+```{r getModel}
+fPath <- '/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/discourse/rsa-uid-discourse-abstraction-20180304.wppl'
+m <- getModelFile(fPath)
+```
+
+```{r runFn}
+run <- createRunFn(m)
+runFn <- function(i, targetDistr, nUtterances, resultType, alpha) {
+  dTemp <- data.frame(targetDistr=targetDistr, nUtterances=nUtterances, resultType=resultType, alpha=alpha)
+  df <- run(dTemp) %>%
+    mutate(runNum=i, targetDistr=targetDistr, alpha=alpha, resultType=resultType)
+  df
+}
+```
+
+# (1) Single run models
+
+Run functions.
+```{r singleRun}
+ALPHA <- 10
+TOPIC <- 'T1'
+NUM_UTTERANCES <- 50
+# TODO (BP): This needs to be fixed...
+# df_baseline <- runFn(1, 
+#                      targetDistr=TOPIC, 
+#                      nUtterances=NUM_UTTERANCES, 
+#                      resultType='baseline', 
+#                      alpha=ALPHA)
+df_contextUnawareS2 <- runFn(1,
+                            targetDistr=TOPIC,
+                            nUtterances=NUM_UTTERANCES,
+                            resultType='contextUnawareS2',
+                            alpha=ALPHA)
+df_contextAwareS2 <- runFn(1, 
+                           targetDistr=TOPIC, 
+                           nUtterances=NUM_UTTERANCES, 
+                           resultType='contextAwareS2', 
+                           alpha=ALPHA)
+
+df_agg <- rbind(df_contextUnawareS2, df_contextAwareS2)
+# df_agg <- rbind(df_baseline, df_contextUnwareS2, df_contextAwareS2)
+```
+
+Convergence plots by speaker type.
+```{r listenerInferencePlot}
+# df_agg %>% 
+#   gather(topic, listenerTopicPosterior, c(T1, T2, T3, T4)) %>%
+#   mutate(topic=ifelse(topic==TOPIC, 'target', topic)) %>%
+#   ggplot(aes(x=utteranceNum, y=listenerTopicPosterior, col=topic)) +
+#     geom_line() +
+#     # geom_vline(data=df_agg %>% select(resultType, pos) %>% unique, aes(xintercept=pos), lty=2)+
+#     theme_few() +
+#     facet_grid(~resultType)
+```
+
+```{r}
+df_agg %>%
+  mutate(xHere=ifelse(utterance == 'x', 1, 0)) %>%
+  ggplot(aes(x=utteranceNum, y=xHere)) +
+    geom_jitter(alpha=0.75, height=0.05, width=0, aes(col=utterance), size=2) +
+    geom_line(aes(x=utteranceNum, y=T1)) +
+    theme_few() +
+    facet_grid(~resultType)
+```
+
+```{r run-sims}
+nSims <- 100
+
+# Parallelization setup
+no_cores <- detectCores() - 1
+cl <- makeCluster(no_cores, type='FORK')
+registerDoParallel(cl)
+
+# Run sims
+ptm <- proc.time()
+sims <- foreach(i=seq(1, nSims), .packages=c('dplyr', 'rwebppl'), .combine=rbind) %dopar% 
+  runFn(i, targetDistr='T1', nUtterances=NUM_UTTERANCES, resultType='contextAwareS2', alpha=ALPHA)
+stopCluster(cl)
+etm <- proc.time() - ptm
+cat("runtime: ", etm[3] / 60)
+
+# df_par <- runParVaryingAlpha(runFn=runFn,
+#                              targetDistr='T1',
+#                              resultType='contextAwareS2',
+#                              nUtterances=30,
+#                              nSims=25,
+#                              alpha=ALPHA,
+#                              binSize=1)
+```
+
+```{r plot-sims}
+sims %>%
+  mutate(`P(Topic|Utterances)`=ifelse(utterance=='x', 0.5, ifelse(utterance=='y', 0.75, 0)),
+         utterance=ifelse(utterance=='x', '[a, d]', ifelse(utterance=='y', '[b, c]', utterance))) %>%
+  ggplot(aes(x=utteranceNum, y=`P(Topic|Utterances)`)) +
+    geom_smooth(method='loess', aes(y=T1)) +
+    geom_jitter(aes(col=utterance), width=0.5, height=0.1, alpha=0.25, size=2) +
+    ylab("Listener posterior probability of target topic") +
+    xlab("Utterance position") +
+    ggtitle("S2 production (points) and listener topic inference (line)\nn=100 simulations") +
+    theme_few() +
+    theme(plot.title=element_text(hjust = 0.5))
+```
+
+```{r}
+sims %>%
+  mutate(isX=utterance=='x',
+         isA=utterance=='a',
+         isB=utterance=='b') %>%
+  group_by(utteranceNum) %>%
+  summarise(n=n(),
+            numX=sum(isX),
+            probX=numX/n,
+            stdX=sqrt(probX*(1-probX)/n),
+            numA=sum(isA),
+            probA=numA/n,
+            stdA=sqrt(probA*(1-probA)/n),
+            numB=sum(isB),
+            probB=numB/n,
+            stdB=sqrt(probB*(1-probB)/n),
+            avgT1=mean(T1),
+            avgT2=mean(T2),
+            avgT3=mean(T3),
+            avgT4=mean(T4)) %>%
+  # Check relations to other utterances here:
+  # gather(type, val, c(probX, probA, probB)) %>%
+  # ggplot(aes(x=utteranceNum, y=val, col=type)) +
+  ggplot(aes(x=utteranceNum, y=probX)) +
+    # geom_smooth(aes(y=avgT1), col='red', alpha=0.2) +
+    # geom_smooth(aes(y=avgT2), col='green', alpha=0.2) +
+    geom_point(size=2, alpha=0.75) +
+    geom_smooth(method='loess', alpha=0.5, col='blue') +
+    geom_errorbar(aes(ymin=probX-2*stdX, ymax=probX+2*stdX), alpha=0.5, width=0) +
+    ylab("Empirical probability") +
+    xlab("Utterance position") +
+    ggtitle("Empirical probability S2 uses ambiguous utterance\nn=100 simulations") +
+    theme_few() +
+    theme(plot.title=element_text(hjust = 0.5))
+```
+

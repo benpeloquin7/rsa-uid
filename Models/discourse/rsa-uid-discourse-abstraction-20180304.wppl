@@ -1,9 +1,7 @@
-// Globals
-
 // var rData = [{
-//   'nUtterances': 100,
-//   'resultType': 'baseline',
-//   'alpha': 10,
+//   'nUtterances': 2,
+//   'resultType': 'contextAwareS2',
+//   'alpha': 4,
 //   'theta': 0.1,
 //   'targetDistr': 'T1'
 // }]
@@ -21,7 +19,7 @@ var targetDistr = getRData('targetDistr')
 
 // Topics
 var topicNames = ['T1', 'T2', 'T3', 'T4']
-var topicNamesDistr = Categorical({vs:topicNames, ps:[1, 1, 1, 1]})
+var topicNamesDistr = Categorical({vs:topicNames, ps:[0.1, 1, 1, 1]})
 var topicNamesPrior = function() { 
   return sample(topicNamesDistr)
 }
@@ -55,8 +53,8 @@ var utterancesPrior = function() {return sample(utterancesDistr)}
 // Scenario 4: expanded set
 var T1 = Categorical({vs:worlds, ps:[0.6, 0.25, 0.15, 0.1]})
 var T2 = Categorical({vs:worlds, ps:[0.6, 0.15, 0.25, 0.1]}) 
-var T3 = Categorical({vs:worlds, ps:[0.25, 0.6, 0.15, 0.1]})
-var T4 = Categorical({vs:worlds, ps:[0.25, 0.1, 0.15, 0.6]})
+var T3 = Categorical({vs:worlds, ps:[0.1, 0.15, 0.25, 0.6]})
+var T4 = Categorical({vs:worlds, ps:[0.1, 0.25, 0.15, 0.6]})
 
 // Scenario 5: Equillibrium1
 //var T1 = Categorical({vs:worlds, ps:[0.33, 0.33, 0.33]})
@@ -93,9 +91,9 @@ var utteranceMeaning = function(utterance) {
   } else if (utterance.includes('d')) {
     return 'd'
   } else if (utterance.includes('x')) {
-    return uniformDraw(['a', 'b'])
+    return uniformDraw(['a', 'd'])
   } else if (utterance.includes('y')) {
-    return uniformDraw(['c', 'd'])
+    return uniformDraw(['b', 'c'])
   }
   else {
     console.log("Error on", utterance)
@@ -130,14 +128,14 @@ var utteranceMaker = function(topicDistrName) {
 
 var cost = function(utterance) {
   var costs = {
-    'a': 2,
-    'b': 2,
-    'c': 2,
-    'd': 2,
-    'x': 0.1,
-    'y': 0.1
+    'a': 0.2,
+    'b': 0.2,
+    'c': 0.2,
+    'd': 0.2,
+    'x': 0.18,
+    'y': 0.18
   }
-  return utterance.split(' ').length
+  return costs[utterance]
 }
 
 //
@@ -198,7 +196,7 @@ var S1 = cache(function(world) {
     model(){
       var utterance = utterancesPrior()
       var L = L0(utterance)
-      factor(alpha * L.score(world))
+      factor(alpha * (L.score(world) - cost(utterance)))
       return utterance
     }
   })
@@ -366,17 +364,17 @@ var runFn = function(resultType, runReverse) {
     return processUtterances(utteranceList, listenerInferences)
   } 
   else if (resultType == 'contextUnawareS2') {
-    var utteranceList = repeat(nUtterances, function(x) { sample(S2(targetDistr, []))['utterance']})
+    var utteranceList = repeat(nUtterances, function(x) { sample(S2(targetDistr, []))['utterance'] })
     var listenerInferences = getListenerInferences(utteranceList)
     return processUtterances(utteranceList, listenerInferences)
   } 
   else if (resultType == 'S1') {
-    var utteranceList = repeat(nUtterances, (function(x) { return sample(S1(targetDistr))}))
+    var utteranceList = repeat(nUtterances, (function(x) { return sample(S1(targetDistr)) }))
     var listenerInferences = getListenerInferences(utteranceList)
     return processUtterances(utteranceList, listenerInferences)
   }
   else if (resultType == 'baseline') {
-    var utteranceList = repeat(nUtterances, (function(x) {utterancesPrior()}))
+    var utteranceList = repeat(nUtterances, (function(x) { utterancesPrior() }))
     var listenerInferences = getListenerInferences(utteranceList)
     return processUtterances(utteranceList, listenerInferences)
   } 
