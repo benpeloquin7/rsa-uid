@@ -163,8 +163,8 @@ var cost = function(utterance) {
     'b': 0.2,
     'c': 0.2,
     'd': 0.2,
-    'x': 0.18,
-    'y': 0.18
+    'x': 0.15,
+    'y': 0.15
   }
   return costs[utterance]
 }
@@ -200,18 +200,18 @@ var S1 = cache(function(world) {
 // Note (BP): this function can be problematic when sampling
 // from S1 is exponential in the number of utterances.
 //
-var listenerTopicDistrPosterior = cache(function(observedData) {
-  return Infer({method: 'enumerate'}, function() {
-    var topicDistrName = topicNamesPrior()
-    if (observedData != []) {
-      var obsFn = function(datum){
-        var world = sampleWorldFromTopic(topicDistrName)()
-        condition(datum == sample(S1(world)))}
-      mapData({data: observedData}, obsFn)
-    }
-    return topicDistrName
-  })
-})
+// var listenerTopicDistrPosterior = cache(function(observedData) {
+//   return Infer({method: 'enumerate'}, function() {
+//     var topicDistrName = topicNamesPrior()
+//     if (observedData != []) {
+//       var obsFn = function(datum){
+//         var world = sampleWorldFromTopic(topicDistrName)()
+//         condition(datum == sample(S1(world)))}
+//       mapData({data: observedData}, obsFn)
+//     }
+//     return topicDistrName
+//   })
+// })
 
 
 var incrementIndex = function(li, targetI) {
@@ -240,7 +240,7 @@ var updateParams = function(oldParams, currentTopic) {
 
 var listenerTopicDistrPosteriorConjugate = cache(function(utterance, oldParams) {
   return Infer({method: 'enumerate'}, function() {
-    var topicDistrName = sample(Categorical({vs: topicNames, ps:oldParams}))
+    var topicDistrName = sample(Categorical({vs:topicNames, ps:oldParams}))
     var world = sampleWorldFromTopic(topicDistrName)()
     condition(utterance == sample(S1(world)))
     return topicDistrName
@@ -253,22 +253,21 @@ var L1 = cache(function(utterance, data, oldParams) {
     model() {
       // Sample a topic distr given prev utterances (data).
       // Given previous evidence what topic are we in (including current utterance)
-      var estTopicDistr = listenerTopicDistrPosteriorConjugate(utterance, oldParams)
+      // var estTopicDistr = listenerTopicDistrPosteriorConjugate(utterance, oldParams)
       // Sample a topic
-      var estTopicName = sample(estTopicDistr) 
+      var estTopicName = sample(Categorical({vs:topicNames, ps:oldParams}))
+      // var estTopicName = sample(estTopicDistr) 
       // Update topic distr
-      var updatedParams = updateParams(oldParams, estTopicName)
+      // var updatedParams = updateParams(oldParams, estTopicName)
       // Sample a world
       var estWorld = sampleWorldFromTopic(estTopicName)()
-
       var S = S1(estWorld)
       // Alternatively, continue the speaker reasoning here -- I tend to like this a little more
       // Than the litera meaning factorization.
       // factor(S.score(utterance))
       factor(S.score(utterance))
       // Listener jointly reasons about (meaning, topic)
-      return {'estWorld': estWorld, 
-              'estTopicDistrName': estTopicName}
+      return {'estWorld': estWorld, 'estTopicDistrName': estTopicName}
     }
   })
 })
@@ -276,16 +275,18 @@ var L1 = cache(function(utterance, data, oldParams) {
 var S2 = cache(function(world, T, data, oldParams) {
   Infer({
     model() {
-      var world = sampleWorldFromTopic(T)()
+      // var world = sampleWorldFromTopic(T)()
       var utterance = utterancesPrior()
       var L = L1(utterance, data, oldParams)
+      // var listenerSampledTopic = sample(marginalize(L, function(x) {
+      //   return x['estTopicDistrName']
+      // }))
+      // Here speaker wants to update what they beliebe are the 
+      // listener topic distr params.
+      // var listenerSampledTopic = sample(L)["estTopicDistrName"]
+      // var updatedParams = updateParams(oldParams, listenerSampledTopic)
       factor(alpha * (L.score({'estWorld': world, 'estTopicDistrName': T}) - cost(utterance)))
-      var listenerSampledTopic = sample(marginalize(L, function(x) {
-        return x['estTopicDistrName']
-      }))
-      var updatedParams = updateParams(oldParams, listenerSampledTopic)
-      return {'utterance': utterance,
-              'updatedParams': updatedParams}
+      return {'utterance': utterance}
     }
   })
 })
@@ -302,7 +303,11 @@ var speakerFn = cache(function(T, d, params) {
   var utterance = currSpeakerSample['utterance']
   // Note that udpatedParams is literally updated, not stored as is
   // utterances. That is because we want to accumulate data w.r.t the topics.
-  var updatedParams = currSpeakerSample['updatedParams']
+  // var updatedParams = currSpeakerSample['updatedParams']
+
+  // Here!!!!+!
+  var topic = sample(listenerTopicDistrPosteriorConjugate(utterance, params))
+  var updatedParams = updateParams(params, topic)
   return {'utterances':d.concat([utterance]), 
           'updatedParams':updatedParams}
 })

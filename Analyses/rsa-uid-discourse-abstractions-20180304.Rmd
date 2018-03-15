@@ -47,9 +47,9 @@ runFn <- function(i, targetDistr, nUtterances, resultType, alpha) {
 
 Single model runs -- contrast `contexUnawareS2` and `contextAwareS2`.
 ```{r singleRun}
-ALPHA <- 10
+ALPHA <- 6
 TOPIC <- 'T1'
-NUM_UTTERANCES <- 100
+NUM_UTTERANCES <- 200
 # TODO (BP): This needs to be fixed...
 # df_baseline <- runFn(1, 
 #                      targetDistr=TOPIC, 
@@ -71,25 +71,19 @@ df_agg <- rbind(df_contextUnawareS2, df_contextAwareS2)
 # df_agg <- rbind(df_baseline, df_contextUnwareS2, df_contextAwareS2)
 ```
 
-Convergence plots by speaker type.
-```{r listenerInferencePlot}
-# df_agg %>% 
-#   gather(topic, listenerTopicPosterior, c(T1, T2, T3, T4)) %>%
-#   mutate(topic=ifelse(topic==TOPIC, 'target', topic)) %>%
-#   ggplot(aes(x=utteranceNum, y=listenerTopicPosterior, col=topic)) +
-#     geom_line() +
-#     # geom_vline(data=df_agg %>% select(resultType, pos) %>% unique, aes(xintercept=pos), lty=2)+
-#     theme_few() +
-#     facet_grid(~resultType)
-```
 
 S2 speaker more likely to use ambiguous utterance `x` when listener is confident in the (correct) topic.
 ```{r}
 df_agg %>%
-  mutate(xHere=ifelse(utterance == 'x', 1, 0)) %>%
-  ggplot(aes(x=utteranceNum, y=xHere)) +
-    geom_jitter(alpha=0.75, height=0.05, width=0, aes(col=utterance), size=2) +
-    geom_line(aes(x=utteranceNum, y=T1)) +
+  mutate(xHere=ifelse(utterance == 'x', 1, 0),
+         yHere=ifelse(utterance == 'y', 0.5, 0)) %>%
+  gather(utteranceLoc, val, c(xHere, yHere)) %>%
+  ggplot(aes(x=utteranceNum, y=val)) +
+    geom_jitter(alpha=0.50, height=0.1, width=0, aes(col=utterance), size=2) +
+    geom_line(aes(x=utteranceNum, y=T1), col='blue') +
+    geom_line(aes(x=utteranceNum, y=T2), col='red') +
+    geom_line(aes(x=utteranceNum, y=T3), col='green') +
+    geom_line(aes(x=utteranceNum, y=T4), col='purple') +
     theme_few() +
     facet_grid(~resultType)
 ```
@@ -167,7 +161,7 @@ sims %>%
   ggplot(aes(x=utteranceNum, y=probX)) +
     # geom_smooth(aes(y=avgT1), col='red', alpha=0.2) +
     # geom_smooth(aes(y=avgT2), col='green', alpha=0.2) +
-    geom_point(size=2, alpha=0.75) +
+    geom_jitter(size=2, alpha=0.75, width=2, height=0) +
     geom_smooth(method='lm', alpha=0.5, col='blue') +
     geom_errorbar(aes(ymin=probX-2*stdX, ymax=probX+2*stdX), alpha=0.5, width=0) +
     ylab("Empirical probability") +
@@ -179,8 +173,8 @@ sims %>%
 
 Check proportions
 ```{r plot-proportions-contextAwareS2-vs-baseline-alpha20-compare}
-binSize=20
-df_binned <- addUtteranceBins(sims, nUtterances=NUM_UTTERANCES, binSize=20)
+binSize=10
+df_binned <- addUtteranceBins(sims, nUtterances=NUM_UTTERANCES, binSize=binSize)
 df_filled <- fillUtteranceProportions(df_binned, binSize)
 ```
 
@@ -203,14 +197,9 @@ df_filled %>%
   group_by(resultType, runNum, binVal) %>%
   summarise(entropy=entropy::entropy(norm_(n), unit=c('log2'))) %>%
   ggplot(aes(x=binVal, y=entropy)) +
-    geom_point() +
-    geom_smooth(method='loess') +
+    geom_smooth(method='lm') +
+    # geom_smooth(method='lm') +
     # geom_jitter(alpha=0.2, width=0.05, height=0) +
     theme_few()
 ```
-
-```{r}
-
-```
-
 
