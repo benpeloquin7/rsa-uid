@@ -28,7 +28,7 @@ source("run-helpers.R")
 
 Load model.
 ```{r getModel}
-fPath <- '/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/discourse/rsa-uid-discourse-abstraction-20180304.wppl'
+fPath <- '/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/discourse/rsa-uid-discourse-abstractions-conjugate-updates-20180314.wppl'
 m <- getModelFile(fPath)
 ```
 
@@ -49,7 +49,7 @@ Single model runs -- contrast `contexUnawareS2` and `contextAwareS2`.
 ```{r singleRun}
 ALPHA <- 10
 TOPIC <- 'T1'
-NUM_UTTERANCES <- 50
+NUM_UTTERANCES <- 100
 # TODO (BP): This needs to be fixed...
 # df_baseline <- runFn(1, 
 #                      targetDistr=TOPIC, 
@@ -98,6 +98,8 @@ df_agg %>%
 # (2) Bootstrapped simulations.
 
 Run sims.
+
+Note: This simulation is now quite slow running taking around 60min to run `100` sims of `75` utterances.
 ```{r run-sims}
 nSims <- 100
 
@@ -166,7 +168,7 @@ sims %>%
     # geom_smooth(aes(y=avgT1), col='red', alpha=0.2) +
     # geom_smooth(aes(y=avgT2), col='green', alpha=0.2) +
     geom_point(size=2, alpha=0.75) +
-    geom_smooth(method='loess', alpha=0.5, col='blue') +
+    geom_smooth(method='lm', alpha=0.5, col='blue') +
     geom_errorbar(aes(ymin=probX-2*stdX, ymax=probX+2*stdX), alpha=0.5, width=0) +
     ylab("Empirical probability") +
     xlab("Utterance position") +
@@ -174,4 +176,41 @@ sims %>%
     theme_few() +
     theme(plot.title=element_text(hjust = 0.5))
 ```
+
+Check proportions
+```{r plot-proportions-contextAwareS2-vs-baseline-alpha20-compare}
+binSize=20
+df_binned <- addUtteranceBins(sims, nUtterances=NUM_UTTERANCES, binSize=20)
+df_filled <- fillUtteranceProportions(df_binned, binSize)
+```
+
+
+```{r}
+df_filled %>% 
+  filter(runNum %in% seq(1, 5)) %>%
+  ggplot(aes(x=binVal, y=prop, fill=utterance)) +
+    # geom_vline(data=df_agg %>% select(resultType, posBin) %>% unique, aes(xintercept=posBin), lty=2) +
+    geom_bar(stat='identity', alpha=0.5) +
+    facet_grid(~resultType) +
+    theme_few() +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+    facet_wrap(~runNum)
+```
+
+
+```{r}
+df_filled %>%
+  group_by(resultType, runNum, binVal) %>%
+  summarise(entropy=entropy::entropy(norm_(n), unit=c('log2'))) %>%
+  ggplot(aes(x=binVal, y=entropy)) +
+    geom_point() +
+    geom_smooth(method='loess') +
+    # geom_jitter(alpha=0.2, width=0.05, height=0) +
+    theme_few()
+```
+
+```{r}
+
+```
+
 

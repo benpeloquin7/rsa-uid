@@ -1,10 +1,10 @@
-var rData = [{
-  'nUtterances': 20,
-  'resultType': 'contextAwareS2',
-  'alpha': 4,
-  'theta': 0.1,
-  'targetDistr': 'T1'
-}]
+// var rData = [{
+//   'nUtterances': 20,
+//   'resultType': 'contextAwareS2',
+//   'alpha': 4,
+//   'theta': 0.1,
+//   'targetDistr': 'T1'
+// }]
 
 
 //
@@ -377,7 +377,7 @@ var runFn = function(resultType) {
   else if (resultType == 'contextUnawareS2') {
     var utteranceList = repeat(nUtterances, function(x) { 
       var world = sampleWorldFromTopic(targetDistr)()
-      sample(S2(world, targetDistr, []))['utterance'] })
+      sample(S2(world, targetDistr, [], topicInitWeights))['utterance'] })
     var listenerInferences = getListenerInferences(utteranceList)
     return processUtterances(utteranceList, listenerInferences)
   } 
