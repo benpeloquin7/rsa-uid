@@ -1,11 +1,10 @@
 // var rData = [{
-//   'nUtterances': 20,
+//   'nUtterances': 50,
 //   'resultType': 'contextAwareS2',
-//   'alpha': 4,
+//   'alpha': 10,
 //   'theta': 0.1,
 //   'targetDistr': 'T1'
 // }]
-
 
 //
 // Helpers
@@ -84,10 +83,15 @@ var utterancesPrior = function() {return sample(utterancesDistr)}
 //var T3 = Categorical({vs:worlds, ps:[0.7, 0.20, 0.10]})
 
 // Scenario 4: expanded set
+// var T1 = Categorical({vs:worlds, ps:[0.6, 0.25, 0.15, 0.1]})
+// var T2 = Categorical({vs:worlds, ps:[0.6, 0.15, 0.25, 0.1]}) 
+// var T3 = Categorical({vs:worlds, ps:[0.1, 0.15, 0.25, 0.6]})
+// var T4 = Categorical({vs:worlds, ps:[0.1, 0.25, 0.15, 0.6]})
+
 var T1 = Categorical({vs:worlds, ps:[0.6, 0.25, 0.15, 0.1]})
-var T2 = Categorical({vs:worlds, ps:[0.6, 0.15, 0.25, 0.1]}) 
-var T3 = Categorical({vs:worlds, ps:[0.1, 0.15, 0.25, 0.6]})
-var T4 = Categorical({vs:worlds, ps:[0.1, 0.25, 0.15, 0.6]})
+var T2 = Categorical({vs:worlds, ps:[0.25, 0.15, 0.1, 0.6]}) 
+var T3 = Categorical({vs:worlds, ps:[0.15, 0.1, 0.6, 0.25]})
+var T4 = Categorical({vs:worlds, ps:[0.1, 0.6, 0.25, 0.15]})
 
 // Scenario 5: Equillibrium1
 //var T1 = Categorical({vs:worlds, ps:[0.33, 0.33, 0.33]})
@@ -159,8 +163,8 @@ var cost = function(utterance) {
     'b': 0.2,
     'c': 0.2,
     'd': 0.2,
-    'x': 0.10,
-    'y': 0.10
+    'x': 0.18,
+    'y': 0.18
   }
   return costs[utterance]
 }
@@ -229,18 +233,16 @@ var updateParams = function(oldParams, currentTopic) {
     'T4': 3,
   }
   var updateIndex = topicIndices[currentTopic]
-//   var newVs = oldDistr['params']['vs']
-//   var oldPs = oldDistr['params']['ps']
   var newPs = incrementIndex(oldParams, updateIndex)
   return newPs
 }
 
 
-var listenerTopicDistrPosteriorConjugate = cache(function(newData, oldParams) {
+var listenerTopicDistrPosteriorConjugate = cache(function(utterance, oldParams) {
   return Infer({method: 'enumerate'}, function() {
     var topicDistrName = sample(Categorical({vs: topicNames, ps:oldParams}))
     var world = sampleWorldFromTopic(topicDistrName)()
-    condition(newData == sample(S1(world)))
+    condition(utterance == sample(S1(world)))
     return topicDistrName
   })
 })
@@ -274,7 +276,7 @@ var L1 = cache(function(utterance, data, oldParams) {
 var S2 = cache(function(world, T, data, oldParams) {
   Infer({
     model() {
-      // var world = sampleWorldFromTopic(T)()
+      var world = sampleWorldFromTopic(T)()
       var utterance = utterancesPrior()
       var L = L1(utterance, data, oldParams)
       factor(alpha * (L.score({'estWorld': world, 'estTopicDistrName': T}) - cost(utterance)))
@@ -283,7 +285,7 @@ var S2 = cache(function(world, T, data, oldParams) {
       }))
       var updatedParams = updateParams(oldParams, listenerSampledTopic)
       return {'utterance': utterance,
-             'updatedParams': updatedParams}
+              'updatedParams': updatedParams}
     }
   })
 })
@@ -298,6 +300,8 @@ var speakerFn = cache(function(T, d, params) {
   var world = sampleWorldFromTopic(T)()
   var currSpeakerSample = sample(S2(world, T, d, params))
   var utterance = currSpeakerSample['utterance']
+  // Note that udpatedParams is literally updated, not stored as is
+  // utterances. That is because we want to accumulate data w.r.t the topics.
   var updatedParams = currSpeakerSample['updatedParams']
   return {'utterances':d.concat([utterance]), 
           'updatedParams':updatedParams}
@@ -320,6 +324,75 @@ var dataSizes = getDataSizes(nUtterances)
 // A context slice is the size of the preceding words (e.g. 0-3, 0-10, 0-n)
 var contextSlices = map(function(x) {return [0, x]}, dataSizes)
 
+
+// recurseUpdates
+// ==============
+// Given a vector of utterances and initial weights update topic counts.
+// Since we need to update the counts online this is recursive function operating
+// over the utterances.
+// Parameters
+// ----------
+// utterances: list of chars
+//   Utterances produced by speaker.
+// weights: list of lists of ints
+//    List of weight lists for each topic.
+//    Note that a sanity check is that the sum of each succesive
+//    weight vector should increse by one.
+// 
+// Returns
+// -------
+// list of lists
+//   Each sublist is of size num topics and contains the 
+//   incremented counts.
+//
+var recurseTopicWeightUpdates = function(utterances, weights) {
+  var currWeights = weights[weights.length-1]
+  var currUtterance = utterances[0]
+  var updatedParams = updateTopicWeights(currUtterance, currWeights)
+  var updatedWeights = weights.concat([updatedParams])
+  if (utterances.length == 1) {
+    return updatedWeights
+  } 
+  var remainingUtterances = utterances.slice(1, utterances.length)
+  return recurseTopicWeightUpdates(remainingUtterances, updatedWeights)
+}
+// var utterances = ['a', 'c', 'd', 'a', 'a', 'b'] 
+// var d = [topicInitWeights]
+// var weights = recurseTopicWeightUpdates(utterances, d)
+
+
+// getListenerInferencesConjugate
+// ==============================
+// Given a list of utterances make sequential updates to listener topic
+// posterior.
+// 
+// Parameters
+// ----------
+// utterances : list of chars
+//   Vector of utterances.
+// initialWeights: list of ints
+//   Prior over topic counts.
+// 
+// Returns
+// -------
+// List of dicst
+//   Each key is a topic, each value the posterior probability of that topic.
+//
+var getListenerInferencesConjugate = function(utterances, initialWeights) {
+  var topicCounts = recurseTopicWeightUpdates(utterances, [initialWeights])
+  var res = map(function(x) {
+    var newDistr = Categorical({vs:topicNames, ps:x})
+    var res_ = {
+      "T1": Math.exp(newDistr.score("T1")),
+      "T2": Math.exp(newDistr.score("T2")),
+      "T3": Math.exp(newDistr.score("T3")),
+      "T4": Math.exp(newDistr.score("T4"))
+    }
+    return res_
+  }, topicCounts)
+  return res
+}
+
 // getListenerInferences
 // =====================
 // Given a slice of speaker utterance data, return listeners state of belief
@@ -334,6 +407,13 @@ var getListenerInferences = function(utterances) {
       "T4": Math.exp(listenerTopicDistrPosterior(utterances.slice(x[0], x[1])).score("T4"))}
   }, contextSlices)
   return res
+}
+
+
+var updateTopicWeights = function(utterance, oldTopicWeights) {
+  var sampledTopic = sample(listenerTopicDistrPosteriorConjugate(utterance, oldTopicWeights))
+  var updatedParams = updateParams(oldTopicWeights, sampledTopic)
+  return updatedParams
 }
 
 
@@ -370,15 +450,17 @@ var processUtterances = function(speakerData, listenerInferences) {
 //
 var runFn = function(resultType) {
   if (resultType == 'contextAwareS2') {
+    // Make sure to append a start token
     var utteranceList = speakerRecurse(targetDistr, [], topicInitWeights, nUtterances)
-    var listenerInferences = getListenerInferences(utteranceList)
+    var listenerInferences = getListenerInferencesConjugate(utteranceList, topicInitWeights)
     return processUtterances(utteranceList, listenerInferences)
   } 
   else if (resultType == 'contextUnawareS2') {
+    // Make sure to append a start token
     var utteranceList = repeat(nUtterances, function(x) { 
       var world = sampleWorldFromTopic(targetDistr)()
-      sample(S2(world, targetDistr, [], topicInitWeights))['utterance'] })
-    var listenerInferences = getListenerInferences(utteranceList)
+      return sample(S2(world, targetDistr, [], topicInitWeights))['utterance'] })
+    var listenerInferences = getListenerInferencesConjugate(utteranceList, topicInitWeights)
     return processUtterances(utteranceList, listenerInferences)
   } 
   else if (resultType == 'S1') {
