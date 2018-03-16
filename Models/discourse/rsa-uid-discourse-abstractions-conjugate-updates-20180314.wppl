@@ -163,8 +163,8 @@ var cost = function(utterance) {
     'b': 0.2,
     'c': 0.2,
     'd': 0.2,
-    'x': 0.15,
-    'y': 0.15
+    'x': 0.05,
+    'y': 0.05
   }
   return costs[utterance]
 }
@@ -278,13 +278,8 @@ var S2 = cache(function(world, T, data, oldParams) {
       // var world = sampleWorldFromTopic(T)()
       var utterance = utterancesPrior()
       var L = L1(utterance, data, oldParams)
-      // var listenerSampledTopic = sample(marginalize(L, function(x) {
-      //   return x['estTopicDistrName']
-      // }))
       // Here speaker wants to update what they beliebe are the 
       // listener topic distr params.
-      // var listenerSampledTopic = sample(L)["estTopicDistrName"]
-      // var updatedParams = updateParams(oldParams, listenerSampledTopic)
       factor(alpha * (L.score({'estWorld': world, 'estTopicDistrName': T}) - cost(utterance)))
       return {'utterance': utterance}
     }
@@ -304,8 +299,6 @@ var speakerFn = cache(function(T, d, params) {
   // Note that udpatedParams is literally updated, not stored as is
   // utterances. That is because we want to accumulate data w.r.t the topics.
   // var updatedParams = currSpeakerSample['updatedParams']
-
-  // Here!!!!+!
   var topic = sample(listenerTopicDistrPosteriorConjugate(utterance, params))
   var updatedParams = updateParams(params, topic)
   return {'utterances':d.concat([utterance]), 
