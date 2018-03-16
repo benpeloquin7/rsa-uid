@@ -47,9 +47,9 @@ runFn <- function(i, targetDistr, nUtterances, resultType, alpha) {
 
 Single model runs -- contrast `contexUnawareS2` and `contextAwareS2`.
 ```{r singleRun}
-ALPHA <- 6
+ALPHA <- 8
 TOPIC <- 'T1'
-NUM_UTTERANCES <- 200
+NUM_UTTERANCES <- 120
 # TODO (BP): This needs to be fixed...
 # df_baseline <- runFn(1, 
 #                      targetDistr=TOPIC, 
@@ -129,7 +129,7 @@ sims %>%
     geom_jitter(aes(col=utterance), width=0.5, height=0.1, alpha=0.25, size=2) +
     ylab("Listener posterior probability of target topic") +
     xlab("Utterance position") +
-    ggtitle("S2 production (points) and listener topic inference (line)\nn=100 simulations") +
+    ggtitle(paste("S2 production (points) and listener topic inference (line)\nn=",nSims," simulations")) +
     theme_few() +
     theme(plot.title=element_text(hjust = 0.5))
 ```
@@ -137,11 +137,15 @@ sims %>%
 Empirical probability of ambiguous utterance as a function of utterance position.
 ```{r}
 sims %>%
-  mutate(isX=utterance=='x',
+  mutate(isAmbiguous=(utterance=='x' | utterance=='y'),
+         isX=utterance=='x',
          isA=utterance=='a',
          isB=utterance=='b') %>%
   group_by(utteranceNum) %>%
   summarise(n=n(),
+            numAmb=sum(isAmbiguous),
+            probAmb=numAmb/n,
+            stdAmb=sqrt(probAmb*(1-probAmb)/n),
             numX=sum(isX),
             probX=numX/n,
             stdX=sqrt(probX*(1-probX)/n),
@@ -158,22 +162,22 @@ sims %>%
   # Check relations to other utterances here:
   # gather(type, val, c(probX, probA, probB)) %>%
   # ggplot(aes(x=utteranceNum, y=val, col=type)) +
-  ggplot(aes(x=utteranceNum, y=probX)) +
+  ggplot(aes(x=utteranceNum, y=probAmb)) +
     # geom_smooth(aes(y=avgT1), col='red', alpha=0.2) +
     # geom_smooth(aes(y=avgT2), col='green', alpha=0.2) +
-    geom_jitter(size=2, alpha=0.75, width=2, height=0) +
+    geom_point(size=2, alpha=0.75) +
     geom_smooth(method='lm', alpha=0.5, col='blue') +
-    geom_errorbar(aes(ymin=probX-2*stdX, ymax=probX+2*stdX), alpha=0.5, width=0) +
+    geom_errorbar(aes(ymin=probAmb-2*stdAmb, ymax=probAmb+2*stdAmb), alpha=0.5, width=0) +
     ylab("Empirical probability") +
     xlab("Utterance position") +
-    ggtitle("Empirical probability S2 uses ambiguous utterance\nn=100 simulations") +
+    ggtitle(paste("Empirical probability S2 uses ambiguous utterance\nn=",nSims," simulations")) +
     theme_few() +
     theme(plot.title=element_text(hjust = 0.5))
 ```
 
 Check proportions
 ```{r plot-proportions-contextAwareS2-vs-baseline-alpha20-compare}
-binSize=10
+binSize=12
 df_binned <- addUtteranceBins(sims, nUtterances=NUM_UTTERANCES, binSize=binSize)
 df_filled <- fillUtteranceProportions(df_binned, binSize)
 ```
@@ -197,9 +201,9 @@ df_filled %>%
   group_by(resultType, runNum, binVal) %>%
   summarise(entropy=entropy::entropy(norm_(n), unit=c('log2'))) %>%
   ggplot(aes(x=binVal, y=entropy)) +
-    geom_smooth(method='lm') +
-    # geom_smooth(method='lm') +
-    # geom_jitter(alpha=0.2, width=0.05, height=0) +
+    # geom_smoothmethod='lm') +
+    geom_smooth(method='lm', col='blue') +
+    # geom_jitter(alpha=0.1, width=0.05, height=0) +
     theme_few()
 ```
 
