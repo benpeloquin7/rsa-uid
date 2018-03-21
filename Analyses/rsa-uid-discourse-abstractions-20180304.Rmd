@@ -28,7 +28,7 @@ source("run-helpers.R")
 
 Load model.
 ```{r getModel}
-fPath <- '/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/discourse/rsa-uid-discourse-abstractions-conjugate-updates-20180314.wppl'
+fPath <- '/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/discourse/rsa-uid-discourse-abstractions-conjugate-updates-single-run-20180314.wppl'
 m <- getModelFile(fPath)
 ```
 
@@ -205,5 +205,33 @@ df_filled %>%
     geom_smooth(method='lm', col='blue') +
     # geom_jitter(alpha=0.1, width=0.05, height=0) +
     theme_few()
+```
+
+# Single run model
+```{r setup}
+fPath <- '/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/discourse/rsa-uid-discourse-abstractions-conjugate-updates-single-run-20180314.wppl'
+m <- getModelFile(fPath)
+run <- createRunFn(m)
+runFn <- function(i, currWorld, currData, topicPosterior, targetDistr, alpha) {
+  # Note topicPosterior is a string of counts e.g. '1 1 1 1'
+  dTemp <- data.frame(currWorld=currWorld, 
+                      currData=currData, 
+                      topicPosterior=topicPosterior, 
+                      targetDistr=targetDistr, 
+                      alpha=alpha)
+  df <- run(dTemp) %>%
+    mutate(runNum=i, 
+           currWorld=currWorld, 
+           currData=currData, 
+           targetDistr=targetDistr, 
+           topicPosterior=topicPosterior, 
+           alpha=alpha)
+  df
+}
+```
+
+```{r}
+
+runFn(1, 'a', '', '1 1 1 1', 'T1', 6)
 ```
 
