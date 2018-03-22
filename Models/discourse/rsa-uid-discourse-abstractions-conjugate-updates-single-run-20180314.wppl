@@ -59,7 +59,7 @@ var createWorld = function(w) {
 var alpha = getRData('alpha')
 var targetDistr = getRData('targetDistr')
 var currWorld = createWorld(getRData('currWorld'))
-var topicPosteriorCounts = convertStrList2IntList(getRData('topicPosterior'))
+var topicPosteriorCounts = convertStrList2IntList()
 var nUtterances = 100
 var currData = []
 

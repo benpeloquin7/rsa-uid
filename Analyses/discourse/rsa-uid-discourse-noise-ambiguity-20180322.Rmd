@@ -42,11 +42,11 @@ ALPHA <- 12
 TOPIC <- 'T1'
 NUM_UTTERANCES <- 80
 # TODO (BP): This needs to be fixed...
-# df_baseline <- runFn(1, 
-#                      targetDistr=TOPIC, 
-#                      nUtterances=NUM_UTTERANCES, 
-#                      resultType='baseline', 
-#                      alpha=ALPHA)
+df_baseline <- runFn(1,
+                     targetDistr=TOPIC,
+                     nUtterances=NUM_UTTERANCES,
+                     resultType='baseline',
+                     alpha=ALPHA)
 df_contextUnawareS2 <- runFn(1,
                             targetDistr=TOPIC,
                             nUtterances=NUM_UTTERANCES,
@@ -58,18 +58,23 @@ df_contextAwareS2 <- runFn(1,
                            resultType='contextAwareS4', 
                            alpha=ALPHA)
 
-df_agg <- rbind(df_contextUnawareS2, df_contextAwareS2)
+df_agg <- rbind(df_contextUnawareS2, df_contextAwareS2, df_baseline)
 # df_agg <- rbind(df_baseline, df_contextUnwareS2, df_contextAwareS2)
 ```
 
 S2 speaker more likely to use ambiguous utterance `x` when listener is confident in the (correct) topic.
 ```{r}
+lvls <- as.factor(df_agg$utterance)
+
 df_agg %>%
-  mutate(xHere=ifelse(utterance == 'x' | utterance == 'X x', 1, 0),
-         yHere=ifelse(utterance == 'y' | utterance == 'X y', 0.5, 0)) %>%
-  gather(utteranceLoc, val, c(xHere, yHere)) %>%
-  ggplot(aes(x=utteranceNum, y=val)) +
-    geom_jitter(alpha=0.50, height=0.1, width=0, aes(col=utterance), size=2) +
+  rowwise() %>%
+  mutate(utteranceYPos=which(utterance==levels(lvls))/10) %>%
+  # mutate(xHere=ifelse(utterance == 'x' | utterance == 'X x', 1, 0),
+  #        yHere=ifelse(utterance == 'y' | utterance == 'X y', 0.5, 0)) %>%
+  # gather(utteranceLoc, val, c(xHere, yHere)) %>%
+  ggplot(aes(x=utteranceNum, y=utteranceYPos, col=utterance)) +
+    # geom_jitter(alpha=0.50, height=0.1, width=0, aes(col=utterance), size=2) +
+    geom_point() +
     geom_line(aes(x=utteranceNum, y=T1), col='blue') +
     geom_line(aes(x=utteranceNum, y=T2), col='red') +
     geom_line(aes(x=utteranceNum, y=T3), col='green') +
@@ -152,7 +157,7 @@ sims %>%
     geom_errorbar(aes(ymin=probAmb-2*stdAmb, ymax=probAmb+2*stdAmb), alpha=0.5, width=0) +
     ylab("Empirical probability") +
     xlab("Utterance position") +
-    ggtitle(paste("Empirical probability S2 uses ambiguous utterance\nn=",nSims," simulations")) +
+    ggtitle(paste("Empirical probability S4 uses ambiguous utterance\nn=",nSims," simulations")) +
     theme_few() +
     theme(plot.title=element_text(hjust = 0.5))
 ```
@@ -188,5 +193,6 @@ df_filled %>%
     # geom_jitter(alpha=0.1, width=0.05, height=0) +
     theme_few()
 ```
+
 
 
