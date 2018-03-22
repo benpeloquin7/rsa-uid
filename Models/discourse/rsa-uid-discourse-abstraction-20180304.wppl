@@ -27,7 +27,7 @@ var world = createWorld(getRData('world'))
 
 // Topics
 var topicNames = ['T1', 'T2', 'T3', 'T4']
-var topicNamesDistr = Categorical({vs:topicNames, ps:[1, 1, 1, 1]})
+var topicNamesDistr = Categorical({vs:topicNames, ps:[0.1, 1, 1, 1]})
 var topicNamesPrior = function() { 
   return sample(topicNamesDistr)
 }
@@ -43,10 +43,14 @@ var utterancesDistr = Categorical({vs:utterances, ps:[1, 1, 1, 1, 1, 1]})
 var utterancesPrior = function() {return sample(utterancesDistr)}
 
 // Scenario 4: expanded set
+// var T1 = Categorical({vs:worlds, ps:[0.6, 0.25, 0.15, 0.1]})
+// var T2 = Categorical({vs:worlds, ps:[0.6, 0.15, 0.25, 0.1]}) 
+// var T3 = Categorical({vs:worlds, ps:[0.1, 0.15, 0.25, 0.6]})
+// var T4 = Categorical({vs:worlds, ps:[0.1, 0.25, 0.15, 0.6]})
 var T1 = Categorical({vs:worlds, ps:[0.6, 0.25, 0.15, 0.1]})
-var T2 = Categorical({vs:worlds, ps:[0.6, 0.15, 0.25, 0.1]}) 
-var T3 = Categorical({vs:worlds, ps:[0.1, 0.15, 0.25, 0.6]})
-var T4 = Categorical({vs:worlds, ps:[0.1, 0.25, 0.15, 0.6]})
+var T2 = Categorical({vs:worlds, ps:[0.25, 0.15, 0.1, 0.6]}) 
+var T3 = Categorical({vs:worlds, ps:[0.15, 0.1, 0.6, 0.25]})
+var T4 = Categorical({vs:worlds, ps:[0.1, 0.6, 0.25, 0.15]})
 
 var topicDistr = {
   'T1': T1,
@@ -190,19 +194,6 @@ var listenerTopicDistrPosterior = cache(function(observedData) {
     if (observedData != []) {
       var obsFn = function(datum){
         condition(datum == sample(S1Helper(topicDistrName)))}
-      mapData({data: observedData}, obsFn)
-    }
-    return topicDistrName
-  })
-})
-
-var listenerTopicDistrPosteriorConjugate = cache(function() {
-  return Infer({method: 'enumerate'}, function() {
-    var topicDistrName = topicNamesPrior()
-    if (observedData != []) {
-      var obsFn = function(datum){
-        var world = sampleWorldFromTopic(topicDistrName)()
-        condition(datum == sample(S1(world)))}
       mapData({data: observedData}, obsFn)
     }
     return topicDistrName
