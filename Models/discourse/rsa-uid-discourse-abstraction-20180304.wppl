@@ -1,11 +1,9 @@
 // var rData = [{
-//   'nUtterances': 2,
-//   'resultType': 'contextAwareS2',
-//   'alpha': 4,
-//   'theta': 0.1,
-//   'targetDistr': 'T1'
+//   'targetDistr':'T1',
+//   'world':'a',
+//   'alpha': 8,
+//   'nUtterances':100
 // }]
-
 
 // getRData
 // ========
@@ -15,16 +13,21 @@ var getRData = function(key) {
   return rData[0][key]
 }
 
+var createWorld = function(l) {
+  return {d:l}
+}
+
 // Env data
 var nUtterances = getRData('nUtterances')
 var resultType = getRData('resultType')
 var alpha = getRData('alpha')
 var theta = getRData('theta')
 var targetDistr = getRData('targetDistr')
+var world = createWorld(getRData('world'))
 
 // Topics
 var topicNames = ['T1', 'T2', 'T3', 'T4']
-var topicNamesDistr = Categorical({vs:topicNames, ps:[0.1, 1, 1, 1]})
+var topicNamesDistr = Categorical({vs:topicNames, ps:[1, 1, 1, 1]})
 var topicNamesPrior = function() { 
   return sample(topicNamesDistr)
 }
@@ -39,33 +42,11 @@ var utterances = ['a', 'b', 'c', 'd', 'x', 'y']
 var utterancesDistr = Categorical({vs:utterances, ps:[1, 1, 1, 1, 1, 1]})
 var utterancesPrior = function() {return sample(utterancesDistr)}
 
-//var T1 = Categorical({vs:worlds, ps:[0.4, 0.3, 0.2, 0.1, 0.3]})
-//var T2 = Categorical({vs:worlds, ps:[0.3, 0.2, 0.1, 0.4]}) 
-//var T3 = Categorical({vs:worlds, ps:[0.2, 0.1, 0.4, 0.3]})
-//var T4 = Categorical({vs:worlds, ps:[0.1, 0.4, 0.3, 0.2]})
-
-// Scenario 2: shared mode, unequal variance
-//var T1 = Categorical({vs:worlds, ps:[0.6, 0.25, 0.15]})
-//var T2 = Categorical({vs:worlds, ps:[0.6, 0.15, 0.25]}) 
-//var T3 = Categorical({vs:worlds, ps:[0.25, 0.6, 0.15]})
-
-// Scenario 3: equal mode, unequal variance -- this is vary hard
-// in fact, we see that the uncond. entropy decreases...
-//var T1 = Categorical({vs:worlds, ps:[0.6, 0.25, 0.15]})
-//var T2 = Categorical({vs:worlds, ps:[0.5, 0.30, 0.20]}) 
-//var T3 = Categorical({vs:worlds, ps:[0.7, 0.20, 0.10]})
-
 // Scenario 4: expanded set
 var T1 = Categorical({vs:worlds, ps:[0.6, 0.25, 0.15, 0.1]})
 var T2 = Categorical({vs:worlds, ps:[0.6, 0.15, 0.25, 0.1]}) 
 var T3 = Categorical({vs:worlds, ps:[0.1, 0.15, 0.25, 0.6]})
 var T4 = Categorical({vs:worlds, ps:[0.1, 0.25, 0.15, 0.6]})
-
-// Scenario 5: Equillibrium1
-//var T1 = Categorical({vs:worlds, ps:[0.33, 0.33, 0.33]})
-//var T2 = Categorical({vs:worlds, ps:[0.4, 0.2, 0.4]}) 
-//var T3 = Categorical({vs:worlds, ps:[0.2, 0.4, 0.4]})
-
 
 var topicDistr = {
   'T1': T1,
@@ -105,7 +86,11 @@ var utteranceMeaning = function(utterance) {
   }
 }
 
-var sampleWorldFromTopic = function(topicName) {
+// sampleWorldFromTopic
+// ====================
+// P(world|T=t)
+//
+var sampleWorldFromTopic = cache(function(topicName) {
   return function() {
     if (topicName == 'T1') {
       return sample(T1)
@@ -123,16 +108,20 @@ var sampleWorldFromTopic = function(topicName) {
       error('No topic: ', topicName)
     }
   }
-}
+})
 
+// cost
+// ====
+// utteance cost
+//
 var cost = function(utterance) {
   var costs = {
     'a': 0.2,
     'b': 0.2,
     'c': 0.2,
     'd': 0.2,
-    'x': 0.18,
-    'y': 0.18
+    'x': 0.10,
+    'y': 0.10
   }
   return costs[utterance]
 }
@@ -162,6 +151,33 @@ var S1 = cache(function(world) {
   })
 })
 
+// S1Helper
+// ========
+// Cache the conditoinal P(u|T=t) marginalizing over worlds
+// where P(u|T=t) = \sum_w p_s1(u|w) * p_t(w|T=t)
+// Used during listener posterior updates.
+// 
+// Parameters
+// ----------
+// T: str
+//   topic name.
+//
+// Returns
+// -------
+// distr
+//   Marginal distr over sample from T.
+//   Note that when we have exact semantics this is
+//   equivalent to p_t.
+// 
+var S1Helper = cache(function(T){
+  Infer({
+    model() {
+      var world = sampleWorldFromTopic(T)()
+      return sample(S1(world))
+    }
+  })
+})
+
 // listenerTopicDistrPosterior
 // ===========================
 // Get posterior probability over topics given data (utterances)
@@ -173,6 +189,18 @@ var listenerTopicDistrPosterior = cache(function(observedData) {
     var topicDistrName = topicNamesPrior()
     if (observedData != []) {
       var obsFn = function(datum){
+        condition(datum == sample(S1Helper(topicDistrName)))}
+      mapData({data: observedData}, obsFn)
+    }
+    return topicDistrName
+  })
+})
+
+var listenerTopicDistrPosteriorConjugate = cache(function() {
+  return Infer({method: 'enumerate'}, function() {
+    var topicDistrName = topicNamesPrior()
+    if (observedData != []) {
+      var obsFn = function(datum){
         var world = sampleWorldFromTopic(topicDistrName)()
         condition(datum == sample(S1(world)))}
       mapData({data: observedData}, obsFn)
@@ -180,6 +208,7 @@ var listenerTopicDistrPosterior = cache(function(observedData) {
     return topicDistrName
   })
 })
+
 
 var L1 = cache(function(utterance, data) {
   Infer({
@@ -201,10 +230,10 @@ var L1 = cache(function(utterance, data) {
   })
 })
 
-var S2 = cache(function(T, data) {
+var S2 = cache(function(world, T, data) {
   Infer({
     model() {
-      var world = sampleWorldFromTopic(T)()
+      // var world = sampleWorldFromTopic(T)()
       var utterance = utterancesPrior()
       var L = L1(utterance, data)
       factor(alpha * (L.score({'estWorld': world, 'estTopicDistrName': T}) - cost(utterance)))
@@ -217,10 +246,13 @@ var S2 = cache(function(T, data) {
 // Discourse speaker
 // Note (BP): Would be interseting to think about this as a speaker agent
 // 
+
 var d = []
-var speakerFn = function(T, d) {
-  return d.concat([sample(S2(T, d))['utterance']])
-}
+var speakerFn = cache(function(T, d) {
+  // Added during joint advisor meeting 20180306
+  var world = sampleWorldFromTopic(T)()
+  return d.concat([sample(S2(world, T, d))['utterance']])
+})
 
 var speakerRecurse = function(T, d, n) {
   if (n == 0) {
@@ -229,7 +261,6 @@ var speakerRecurse = function(T, d, n) {
     return speakerRecurse(T, speakerFn(T, d), n-1)
   }
 }
-
 
 //
 // Helpers
@@ -310,14 +341,16 @@ var processUtterances = function(speakerData, listenerInferences) {
 // --------
 // List of dicts
 //
-var runFn = function(resultType, runReverse) {
+var runFn = function(resultType) {
   if (resultType == 'contextAwareS2') {
     var utteranceList = speakerRecurse(targetDistr, [], nUtterances)
     var listenerInferences = getListenerInferences(utteranceList)
     return processUtterances(utteranceList, listenerInferences)
   } 
   else if (resultType == 'contextUnawareS2') {
-    var utteranceList = repeat(nUtterances, function(x) { sample(S2(targetDistr, []))['utterance'] })
+    var utteranceList = repeat(nUtterances, function(x) { 
+      var world = sampleWorldFromTopic(targetDistr)()
+      sample(S2(world, targetDistr, []))['utterance'] })
     var listenerInferences = getListenerInferences(utteranceList)
     return processUtterances(utteranceList, listenerInferences)
   } 
@@ -335,7 +368,6 @@ var runFn = function(resultType, runReverse) {
     error('Bad resultType:', resultType)
   }
 }
-
 
 // 
 // run
