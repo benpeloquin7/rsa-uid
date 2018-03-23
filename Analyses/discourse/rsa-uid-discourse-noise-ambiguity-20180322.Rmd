@@ -29,34 +29,38 @@ m <- getModelFile(fPath)
 Setup.
 ```{r runFn}
 run <- createRunFn(m)
-runFn <- function(i, targetDistr, nUtterances, resultType, alpha) {
-  dTemp <- data.frame(targetDistr=targetDistr, nUtterances=nUtterances, resultType=resultType, alpha=alpha)
+runFn <- function(i, targetDistr, nUtterances, resultType, alpha, theta) {
+  dTemp <- data.frame(targetDistr=targetDistr, nUtterances=nUtterances, resultType=resultType, alpha=alpha, theta=theta)
   df <- run(dTemp) %>%
-    mutate(runNum=i, targetDistr=targetDistr, alpha=alpha, resultType=resultType)
+    mutate(runNum=i, targetDistr=targetDistr, alpha=alpha, theta=theta, resultType=resultType)
   df
 }
 ```
 
 ```{r singleRun}
-ALPHA <- 12
+ALPHA <- 8
+THETA <- 0.2
 TOPIC <- 'T1'
-NUM_UTTERANCES <- 80
+NUM_UTTERANCES <- 200
 # TODO (BP): This needs to be fixed...
 df_baseline <- runFn(1,
                      targetDistr=TOPIC,
                      nUtterances=NUM_UTTERANCES,
                      resultType='baseline',
-                     alpha=ALPHA)
+                     alpha=ALPHA,
+                     theta=THETA)
 df_contextUnawareS2 <- runFn(1,
                             targetDistr=TOPIC,
                             nUtterances=NUM_UTTERANCES,
                             resultType='contextUnawareS4',
-                            alpha=ALPHA)
+                            alpha=ALPHA,
+                            theta=THETA)
 df_contextAwareS2 <- runFn(1, 
                            targetDistr=TOPIC, 
                            nUtterances=NUM_UTTERANCES, 
                            resultType='contextAwareS4', 
-                           alpha=ALPHA)
+                           alpha=ALPHA,
+                           theta=THETA)
 
 df_agg <- rbind(df_contextUnawareS2, df_contextAwareS2, df_baseline)
 # df_agg <- rbind(df_baseline, df_contextUnwareS2, df_contextAwareS2)
@@ -87,9 +91,8 @@ df_agg %>%
 
 Run sims.
 
-Note: This simulation is now quite slow running taking around 60min to run `100` sims of `75` utterances.
 ```{r run-sims}
-nSims <- 100
+nSims <- 500
 
 # Parallelization setup
 no_cores <- detectCores() - 1
@@ -99,15 +102,16 @@ registerDoParallel(cl)
 # Run sims
 ptm <- proc.time()
 sims <- foreach(i=seq(1, nSims), .packages=c('dplyr', 'rwebppl'), .combine=rbind) %dopar% 
-  runFn(i, targetDistr='T1', nUtterances=NUM_UTTERANCES, resultType='contextAwareS4', alpha=ALPHA)
+  runFn(i, targetDistr='T1', nUtterances=NUM_UTTERANCES, resultType='contextAwareS4', alpha=ALPHA, theta=THETA)
 stopCluster(cl)
 etm <- proc.time() - ptm
 cat("runtime: ", etm[3] / 60)
 ```
-Plot utterances along listener posterior probabilyt of (correct) topic. We expect more red (and yellow) points in later positions.
+Plot utterances along listener posterior probability of (correct) topic. We expect more red (and yellow) points in later positions.
 ```{r plot-sims}
 sims %>%
-  mutate(`P(Topic|Utterances)`=ifelse(utterance=='x' | utterance=='X x', 0.5, ifelse(utterance=='y' | utterance=='X y', 0.75, 0)),
+  mutate(`P(Topic|Utterances)`=ifelse(utterance=='x' | utterance=='X x', 0.5, 
+                                      ifelse(utterance=='y' | utterance=='X y', 0.75, 0)),
          utterance=ifelse(utterance=='x', '[a, d]', 
                           ifelse(utterance=='X x', 'X[a, d]', 
                                  ifelse(utterance=='y', '[b, c]', ifelse(utterance=='X y', 'X[b, c]', utterance))))) %>%
@@ -164,7 +168,7 @@ sims %>%
 
 Check proportions
 ```{r plot-proportions-contextAwareS2-vs-baseline-alpha20-compare}
-binSize=10
+binSize=20
 df_binned <- addUtteranceBins(sims, nUtterances=NUM_UTTERANCES, binSize=binSize)
 df_filled <- fillUtteranceProportions(df_binned, binSize)
 ```
@@ -182,7 +186,7 @@ df_filled %>%
     facet_wrap(~runNum)
 ```
 
-
+## Genzel & Charniak (2002) effect
 ```{r}
 df_filled %>%
   group_by(resultType, runNum, binVal) %>%
@@ -194,5 +198,98 @@ df_filled %>%
     theme_few()
 ```
 
+
+```{r}
+run_corpus_analysis2 <- function(df_lm, ci=0.975) {
+  df_lm %>%
+    group_by(expNum, second) %>%
+    mutate(secondTotalProp=sum(prop),       # p(a|X) + p(a|^)
+           lik=prop/secondTotalProp) %>%    # p(X|a) = p(X a) / p(a|X) + p(a|^)
+    ungroup %>%
+    group_by(expNum) %>%
+    mutate(postProb=log2(secondTotalProp/sum(prop))) %>%  # p(a)
+    ungroup %>%
+    select(expNum, first, second, lik, postProb) %>%
+    filter(second %in% c(c(letters[1:5], 'x', 'y'), '*'), first=='X') %>%
+    group_by(expNum, second) %>%
+    summarise(
+      avgPostProb=mean(postProb),
+      sdPostProb=sd(postProb),
+      # xmin=avgPostProb-2*sdPostProb,
+      # xmax=avgPostProb+2*sdPostProb,
+      xmin=quantile(postProb, probs=c(1-ci)),
+      xmax=quantile(postProb, probs=c(ci)),
+      avgLikelihood=mean(lik),
+      sdLikelihood=sd(lik),
+      # ymin=avgLikelihood-2*sdLikelihood,
+      # ymax=avgLikelihood+2*sdLikelihood,
+      ymin=quantile(lik, probs=c(1-ci)),
+      ymax=quantile(lik, probs=c(ci)),
+      n=n())
+}
+```
+
+
+# Levy & Jaeger (2007) effect
+```{r process-sims}
+# Early utterances
+sims_processed_early <- sims %>%
+  filter(utteranceNum < 100) %>%
+  mutate(currUtterance=utterance,
+         expNum=runNum) %>%
+  process_sims(.) %>%
+  run_corpus_analysis(.) %>%
+  mutate(simType='early')
+
+# Late utterances
+sims_processed_late <- sims %>%
+  filter(utteranceNum >= 100) %>%
+  mutate(currUtterance=utterance,
+         expNum=runNum) %>%
+  process_sims(.) %>%
+  run_corpus_analysis(.) %>%
+  mutate(simType='late')
+
+# All utterances
+sims_full <- sims %>%
+  mutate(currUtterance=utterance,
+         expNum=runNum) %>%
+  process_sims(.) %>%
+  run_corpus_analysis(.) %>%
+  mutate(simType='full')
+
+sims_all <- rbind(sims_processed_early, sims_processed_late, sims_full)
+```
+
+
+```{r}
+sims_all %>% 
+  filter(second %in% letters[1:4]) %>%
+  ggplot(aes(x=avgPostProb, y=avgLikelihood, col=as.factor(second))) +
+    geom_point() +
+    geom_errorbar(aes(ymax=ymax, ymin=ymin), width=0) +
+    geom_errorbarh(aes(xmax=xmax, xmin=xmin), height=0) +
+    ylab('Likelihood of marked version') +
+    xlab('mean(log(p(utt))') +
+    ylim(0, 1) +
+    theme_few() +
+    facet_wrap(~simType)
+```
+
+```{r}
+sims %>%
+  mutate(currUtterance=utterance,
+         expNum=runNum) %>%
+  process_sims(.) %>%
+  run_corpus_analysis2(.) %>%
+  # filter(second %in% letters[1:4]) %>%
+   ggplot(aes(x=avgPostProb, y=avgLikelihood, col=as.factor(second))) +
+    geom_point(alpha=0.3) +
+    geom_smooth(method='lm', aes(group=1)) +
+    ylab('Likelihood of marked version') +
+    xlab('mean(log(p(utt))') +
+    ylim(0, 1) +
+    theme_few()
+```
 
 

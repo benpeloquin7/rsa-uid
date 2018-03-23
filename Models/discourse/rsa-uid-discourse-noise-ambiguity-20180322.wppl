@@ -78,11 +78,11 @@ var utteranceWeights = repeat(utterances.length, function(x) {1})
 var utterancesDistr = Categorical({vs:utterances, ps:utteranceWeights})
 var utterancesPrior = function() {return sample(utterancesDistr)}
 
+// Topics
 var T1 = Categorical({vs:worlds, ps:[0.6, 0.25, 0.15, 0.1]})
 var T2 = Categorical({vs:worlds, ps:[0.25, 0.15, 0.1, 0.6]}) 
 var T3 = Categorical({vs:worlds, ps:[0.15, 0.1, 0.6, 0.25]})
 var T4 = Categorical({vs:worlds, ps:[0.1, 0.6, 0.25, 0.15]})
-
 var topicDistr = {
   'T1': T1,
   'T2': T2,
@@ -90,6 +90,7 @@ var topicDistr = {
   'T4': T4
 }
 
+// General helpers
 var getTopicNameDistr = function(topicName) {
   return topicDistr[topicName]
 }
@@ -98,7 +99,7 @@ var litMeaning = function(utterance, world) {
   return utterance == world['d']
 }
 
-// Noise
+// Noise helpers
 var _removeEmptyItems = function(arr) {
   filter(function(x) {return x != ''}, arr)
 }
