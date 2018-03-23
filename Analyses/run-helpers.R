@@ -297,7 +297,7 @@ run_corpus_analysis <- function(df_lm, ci=0.975) {
     mutate(postProb=log2(secondTotalProp/sum(prop))) %>%  # p(a)
     ungroup %>%
     select(expNum, first, second, lik, postProb) %>%
-    filter(second %in% c(letters[1:5], '*'), first=='X') %>%
+    filter(second %in% c(c(letters[1:5], 'x', 'y'), '*'), first=='X') %>%
     group_by(second) %>%
     summarise(
       avgPostProb=mean(postProb),
@@ -491,14 +491,35 @@ runParVaryingAlpha <- function(runFn,
   cat("runtime: ", etm[3] / 60)
   
   # Process sims
-  breaks <- seq(0, nUtterances, by=binSize)
+  df_sims <- addUtteranceBins(sims, nUtterances, binSize)
+  df_filled <- fillUtteranceProportions(df_sims)
+  df_filled
+}
+# df_test_runParVaryingAlpha <- runParVaryingAlpha(nSims=10)
+
+# addUtteranceBins
+# ================
+# Add new column of utterance position bin.
+#
+addUtteranceBins <- function(sims, nUtterances, binSize) {
+  # browser()
+  breaks_ <- seq(0, nUtterances, by=binSize)
+  # Something breaking here...
   df_sims <- sims %>%
-    mutate(bin=cut(utteranceNum, breaks=breaks, right=FALSE, include.lowest=TRUE))
+    mutate(bin=cut(utteranceNum, breaks=breaks_, right=FALSE, include.lowest=TRUE))
   binLevels <- levels(df_sims$bin)
   df_sims$binVal <- match(df_sims$bin, binLevels)
-  
+  df_sims
+}
+
+
+# fillUtteranceProportions
+# ========================
+# Aggregate utterance proportions. Fill missing utterances for each bin.
+#
+fillUtteranceProportions <- function(df_binned_utterances, binSize) {
   # Get utterance totals
-  df_sims_utteranceTotals <- df_sims %>%
+  df_sims_utteranceTotals <- df_binned_utterances %>%
     group_by(runNum, resultType, alpha, binVal, utterance) %>%
     summarise(n=n()) %>%
     ungroup
@@ -526,4 +547,3 @@ runParVaryingAlpha <- function(runFn,
   
   df_filled
 }
-# df_test_runParVaryingAlpha <- runParVaryingAlpha(nSims=10)
