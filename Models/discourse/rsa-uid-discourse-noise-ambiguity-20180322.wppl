@@ -79,10 +79,14 @@ var utterancesDistr = Categorical({vs:utterances, ps:utteranceWeights})
 var utterancesPrior = function() {return sample(utterancesDistr)}
 
 // Topics
-var T1 = Categorical({vs:worlds, ps:[0.6, 0.25, 0.15, 0.1]})
-var T2 = Categorical({vs:worlds, ps:[0.25, 0.15, 0.1, 0.6]}) 
-var T3 = Categorical({vs:worlds, ps:[0.15, 0.1, 0.6, 0.25]})
-var T4 = Categorical({vs:worlds, ps:[0.1, 0.6, 0.25, 0.15]})
+// var T1 = Categorical({vs:worlds, ps:[0.6, 0.25, 0.1, 0.01]})
+// var T2 = Categorical({vs:worlds, ps:[0.25, 0.1, 0.01, 0.6]}) 
+// var T3 = Categorical({vs:worlds, ps:[0.1, 0.01, 0.6, 0.25]})
+// var T4 = Categorical({vs:worlds, ps:[0.01, 0.6, 0.25, 0.1]})
+var T1 = Categorical({vs:worlds, ps:[0.6, 0.30, 0.15, 0.05]})
+var T2 = Categorical({vs:worlds, ps:[0.30, 0.15, 0.05, 0.6]}) 
+var T3 = Categorical({vs:worlds, ps:[0.15, 0.05, 0.6, 0.30]})
+var T4 = Categorical({vs:worlds, ps:[0.05, 0.6, 0.30, 0.15]})
 var topicDistr = {
   'T1': T1,
   'T2': T2,

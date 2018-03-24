@@ -39,9 +39,9 @@ runFn <- function(i, targetDistr, nUtterances, resultType, alpha, theta) {
 
 ```{r singleRun}
 ALPHA <- 8
-THETA <- 0.2
+THETA <- 0.15
 TOPIC <- 'T1'
-NUM_UTTERANCES <- 200
+NUM_UTTERANCES <- 80
 # TODO (BP): This needs to be fixed...
 df_baseline <- runFn(1,
                      targetDistr=TOPIC,
@@ -89,10 +89,10 @@ df_agg %>%
 
 # (2) Bootstrapped simulations.
 
-Run sims.
+Run sims. Note (n=500 sims at nUttt=200 utterances takes 30min to run)
 
 ```{r run-sims}
-nSims <- 500
+nSims <- 100
 
 # Parallelization setup
 no_cores <- detectCores() - 1
@@ -120,7 +120,7 @@ sims %>%
     geom_jitter(aes(col=utterance), width=0.5, height=0.1, alpha=0.25, size=2) +
     ylab("Listener posterior probability of target topic") +
     xlab("Utterance position") +
-    ggtitle(paste("S2 production (points) and listener topic inference (line)\nn=",nSims," simulations")) +
+    ggtitle(paste("S4 production (points) and listener topic inference (line)\nn=",nSims," simulations")) +
     theme_few() +
     theme(plot.title=element_text(hjust = 0.5))
 ```
@@ -158,6 +158,7 @@ sims %>%
     # geom_smooth(aes(y=avgT2), col='green', alpha=0.2) +
     geom_point(size=2, alpha=0.75) +
     geom_smooth(method='loess', alpha=0.5, col='blue') +
+    # geom_smooth(method = "lm", formula = y ~ poly(x, 2)) +
     geom_errorbar(aes(ymin=probAmb-2*stdAmb, ymax=probAmb+2*stdAmb), alpha=0.5, width=0) +
     ylab("Empirical probability") +
     xlab("Utterance position") +
@@ -168,7 +169,7 @@ sims %>%
 
 Check proportions
 ```{r plot-proportions-contextAwareS2-vs-baseline-alpha20-compare}
-binSize=20
+binSize=10
 df_binned <- addUtteranceBins(sims, nUtterances=NUM_UTTERANCES, binSize=binSize)
 df_filled <- fillUtteranceProportions(df_binned, binSize)
 ```
@@ -195,12 +196,15 @@ df_filled %>%
     # geom_smoothmethod='lm') +
     geom_smooth(method='lm', col='blue') +
     # geom_jitter(alpha=0.1, width=0.05, height=0) +
+    ggtitle("Uncond entropy (Genzel & Charniak) Effect") +
+    ylab("Unconditional entropy (of bin)") +
+    xlab("Binned utterance position") +
     theme_few()
 ```
 
 
 ```{r}
-run_corpus_analysis2 <- function(df_lm, ci=0.975) {
+run_corpus_analysis2 <- function(df_lm, ci=0.90) {
   df_lm %>%
     group_by(expNum, second) %>%
     mutate(secondTotalProp=sum(prop),       # p(a|X) + p(a|^)
@@ -210,17 +214,17 @@ run_corpus_analysis2 <- function(df_lm, ci=0.975) {
     mutate(postProb=log2(secondTotalProp/sum(prop))) %>%  # p(a)
     ungroup %>%
     select(expNum, first, second, lik, postProb) %>%
-    filter(second %in% c(c(letters[1:5], 'x', 'y'), '*'), first=='X') %>%
-    group_by(expNum, second) %>%
+    filter(second %in% c(letters[1:5], 'x', 'y'), first=='X') %>%
+    group_by(second) %>%
     summarise(
-      avgPostProb=mean(postProb),
-      sdPostProb=sd(postProb),
+      avgPostProb=median(postProb),
+      # sdPostProb=sd(postProb),
       # xmin=avgPostProb-2*sdPostProb,
       # xmax=avgPostProb+2*sdPostProb,
       xmin=quantile(postProb, probs=c(1-ci)),
       xmax=quantile(postProb, probs=c(ci)),
-      avgLikelihood=mean(lik),
-      sdLikelihood=sd(lik),
+      avgLikelihood=median(lik),
+      # sdLikelihood=sd(lik),
       # ymin=avgLikelihood-2*sdLikelihood,
       # ymax=avgLikelihood+2*sdLikelihood,
       ymin=quantile(lik, probs=c(1-ci)),
@@ -229,67 +233,113 @@ run_corpus_analysis2 <- function(df_lm, ci=0.975) {
 }
 ```
 
-
 # Levy & Jaeger (2007) effect
 ```{r process-sims}
 # Early utterances
 sims_processed_early <- sims %>%
-  filter(utteranceNum < 100) %>%
+  filter(utteranceNum < 20) %>%
   mutate(currUtterance=utterance,
          expNum=runNum) %>%
   process_sims(.) %>%
-  run_corpus_analysis(.) %>%
+  run_corpus_analysis(., ci=0.90) %>%
   mutate(simType='early')
+
+# Middle utterances
+sims_processed_middle <- sims %>%
+  filter(utteranceNum >= 20 & utteranceNum < 60) %>%
+  mutate(currUtterance=utterance,
+         expNum=runNum) %>%
+  process_sims(.) %>%
+  run_corpus_analysis(., ci=0.90) %>%
+  mutate(simType='middle')
 
 # Late utterances
 sims_processed_late <- sims %>%
-  filter(utteranceNum >= 100) %>%
+  filter(utteranceNum >= 60) %>%
   mutate(currUtterance=utterance,
          expNum=runNum) %>%
   process_sims(.) %>%
-  run_corpus_analysis(.) %>%
+  run_corpus_analysis(., ci=0.90) %>%
   mutate(simType='late')
+
 
 # All utterances
 sims_full <- sims %>%
   mutate(currUtterance=utterance,
          expNum=runNum) %>%
   process_sims(.) %>%
-  run_corpus_analysis(.) %>%
+  run_corpus_analysis(., ci=0.90) %>%
   mutate(simType='full')
 
-sims_all <- rbind(sims_processed_early, sims_processed_late, sims_full)
+sims_all <- rbind(sims_processed_early, sims_processed_middle, sims_processed_late, sims_full)
+sims_all$simType <- factor(sims_all$simType, 
+                           levels=c("early", "middle", "late", "full"), 
+                           labels=c("<20", "20 <= x < 60", ">60", "all"))
+```
+
+
+```{r}
+sims_full %>%
+  filter(second %in% letters[1:4]) %>%
+  # mutate(alph=ifelse(second %in% letters[1:4], 1, 0.8)) %>%
+  ggplot(aes(x=avgPostProb, y=avgLikelihood, col=as.factor(second))) +
+    geom_point(size=2.5) +
+    geom_errorbar(aes(ymax=ymax, ymin=ymin, alpha=0.2), width=0) +
+    geom_errorbarh(aes(xmax=xmax, xmin=xmin, alpha=0.2), height=0) +
+    ylab('Likelihood of marked version') +
+    xlab('lm surprisal -- mean(log(p(utt))') +
+    ggtitle("UID effect in discourse model") +
+    theme_few() +
+    theme(plot.title = element_text(hjust = 0.5))
 ```
 
 
 ```{r}
 sims_all %>% 
-  filter(second %in% letters[1:4]) %>%
+  # filter(second %in% letters[1:4]) %>%
+  # mutate(alph=ifelse(second %in% letters[1:4], 1, 0.8)) %>%
   ggplot(aes(x=avgPostProb, y=avgLikelihood, col=as.factor(second))) +
-    geom_point() +
-    geom_errorbar(aes(ymax=ymax, ymin=ymin), width=0) +
-    geom_errorbarh(aes(xmax=xmax, xmin=xmin), height=0) +
+    geom_point(size=2.5) +
+    geom_errorbar(aes(ymax=ymax, ymin=ymin, alpha=0.2), width=0) +
+    geom_errorbarh(aes(xmax=xmax, xmin=xmin, alpha=0.2), height=0) +
     ylab('Likelihood of marked version') +
     xlab('mean(log(p(utt))') +
     ylim(0, 1) +
     theme_few() +
-    facet_wrap(~simType)
+    facet_wrap(~simType, nrow=1)
+```
+
+# Single speaker behavior
+```{r}
+dPath <- '/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/discourse/'
+fPath <- 'rsa-uid-discourse-noise-ambiguity-single-run-20180322.wppl'
+p <- paste0(dPath, fPath)
+m <- getModelFile(p)
 ```
 
 ```{r}
-sims %>%
-  mutate(currUtterance=utterance,
-         expNum=runNum) %>%
-  process_sims(.) %>%
-  run_corpus_analysis2(.) %>%
-  # filter(second %in% letters[1:4]) %>%
-   ggplot(aes(x=avgPostProb, y=avgLikelihood, col=as.factor(second))) +
-    geom_point(alpha=0.3) +
-    geom_smooth(method='lm', aes(group=1)) +
-    ylab('Likelihood of marked version') +
-    xlab('mean(log(p(utt))') +
-    ylim(0, 1) +
-    theme_few()
+run <- createRunFn(m)
+runFn <- function(i, world, targetDistr, alpha, theta, data) {
+  dTemp <- data.frame(world=world,
+                      targetDistr=targetDistr,
+                      alpha=alpha, 
+                      theta=theta, 
+                      data=data)
+  df <- run(dTemp) %>%
+    mutate(runNum=i,
+           world=world,
+           targetDistr=targetDistr, 
+           alpha=alpha, 
+           theta=theta, 
+           data=data)
+  df
+}
 ```
 
-
+```{r}
+# ALPHA <- 8
+# THETA <- 0.2
+# TOPIC <- 'T1'
+# data <- paste(rep('a', 10), collapse=' ')
+# runFn(1, 'a', 'T1', 8, 0.2, data)
+```
