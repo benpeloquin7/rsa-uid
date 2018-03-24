@@ -288,16 +288,17 @@ process_sims <- function(sims) {
 #    LM anlayses.
 #
 run_corpus_analysis <- function(df_lm, ci=0.975) {
+  # browser()
   df_lm %>%
     group_by(expNum, second) %>%
     mutate(secondTotalProp=sum(prop),       # p(a|X) + p(a|^)
-           lik=prop/secondTotalProp) %>%    # p(X|a) = p(X a) / p(a|X) + p(a|^)
+           lik=prop/secondTotalProp) %>%    # p(X|a) = p(X, a) / (p(a, X) + p(a, ^))
     ungroup %>%
     group_by(expNum) %>%
     mutate(postProb=log2(secondTotalProp/sum(prop))) %>%  # p(a)
     ungroup %>%
     select(expNum, first, second, lik, postProb) %>%
-    filter(second %in% c(c(letters[1:5], 'x', 'y'), '*'), first=='X') %>%
+    filter(second %in% c(letters[1:5], 'x', 'y'), first=='X') %>%
     group_by(second) %>%
     summarise(
       avgPostProb=mean(postProb),
