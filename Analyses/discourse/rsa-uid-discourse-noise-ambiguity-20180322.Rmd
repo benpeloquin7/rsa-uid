@@ -196,10 +196,11 @@ df_filled %>%
     # geom_smoothmethod='lm') +
     geom_smooth(method='lm', col='blue') +
     # geom_jitter(alpha=0.1, width=0.05, height=0) +
-    ggtitle("Uncond entropy (Genzel & Charniak) Effect") +
+    ggtitle("Uncond entropy (Genzel & Charniak) effect") +
     ylab("Unconditional entropy (of bin)") +
     xlab("Binned utterance position") +
-    theme_few()
+    theme_few() +
+    theme(plot.title = element_text(hjust = 0.5))
 ```
 
 
@@ -310,36 +311,147 @@ sims_all %>%
 ```
 
 # Single speaker behavior
-```{r}
+```{r single-speaker-model-file}
 dPath <- '/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/discourse/'
 fPath <- 'rsa-uid-discourse-noise-ambiguity-single-run-20180322.wppl'
 p <- paste0(dPath, fPath)
 m <- getModelFile(p)
 ```
 
-```{r}
+```{r single-speaker-run-fn}
 run <- createRunFn(m)
 runFn <- function(i, world, targetDistr, alpha, theta, data) {
+  
+  # Topic posterior
   dTemp <- data.frame(world=world,
                       targetDistr=targetDistr,
                       alpha=alpha, 
-                      theta=theta, 
+                      resultType='topicPosterior',
+                      theta=theta,
                       data=data)
-  df <- run(dTemp) %>%
+  df_topic_post <- run(dTemp) %>%
     mutate(runNum=i,
            world=world,
            targetDistr=targetDistr, 
            alpha=alpha, 
-           theta=theta, 
+           theta=theta,
+           data=data) %>%
+    select(support, prob, data) %>%
+    rename(topicPost=prob)
+    
+  # Speaker data
+  dTemp <- data.frame(world=world,
+                      targetDistr=targetDistr,
+                      resultType='speaker',
+                      alpha=alpha, 
+                      theta=theta,
+                      data=data)
+  df_speaker <- run(dTemp) %>%
+    mutate(runNum=i,
+           world=world,
+           targetDistr=targetDistr, 
+           alpha=alpha, 
+           theta=theta,
            data=data)
-  df
+  
+  df_merge <- merge(df_speaker, df_topic_post, by='data')
+  df_merge
 }
 ```
 
-```{r}
-# ALPHA <- 8
-# THETA <- 0.2
-# TOPIC <- 'T1'
-# data <- paste(rep('a', 10), collapse=' ')
-# runFn(1, 'a', 'T1', 8, 0.2, data)
+```{r single-speaker-test}
+ALPHA <- 6
+THETA <- 0.15
+TOPIC <- 'T1'
+# DATA <- paste0(rep('a', 10), collapse=' ')
+DATA <- ''
+
+d <- runFn(1, 'a', TOPIC, ALPHA, THETA, DATA)
 ```
+
+
+```{r single-speaker-run}
+# data
+worlds <- c('a', 'b', 'c', 'd')
+datas <- c('', paste0(rep('a', 1), collapse=' '), paste0(rep('a', 10), collapse=' '))
+thetas <- seq(0.1, 0.9, by=0.1)
+
+df_agg <- data.frame()
+for (w in worlds) {
+  cat(paste('\nworld:', w))
+  for (d in datas) {
+    for (theta in thetas) {
+      
+      currDf <- runFn(1, w, TOPIC, ALPHA, theta, d) %>%
+        mutate(world=w,
+               data=d)
+      df_agg <- rbind(df_agg, currDf)
+    }
+  }
+}
+```
+
+```{r single-speaker-plot1}
+getDataAmount <- function(data) {
+  nchar(gsub(' ', '' , data))
+}
+
+df_agg %>%
+  filter(support=='T1') %>%
+  filter((world=='a' & (utterance == 'X a' | utterance == 'a')) | 
+           (world=='b' & (utterance == 'X b' | utterance == 'b')) |
+           (world=='c' & (utterance == 'X c' | utterance == 'c')) |
+           (world=='d' & (utterance == 'X d' | utterance == 'd'))) %>%
+  rowwise %>%
+  mutate(utteranceLen=getDataAmount(utterance),
+         numPrevUtterances=getDataAmount(data),
+         marked=ifelse(utteranceLen==2, 'marked', 'unmarked')) %>%
+  select(prob, world, theta, numPrevUtterances, marked) %>%
+  spread(marked, prob) %>%
+  group_by(world, numPrevUtterances) %>%
+  mutate(highestMarked=max(marked),
+         lowestUnmarked=min(unmarked)) %>%
+  gather(type, prob, c(marked, unmarked)) %>%
+  # mutate(cross=ifelse(marked > unmarked, theta, 0)) %>%
+  ggplot(aes(x=theta, y=prob, lty=type)) +
+    geom_line() +
+    theme_few() +
+    ylab('Speaker posterior of unmarked or marked utterance') +
+    xlab('Noise level (theta)') +
+    ggtitle('Speaker likelihood of marking across thetas') +
+    facet_grid(numPrevUtterances~world) +
+    geom_line(aes(y=highestMarked), col='blue', alpha=0.2) +
+    geom_line(aes(y=lowestUnmarked), col='red', alpha=0.2) +
+    theme(plot.title=element_text(hjust = 0.5))
+```
+
+
+```{r single-speaker-plot2}
+getDataAmount <- function(data) {
+  nchar(gsub(' ', '' , data))
+}
+
+
+df_agg %>%
+  filter(support=='T1') %>%
+  filter((world=='a' & (utterance == 'X a' | utterance == 'a')) | 
+           (world=='b' & (utterance == 'X b' | utterance == 'b')) |
+           (world=='c' & (utterance == 'X c' | utterance == 'c')) |
+           (world=='d' & (utterance == 'X d' | utterance == 'd'))) %>%
+  rowwise %>%
+  mutate(utteranceLen=getDataAmount(utterance),
+         numPrevUtterances=getDataAmount(data),
+         marked=ifelse(utteranceLen==2, 'marked', 'unmarked')) %>%
+  select(prob, world, theta, numPrevUtterances, marked) %>%
+  spread(marked, prob) %>%
+  mutate(diff=marked-unmarked) %>%
+  # mutate(cross=ifelse(marked > unmarked, theta, 0)) %>%
+  ggplot(aes(x=theta, y=diff, fill=world)) +
+    geom_area(alpha=0.4) +
+    theme_few() +
+    ylab('Speaker posterior of unmarked or marked utterance') +
+    xlab('Noise level (theta)') +
+    ggtitle('Speaker likelihood of marking across thetas') +
+    facet_grid(world~numPrevUtterances)
+```
+
