@@ -1,0 +1,119 @@
+---
+title: "summary-spring-2018"
+author: "Ben"
+date: "4/4/2018"
+output: html_document
+---
+
+```{r libraries, echo=FALSE, message=FALSE, warning=FALSE}
+library(dplyr)
+library(knitr)
+```
+
+# Introduction
+
+The combinatorial expressivity of natural language allows speakers to communicate about an unbounded set of potential meanings using a finite lexicon (CITATION). But, by this same mechanism, a speaker may be confronted by multiple forms to express just a single meaning. How do speakers choose how to form their utterances?
+
+This question is deeply related to the ongoing argument relating to the *function* of language, that is, the question "what is language for?" While one perspective highlights properties of language design (e.g. ambiguity), which appear to be at odds with a system optimized for communiction, functionalist theories, which attempt to explain proporties of linguistic systems in terms of communicative pressures, have increasingly pointed to evidence of optimal speaker behavior (e.g. dependency length minimization, NEED OTHERS HERE). 
+
+One family of functionalist theories including the Smooth Redundancy Hypothesis (SRH), Uniform Information Density (UID) and the Constant Entropy Rate Hypothesis (CER), frame speaker production at multiple levels in general information-theoretic terms -- if speakers are rational and communication takes place in a limited-capacity noisy channel, then speakers should attempt to optimize communicative properties of their utterances. That is, given multiple forms to choose from, speakers should choose the most efficient form (in that particular context).
+
+Standard evidence for the theories above is taken from observational studies of natural corpora highlighting behavior and linguist choice points that align with information-theoretic arguments. But none has shown that these same behaviors can be derived in agents, or explore the necessary components upon which these behaviors depend. The goal of the current work is to evaulate the hypothesis that such behavioral signatures arise from rational pragmatic agents and, further, to describe the features necessary to derive these signatures. We adopt a fully computational approach -- simulating production behavior in pragmatic agents while manipulating agent- and langauge-level components of interest. 
+
+We begin with an introduction to the family of functionalist theories which frame aspects of production behavior in information-theoretic terms, highlighting the empirical signatures of each theory. We then present a rational-pragmatic interpretation of these behaviors. Next we introduce the faimly of computational pragmatics models.
+
+# Thinking aout speaker optimality in information-theoretic terms
+
+### Introduction
+
+### Smooth Redundancy Hypothesis (Ayelett & Turk, 2004, OTHERS)
+
+### Uniform Information Density (Levy & Jaeger, 2007; Jaeger, 2010, OTHERS)
+
+### Constant Entropy Rate Hypothesis (Genzel & Charniak, 2002; OTHERS)
+
+## Re-interpreting UID and CER in rational-pragmatic terms
+
+# Rational Speech-act Theory
+
+## Basic model
+
+# Simulations
+
+## UID-effects
+
+### Model (Noisy RSA)
+
+$$L_{0}(m|u_p) \propto P(m) \sum_{u_i}P(u_i)P_{noise}(u_p|u_i)$$
+
+$$L_{n-1}(m|u_p) \propto P(m) \sum_{u_i}S_{n-1}(u_i|m)P_{noise}(u_p|u_i)$$
+
+$$S_n(u|m) \propto \mathbb{U}(u;m)$$
+$$\mathbb{U}(u;m) = \exp(-\alpha(\sum_{u_p}log(L_{n-1}(m|u_p))\times P_{noise}(u_p|u_i) - cost(u_i))))$$
+
+### Results
+
+## CER-effects
+
+### Model (Ambiguity+Topic RSA)
+A literal listener evaluates the truth-functional semantics of an utterance $u$ in proportion to the set of relevant utterances in the lexicon. Note that this base listener does not take the previous history of utterances $D$ into consideration.
+$$L_0(m |u) \propto \delta(u)P(m)$$
+
+The lowest level speaker chooses an utterance in proportion to the expected utility such that a listener will infer the correct intended meaning given that utterance.
+$$S_1(u|m) \propto \exp(-\alpha(-log(L_0(m|u)) - cost(u)))$$
+
+Higher orders listeners jointly infer the meaning $m$ of the current utterance $u$ as well as the topic under discussion $T$ taking into account the complete discrouse history $D$.
+$$L_{1}(m, T|u, D) \propto S_1(u|m)P(m|T)P(T|D)$$
+where the listener updates there posterior over topics given the complete history of utterances made by the speaker.
+$$P(T|D) \propto P(T)\prod_{i}^{|D|}S_{n-1}(u_i|w_i)P(w_i|T)$$
+Higher order speakers choose an utterance $u$ in accordance to the expected utilty of using that utterance to convey a particular meaning $m$ within the context of a particular topic $T$ and the complete discourse history $D$.
+$$S_{2}(u|w, T, D) \propto \mathbb{U}[u, T ;w, D]$$
+
+$$\mathbb{U}[u, T;w, D] = \exp(-\alpha(log(L_2(m|u,T))P(T|D)-cost(u)))$$
+
+
+
+### Results
+
+## Combined model
+
+### Model (Ambiguity+Topic Noisy RSA)
+
+## Results
+
+
+
+
+```{r summary-table-data, echo=FALSE}
+behaviors <- c("Basic scalar implicature",
+               "Speaker mark high-suprisal content",
+               "Listener um-implicature",
+               "Corpus UID effect",
+               "Increase use of ambiguous utterances when context disambiguates",
+               "Increase unconditional entropy over discourse")
+ref <- c("Frank & Goodman (2012)",
+         "Levy & Jaeger (2007), Jaeger (2010)",
+         "Levy & Jaeger (2007), Jaeger (2010)",
+         "Levy & Jaeger (2007), Jaeger (2010)",
+         "Piantadosi (2012)",
+         "Genzel & Charniak (2002)")
+baseModel <- c("X", "", "", "", "", "")
+rsaNoise <- c("X", "X", "X", "X", "", "")
+rsaAmbiguity <- c("X", "", "", "", "X", "X")
+fullModel <- c("X", "X", "X", "X", "X", "X")
+
+df_table <- data.frame(behavior=behaviors,
+                       reference=ref,
+                       base_model=baseModel,
+                       rsa_noise=rsaNoise,
+                       rsa_ambiguity=rsaAmbiguity,
+                       rsa_noise_ambiguity=fullModel) %>%
+  rename('base model'=base_model,
+         'rsa + noise'=rsa_noise,
+         'rsa + ambiguity'=rsa_ambiguity,
+         'rsa + noise + ambiguity'=rsa_noise_ambiguity)
+```
+
+```{r}
+kable(df_table)
+```
