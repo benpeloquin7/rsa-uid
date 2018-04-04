@@ -12,15 +12,17 @@ library(knitr)
 
 # Introduction
 
-The combinatorial expressivity of natural language allows speakers to communicate about an unbounded set of potential meanings using a finite lexicon (CITATION). But, by this same mechanism, a speaker may be confronted by multiple forms to express just a single meaning. How do speakers choose how to form their utterances?
+The combinatorial expressivity of natural language allows speakers to communicate about an unbounded set of potential meanings using a finite lexicon (CITATION). But, by this same mechanism, a speaker may be confronted with multiple forms to express just a single meaning. How do speakers choose which form to use?
 
 This question is deeply related to the ongoing argument relating to the *function* of language, that is, the question "what is language for?" While one perspective highlights properties of language design (e.g. ambiguity), which appear to be at odds with a system optimized for communiction, functionalist theories, which attempt to explain proporties of linguistic systems in terms of communicative pressures, have increasingly pointed to evidence of optimal speaker behavior (e.g. dependency length minimization, NEED OTHERS HERE). 
 
-One family of functionalist theories including the Smooth Redundancy Hypothesis (SRH), Uniform Information Density (UID) and the Constant Entropy Rate Hypothesis (CER), frame speaker production at multiple levels in general information-theoretic terms -- if speakers are rational and communication takes place in a limited-capacity noisy channel, then speakers should attempt to optimize communicative properties of their utterances. That is, given multiple forms to choose from, speakers should choose the most efficient form (in that particular context).
+One family of functionalist theories including the Smooth Redundancy Hypothesis (SRH), Uniform Information Density (UID) and the Constant Entropy Rate Hypothesis (CER), frame speaker production (at multiple levels) in general information-theoretic terms. They propose that if speakers are rational and communication takes place in a limited-capacity noisy channel, then speakers should attempt to optimize communicative properties of their utterances. Such optimization may take place at different linguistic choice points by using prosidic emphasis (Aylett & Turk, 2004), using marked phonolgoical or syntactic forms (Frank & Jaeger, 2008; Levy & Jeager, 2007; Jaeger, 2008) and maintining consant sentence entropy over the course of a discourse. Taken together, this family of theories argue that given multiple forms to choose from, speakers should choose the most efficient form.
 
-Standard evidence for the theories above is taken from observational studies of natural corpora highlighting behavior and linguist choice points that align with information-theoretic arguments. But none has shown that these same behaviors can be derived in agents, or explore the necessary components upon which these behaviors depend. The goal of the current work is to evaulate the hypothesis that such behavioral signatures arise from rational pragmatic agents and, further, to describe the features necessary to derive these signatures. We adopt a fully computational approach -- simulating production behavior in pragmatic agents while manipulating agent- and langauge-level components of interest. 
+Evidence for these hypotheses is taken from observational studies of natural corpora, typically focusing on empirical measurements of "optimal" behavior at signature production choice-points. Our study differs in a number of ways. First, rather than take an empirical approach, we attempt to show that these signature behaviors can be derived in agents and explore the necessary components upon which these behaviors depend. Second, we explore the degree to which these behaviors can emerge in a particular class of rational-pragmatic agents.
 
-We begin with an introduction to the family of functionalist theories which frame aspects of production behavior in information-theoretic terms, highlighting the empirical signatures of each theory. We then present a rational-pragmatic interpretation of these behaviors. Next we introduce the faimly of computational pragmatics models.
+The goal of the current work is to evaulate the hypothesis that such behavioral signatures arise from rational pragmatic agents and, further, to describe the features necessary to derive these signatures. We adopt a fully computational approach -- simulating production behavior in pragmatic agents while manipulating agent- and langauge-level components of interest. 
+
+We begin with an introduction to the family of functionalist theories which frame aspects of production behavior in information-theoretic terms, highlighting the empirical signatures of each theory. We then present a rational-pragmatic interpretation of these behaviors. Next we introduce the basic form of the family of computational pragmatics models we adopt in this study and then outline the particular extensions used in subsequent simulations. Following the sequence of simulations we discuss .... [NEEDS MORE HERE.]
 
 # Thinking aout speaker optimality in information-theoretic terms
 
@@ -44,12 +46,15 @@ We begin with an introduction to the family of functionalist theories which fram
 
 ### Model (Noisy RSA)
 
-$$L_{0}(m|u_p) \propto P(m) \sum_{u_i}P(u_i)P_{noise}(u_p|u_i)$$
+The literal listener evaluates an utterance with respect to their literal meanings $\delta(\cdot)$. Because noise $P_{noise}(\cdot)$ will sometimes corrupt the speakers utterances, the listener evaluates the likely intended utterance, inferred in the context of noise.
+$$L_{0}(m|u_p) \propto P(m) \sum_{u_i}\delta(u_i, m)P_{noise}(u_p|u_i)$$
 
-$$L_{n-1}(m|u_p) \propto P(m) \sum_{u_i}S_{n-1}(u_i|m)P_{noise}(u_p|u_i)$$
-
+Higher-order speakers choose utterances $u$ in accordance with their expected utility $\mathbb{U(u;m)}$ that a listener will recoer the intended meaning $m$, while minimzing cost $cost(u)$.
 $$S_n(u|m) \propto \mathbb{U}(u;m)$$
+where the speaker is aware that noise may corrupt their intended utterance $u_i$ and the listener will need to recover that intended utterances from the produced utterance $u_p$.
 $$\mathbb{U}(u;m) = \exp(-\alpha(\sum_{u_p}log(L_{n-1}(m|u_p))\times P_{noise}(u_p|u_i) - cost(u_i))))$$
+Higher-order listeners infer the intended meaning $m$ of an utterance $u$ by inferring the likely intended utterance $u_i$ given the possibility of noise.
+$$L_{n-1}(m|u_p) \propto P(m) \sum_{u_i}S_{n-1}(u_i|m)P_{noise}(u_p|u_i)$$ 
 
 ### Results
 
