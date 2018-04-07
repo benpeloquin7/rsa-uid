@@ -1,0 +1,285 @@
+/***
+
+  Noisy RSA production model.
+
+  This model can either produce speaker or listener behavior, depending on the specified input type.
+
+  Example rData params:
+  {
+    modelName: "S3",
+    input: "a",
+    alpha: 3,
+    lambda: 1,
+    theta: 0.2
+  }
+
+***/
+
+/*********************/
+/*********************/
+/******* SETUP *******/
+/*********************/
+/*********************/
+
+var getRData = function(varName) {
+  var data = rData[0]
+  return data[varName]
+}
+
+// getInput
+// ========
+// Get input to model.
+// Note for speaker, input will be a dict {d:'utterance'}
+// while for a listener input will be a str.
+//
+var getInput = function(modelName) {
+  if (modelName.includes('S')) {
+    return {d: getRData('input')}  
+  } else if (modelName.includes('L')) {
+    return getRData('input')
+  } else {
+    console.log("Error, bad inputType: ", inputType)
+  }
+}
+
+// Hyperparmas / Env vars
+var modelName = getRData('modelName')
+var INPUT = getInput(modelName)
+// Toggle between alpha and lambda for speaker and listener models
+var LAMBDA = modelName.includes('L') ? getRData('lambda') : 1
+var ALPHA = modelName.includes('S') ? getRData('alpha') : 1
+var THETA = getRData('theta')
+
+// Utterances
+var utterances = ['X a', 'a', 'X b', 'b', 'X c', 'c', 'X d', 'd']
+var utteranceProbs = [1, 1, 1, 1, 1, 1, 1, 1]
+var utterancesDistr = Categorical({vs:utterances, ps:utteranceProbs})
+var utterancesPrior = function() {return sample(utterancesDistr)}
+
+// Worlds
+var worlds = [{d:'a'}, {d:'b'}, {d:'c'}, {d:'d'}]
+var worldProbs = [0.2, 0.5, 1, 2.5]
+var worldsDistr = Categorical({vs:worlds, ps:worldProbs})
+var worldsPrior = function() {return sample(worldsDistr)}
+
+/*********************/
+/*********************/
+/****** MODELS *******/
+/*********************/
+/*********************/
+
+// Noise helpers
+var _removeEmptyItems = function(arr) {
+  filter(function(x) {return x != ''}, arr)
+}
+
+var replaceIndex = function(arr, index, replacement) {
+  return arr.slice(0, index).concat([replacement]).concat(arr.slice(index + 1, arr.length))
+}
+var transformUtterance = function(transformFn) {
+  return function(utterance) {
+      var tokens = utterance.split(' ')
+      var index = sample(RandomInteger({n:tokens.length}))
+      var replacement = transformFn(index)
+      return _removeEmptyItems(replaceIndex(tokens, index, replacement)).join(' ')
+  }  
+}
+var _deleteFn = function(s) {
+  return ''
+}
+var deleteTransform = transformUtterance(_deleteFn)
+
+var vacuousNoiseModel = function(utterance) {
+  return utterance
+}
+var deleteNoiseModel = function(utterance) {
+  return flip(THETA) ? deleteTransform(utterance) : utterance
+}
+
+var decode = cache(function(utteranceProduced, noiseModel) {
+  Infer({
+    model() {
+      var utteranceIntended = utterancesPrior()
+      var noisyUtterance = noiseModel(utteranceIntended, THETA)
+      factor(utteranceProduced == noisyUtterance ? 0 : -Infinity)
+      return utteranceIntended
+    }
+  })
+})
+
+var utteranceMeaning = function(utterance) {
+  if (utterance == '') {
+    console.log("Error on", utterance)
+  }
+  var lastCharIndex = utterance.length - 1
+  if (utterance.includes('a')) {
+    return 'a'
+  } else if (utterance.includes('b')) {
+    return 'b'
+  } else if (utterance.includes('c')) {
+    return 'c'
+  } else if (utterance.includes('d')) {
+    return 'd'
+  }else {
+    console.log("Error on", utterance)
+  }
+}
+
+
+var meaning = function(utterance, world) {
+  var worldDim = world['d']
+  return utteranceMeaning(utterance) == worldDim
+}
+
+
+var L0 = cache(function(utterance) {
+  Infer({
+    model() {
+      var world = worldsPrior()
+      var intendedUtterance = sample(decode(utterance, deleteNoiseModel))
+      var meaning = meaning(utteranceMeaning(intendedUtterance), world)
+      factor(meaning ? 0 : -Infinity)
+      return world
+    }
+  })
+})
+
+var cost = function(utterance) {
+  return utterance.split(' ').length / 10
+}
+
+var S1 = cache(function(world) {
+  Infer({
+    model() {
+      var intendedUtterance = utterancesPrior(world)
+      var producedUtterance = deleteNoiseModel(intendedUtterance)
+      var L = L0(producedUtterance)
+      factor(ALPHA*(L.score(world) - cost(intendedUtterance)))
+      return intendedUtterance
+    }
+  })
+})
+
+var L1 = cache(function(utterance) {
+  Infer({
+    model() {
+      var world = worldsPrior()
+      var intendedUtterance = sample(decode(utterance, deleteNoiseModel))
+      var S = S1(world)
+      factor(LAMBDA*(S.score(intendedUtterance)))
+      return world
+    }
+  })
+})
+
+var S2 = cache(function(world) {
+  Infer({
+    model() {
+      var intendedUtterance = utterancesPrior()
+      var producedUtterance = deleteNoiseModel(intendedUtterance)
+      var L = L1(producedUtterance)
+      factor(ALPHA*(L.score(world) - cost(intendedUtterance)))
+      return intendedUtterance
+    }
+  })
+})
+
+var L2 = cache(function(utterance) {
+  Infer({
+    model() {
+      var world = worldsPrior()
+      var intendedUtterance = sample(decode(utterance, deleteNoiseModel))
+      var S = S2(world)
+      factor(LAMBDA*S.score(intendedUtterance))
+      return world
+    }
+  })
+})
+
+var S3 = cache(function(world) {
+  Infer({
+    model() {
+      var intendedUtterance = utterancesPrior()
+      var producedUtterance = deleteNoiseModel(intendedUtterance)
+      var L = L2(producedUtterance)
+      factor(ALPHA*(L.score(world) - cost(intendedUtterance)))
+      return intendedUtterance
+    }
+  })
+})
+
+var L3 = cache(function(utterance) {
+  Infer({
+    model() {
+      var world = worldsPrior()
+      var intendedUtterance = sample(decode(utterance, deleteNoiseModel))
+      var S = S3(world)
+      factor(LAMBDA*S.score(intendedUtterance))
+      return world
+    }
+  })
+})
+
+var S4 = cache(function(world) {
+  Infer({
+    model() {
+      var intendedUtterance = utterancesPrior()
+      var producedUtterance = deleteNoiseModel(intendedUtterance)
+      var L = L3(producedUtterance)
+      factor(ALPHA*(L.score(world) - cost(intendedUtterance)))
+      return intendedUtterance
+    }
+  })
+})
+
+var L4 = cache(function(utterance) {
+  Infer({
+    model() {
+      var world = worldsPrior()
+      var intendedUtterance = sample(decode(utterance, deleteNoiseModel))
+      var S = S4(world)
+      factor(LAMBDA*S.score(intendedUtterance))
+      return world
+    }
+  })
+})
+
+var S5 = cache(function(world) {
+  Infer({
+    model() {
+      var intendedUtterance = utterancesPrior()
+      var producedUtterance = deleteNoiseModel(intendedUtterance)
+      var L = L4(producedUtterance)
+      factor(ALPHA*(L.score(world) - cost(intendedUtterance)))
+      return intendedUtterance
+    }
+  })
+})
+
+
+/*********************/
+/*********************/
+/******** run ********/
+/*********************/
+/*********************/
+
+var getModel = function(modelName) {
+  var models = {
+    'L0': L0,
+    'S1': S1,
+    'L1': L1,
+    'S2': S2,
+    'L2': L2,
+    'S3': S3,
+    'L3': L3,
+    'S4': S4,
+    'L4': L4,
+    'S5': S5,
+
+  }
+  return models[modelName]
+}
+
+// Run
+var model = getModel(modelName)
+model(INPUT)
