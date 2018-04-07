@@ -8,6 +8,8 @@ output: html_document
 ```{r libraries, echo=FALSE, message=FALSE, warning=FALSE}
 library(dplyr)
 library(knitr)
+
+source("summary-spring-2018-helpers.R")
 ```
 
 # Introduction
@@ -18,34 +20,43 @@ This question is deeply related to the question of the *function* of language --
 
 One family of functionalist theories including the Smooth Redundancy Hypothesis (SRH), Uniform Information Density (UID) and the Constant Entropy Rate Hypothesis (CER), frame speaker production (at multiple levels) in general information-theoretic terms. They propose that if speakers are rational and communication takes place in a limited-capacity noisy channel, then speakers should attempt to optimize communicative properties of their utterances. Such optimization may take place at different linguistic choice points by using prosidic emphasis (Aylett & Turk, 2004), using marked morphological or syntactic forms (Frank & Jaeger, 2008; Levy & Jeager, 2007; Jaeger, 2008) and maintining consant sentence entropy over the course of a discourse. Taken together, this family of theories argue that given multiple forms to choose from, speakers should choose the most efficient form.
 
-Evidence for these hypotheses is taken from observational studies of natural corpora, typically focusing on empirical measurements of "optimal" behavior at signature production choice-points. Our study differs in a number of ways. First, rather than take an empirical approach, we attempt to show that these signature behaviors can be derived in agents and explore the necessary components upon which these behaviors depend. Second, we explore the degree to which these behaviors can emerge in a particular class of rational-pragmatic agents.
-
-The goal of the current work is to evaulate the hypothesis that such behavioral signatures arise from rational pragmatic agents and, further, to describe the features necessary to derive these signatures. We adopt a fully computational approach -- simulating production behavior in pragmatic agents while manipulating agent- and langauge-level components of interest. 
+Evidence for these hypotheses is taken from observational studies of natural corpora, typically focusing on empirical measurements of "optimal" behavior at signature production choice-points. We adopt a functionalist view of these behaviors, but from a different perspective. We evaluate the hypothesis that efficient production signatures arise from rational pragmatic agents and describe the agent- and language-level features necessary to derive these signatures. We adopt a fully computational approach -- simulating production behavior in pragmatic agents while manipulating agent- and langauge-level components of interest. 
 
 We begin with an introduction to the family of functionalist theories which frame aspects of production behavior in information-theoretic terms, highlighting the empirical signatures of each theory. We then present a rational-pragmatic interpretation of these behaviors. Next we introduce the basic form of the family of computational pragmatics models we adopt in this study and then outline the particular extensions used in subsequent simulations. Following the sequence of simulations we discuss the necessary ingredients required to generate efficient behavior, linking these to previous work. We end with a summary of our findings and proposal for next steps.
 
-# Thinking aout speaker optimality in information-theoretic terms
+# Optimal speaker production
 
 ### Introduction
 
-### Smooth Redundancy Hypothesis (Ayelett & Turk, 2004, OTHERS)
+How might communication be optimized for the task of communication? Maybe look at Piantadosi (2012) and others for more here.
 
 ### Uniform Information Density (Levy & Jaeger, 2007; Jaeger, 2010, OTHERS)
+
+If speakers are rational they should attempt to optimize communicative properties of their utterances.
+
 ![Levy & Jaeger (2007) fig. 1](../img/levy-jaeger-2007-fig1.png)
 
-
-Choice point - syntax / relative clauses
+  * Choice point - syntax / relative clauses
 
 ### Constant Entropy Rate Hypothesis (Genzel & Charniak, 2002; OTHERS)
+
+If communication is optimal (efficient) then the most efficient way to send information is a constant rate.
+
 ![Genzel & Charniak (2002) fig. 1](../img/genzel-charniak-2002-fig1.png)
 
-Choice point - discourse
+  * Choice point - discourse
 
 ## Re-interpreting UID and CER in rational-pragmatic terms
 
 # Rational Speech-act Theory
 
 ## Basic model
+
+A literal listener evaluates the truth-functional semantics of an utterance $u$ in proportion to the set of relevant utterances in the lexicon. Note that this base listener does not take the previous history of utterances $D$ into consideration.
+$$L_0(m |u) \propto \delta(u)P(m)$$
+
+The lowest level speaker chooses an utterance in proportion to the expected utility such that a listener will infer the correct intended meaning given that utterance.
+$$S_n(u|m) \propto \exp(-\alpha(-log(L_{n-1}(m|u)) - cost(u)))$$
 
 # Simulations
 
@@ -56,6 +67,8 @@ Choice point - discourse
 The literal listener evaluates an utterance with respect to their literal meanings $\delta(\cdot)$. Because noise $P_{noise}(\cdot)$ will sometimes corrupt the speakers utterances, the listener evaluates the likely intended utterance, inferred in the context of noise.
 $$L_{0}(m|u_p) \propto P(m) \sum_{u_i}\delta(u_i, m)P_{noise}(u_i|u_p)$$
 
+where $\delta(u_i, m) = True$ if $m \in [[u_i]]$.
+
 Higher-order speakers choose utterances $u$ in accordance with their expected utility $\mathbb{U}(u;m)$ that a listener will recover the intended meaning $m$, while minimzing cost $cost(u)$.
 $$S_n(u|m) \propto \mathbb{U}(u;m)$$
 where the speaker is aware that noise may corrupt their intended utterance $u_i$ and the listener will need to recover that intended utterances from the produced utterance $u_p$.
@@ -65,9 +78,138 @@ $$L_{n-1}(m|u_p) \propto P(m) \sum_{u_i}S_{n-1}(u_i|m)P_{noise}(u_i|u_p)$$
 
 ### Results
 
+#### Result 1: Speakers mark high-surprisal utterances
+
+```{r plot1-setup, warning=FALSE, message=FALSE, echo=FALSE}
+# Get model file
+noisy_rsa_production_model <- getModelFile("/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/fyp-presentation/noisy-rsa-production-model.wppl")
+noisy_rsa_production_model_run_fn <- createRunFn(noisy_rsa_production_model)
+basic_rsa_production_model <- getModelFile("/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/fyp-presentation/basic-rsa-production-model.wppl")
+basic_rsa_production_model_run_fn <- createRunFn(basic_rsa_production_model)
+```
+
+
+```{r plot1-data, warning=FALSE, message=FALSE, echo=FALSE}
+THETA <- 0.2
+ALPHA <- 4
+LAMBDA <- 1
+inputs <- c('a', 'b', 'c', 'd')
+df_plot1 <- data.frame()
+for (i in inputs) {
+  runData <- data.frame(modelName='S3',
+                       input=i,
+                       alpha=ALPHA,
+                       lambda=LAMBDA,
+                       theta=THETA)
+  currNoise <- noisy_rsa_production_model_run_fn(runData, 'rData') %>%
+    mutate(modelType='noise',
+           input=i)
+  currBasic <- basic_rsa_production_model_run_fn(runData, 'rData')  %>%
+    mutate(modelType='basic',
+           input=i)
+  df_plot1 <- rbind(df_plot1, rbind(currNoise, currBasic))
+}
+```
+
+```{r plot1, warning=FALSE, message=FALSE, echo=FALSE}
+df_plot1$support <- factor(df_plot1$support, levels=c("a", "X a", "b", "X b", "c", "X c", "d", "X d"))
+# Suprisal vals for plotting
+surprisals <- data.frame(input=as.character(c('a', 'b', 'c', 'd')), 
+                         vals=c(0.2, 0.5, 1, 2.5)) %>%
+  mutate(normed_vals=vals/sum(vals),
+         surprisal=-log2(normed_vals))
+# Plot
+left_join(df_plot1, surprisals, by=c('input'='input')) %>%
+  mutate(referent=ifelse(support %in% c('X a', 'a'), 'a', 
+                         ifelse(support %in% c('X b', 'b'), 'b',
+                                ifelse(support %in% c('X c', 'c'), 'c', 
+                                       ifelse(support %in% c('X d', 'd'), 'd', 'none')))),
+         marked=grepl('X', support)) %>%
+  filter(referent==input, marked) %>%
+  ggplot(aes(x=paste0(referent, ' (', round(surprisal, 2), ')'), y=prob)) +
+    geom_bar(aes(fill=modelType), position='dodge', stat='identity') +
+    xlab("object (-log(P(object))") +
+    ylab("Likelihood of UID cue") +
+    theme_few()
+```
+
+#### Result 2: Listener infer oncoming item is high-surprisal given cue
+
+```{r plot2-data, warning=FALSE, message=FALSE, echo=FALSE}
+THETA <- 0.3
+ALPHA <- 1
+LAMBDA <- 16
+currInput <- 'X'
+
+runData <- data.frame(modelName='L1',
+                     input=currInput,
+                     alpha=ALPHA,
+                     lambda=LAMBDA,
+                     theta=THETA)
+
+df_noisy_plot2 <- noisy_rsa_production_model_run_fn(runData, 'rData') %>%
+  mutate(modelType='noise',
+         input=currInput)
+df_basic_plot2 <-  basic_rsa_production_model_run_fn(runData, 'rData')  %>%
+  mutate(modelType='basic',
+         input=currInput)
+
+df_plot2 <- rbind(df_noisy_plot2, df_basic_plot2)
+```
+
+```{r plot2, warning=FALSE, message=FALSE, echo=FALSE}
+# Plot
+left_join(df_plot2, surprisals, by=c('d'='input')) %>%
+  ggplot(aes(x=paste0(d, ' (', round(surprisal, 2), ')'), y=prob, fill=modelType)) +
+    geom_bar(stat='identity') +
+    xlab("object (-log(P(object))") +
+    ylab("p(obj|UID-cue)") +
+    theme_few()
+```
+  
+#### Result 3: Corpus analysis reflects UID relationship between likelihood to mark and surprisal
+```{r plot3-setup, warning=FALSE, message=FALSE, echo=FALSE}
+plot3ModelFile <- "/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/fyp-presentation/noisy-rsa-corpus-model.wppl"
+```
+
+```{r plot3-data, warning=FALSE, message=FALSE, echo=FALSE}
+THETA <- 0.1
+ALPHA <- 6
+LAMBDA <- 1
+nUtterances <- 100
+nSims <- 30
+
+df_nrsa_corpus <- corpus_run_fn(plot3ModelFile, "S3", ALPHA, LAMBDA, THETA, nUtterances, nSims) %>%
+  mutate(model='noisy_rsa')
+# df_brsa_corpus <- corpus_run_fn(b_corpus, "S3", 5, 1, 0.3, 1000)  %>%
+#   mutate(model='basic_rsa')
+# df_corpsus_comb <- rbind(df_nrsa_corpus, df_brsa_corpus)
+# 
+# df_plot3 <- corpus_run_fn(plot3ModelFile, 'S3', ALPHA, LAMBDA, THETA, nUtterances)
+```
+
+```{r plot3-rsa-uid-corpus-analysis}
+df_nrsa_corpus %>%
+  ggplot(aes(x=avgPostProb, y=avgLikelihood, col=model)) +
+      # geom_line() +
+      geom_errorbar(aes(ymax=ymax, ymin=ymin, width=0)) +
+      geom_errorbarh(aes(xmax=xmax, xmin=xmin, height=0)) +
+      xlab("log( P( u1 | u2 ))") +
+      ylab("Likelihood of full form") +
+      ylim(0, 1) +
+      theme_few()
+```
+
+
 ## CER-effects
 
+  * Unconditional entropy $H(X|L)$ should increase with sentence position.
+  * [SECONDARY MAYBE DON'T INCLUDE] $H(Y)$ remains consant over discourse.
+
 ### Model (Ambiguity+Topic RSA)
+
+NOTE: Just refer to basic RSA model for low-level listener / speaker.
+
 A literal listener evaluates the truth-functional semantics of an utterance $u$ in proportion to the set of relevant utterances in the lexicon. Note that this base listener does not take the previous history of utterances $D$ into consideration.
 $$L_0(m |u) \propto \delta(u)P(m)$$
 
@@ -83,18 +225,37 @@ $$S_{2}(u|w, T, D) \propto \mathbb{U}[u, T ;w, D]$$
 
 $$\mathbb{U}[u, T;w, D] = \exp(-\alpha(log(L_2(m|u,T))P(T|D)-cost(u)))$$
 
-
-
 ### Results
+
+#### Result 1: Listener gradually infers topic
+
+```{r plot4-rsa-CER-listeners-learn-topic}
+
+```
+
+#### Result 2: Speaker more likley to use ambiguous utterance once listener is confident in topic
+
+```{r plot4-rsa-CER-speakers-more-likely-to-use-ambiguous-utterances}
+
+```
+  
+#### Result 3: Unconditional entropy effect
+
+```{r plot5-rsa-CER-unconditional-entropy-effect}
+
+```
+  
+#### Result 4 [OPTIONAL]: $H(Y)$ remains constant across discourse
+
+```{r plot6-rsa-CER-constant-entropy-effect}
+
+```
 
 ## Combined model
 
 ### Model (Ambiguity+Topic Noisy RSA)
 
 ## Results
-
-
-
 
 ```{r summary-table-data, echo=FALSE}
 behaviors <- c("Basic scalar implicature",
@@ -123,8 +284,8 @@ df_table <- data.frame(behavior=behaviors,
   rename('base model'=base_model,
          'rsa + noise'=rsa_noise,
          'rsa + ambiguity'=rsa_ambiguity,
-         'rsa + noise + ambiguity'=rsa_noise_ambiguity) %>%
-  filter(behavior != 'Basic scalar implicature')
+         'rsa + noise + ambiguity'=rsa_noise_ambiguity)
+  # filter(behavior != 'Basic scalar implicature')
 ```
 
 ```{r}
