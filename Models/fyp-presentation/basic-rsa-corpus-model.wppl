@@ -1,0 +1,265 @@
+/***
+
+  Basic RSA corpus model.
+
+  This model can either produce speaker or listener behavior, depending on the specified input type.
+
+  Example rData params:
+  {
+    modelName: "S3",
+    input: "a",
+    alpha: 3,
+    lambda: 1,
+    theta: 0.2,
+    n: 10000
+  }
+
+***/
+
+/*********************/
+/*********************/
+/******* SETUP *******/
+/*********************/
+/*********************/
+
+var getRData = function(varName) {
+  var data = rData[0]
+  return data[varName]
+}
+
+// Hyperparmas / Env vars
+var modelName = getRData('modelName')
+// Toggle between alpha and lambda for speaker and listener models
+var LAMBDA = modelName.includes('L') ? getRData('lambda') : 1
+var ALPHA = modelName.includes('S') ? getRData('alpha') : 1
+var THETA = getRData('theta')
+var N = getRData('n') 
+
+// Utterances
+var utterances = ['X a', 'a', 'X b', 'b', 'X c', 'c', 'X d', 'd']
+var utteranceProbs = [1, 1, 1, 1, 1, 1, 1, 1]
+var utterancesDistr = Categorical({vs:utterances, ps:utteranceProbs})
+var utterancesPrior = function() {return sample(utterancesDistr)}
+
+// Worlds
+var worlds = [{d:'a'}, {d:'b'}, {d:'c'}, {d:'d'}]
+var worldProbs = [0.2, 0.5, 1, 2.5]
+var worldsDistr = Categorical({vs:worlds, ps:worldProbs})
+var worldsPrior = function() {return sample(worldsDistr)}
+
+/*********************/
+/*********************/
+/****** MODELS *******/
+/*********************/
+/*********************/
+
+
+var cost = function(utterance) {
+  return utterance.split(' ').length / 10
+}
+
+var utteranceMeaning = function(utterance) {
+  if (utterance == '') {
+    console.log("Error on", utterance)
+  }
+  var lastCharIndex = utterance.length - 1
+  if (utterance.includes('a')) {
+    return 'a'
+  } else if (utterance.includes('b')) {
+    return 'b'
+  } else if (utterance.includes('c')) {
+    return 'c'
+  } else if (utterance.includes('d')) {
+    return 'd'
+  } else {
+    console.log("Error on", utterance)
+  }
+}
+
+var meaning = function(utterance, world) {
+  var worldDim = world['d']
+  return utteranceMeaning(utterance) == worldDim
+}
+
+
+var L0 = cache(function(utterance) {
+  Infer({
+    model() {
+      var world = worldsPrior()
+      var meaning = meaning(utteranceMeaning(utterance), world)
+      factor(meaning ? 0 : -Infinity)
+      return world
+    }
+  })
+})
+
+
+var S1 = cache(function(world) {
+  Infer({
+    model() {
+      var utterance = utterancesPrior()
+      var L = L0(utterance)
+      factor(ALPHA*(L.score(world) - cost(utterance)))
+      return utterance
+    }
+  })
+})
+
+var L1 = cache(function(utterance) {
+  Infer({
+    model() {
+      var world = worldsPrior()
+      var S = S1(world)
+      factor(LAMBDA*(S.score(utterance)))
+      return world
+    }
+  })
+})
+
+var S2 = cache(function(world) {
+  Infer({
+    model() {
+      var utterance = utterancesPrior()
+      var L = L1(utterance)
+      factor(ALPHA*(L.score(world) - cost(utterance)))
+      return utterance
+    }
+  })
+})
+
+var L2 = cache(function(utterance) {
+  Infer({
+    model() {
+      var world = worldsPrior()
+      var S = S2(world)
+      factor(LAMBDA*S.score(utterance))
+      return world
+    }
+  })
+})
+
+var S3 = cache(function(world) {
+  Infer({
+    model() {
+      var utterance = utterancesPrior()
+      var L = L2(utterance)
+      factor(ALPHA*(L.score(world) - cost(utterance)))
+      return utterance
+    }
+  })
+})
+
+var L3 = cache(function(utterance) {
+  Infer({
+    model() {
+      var world = worldsPrior()
+      var S = S3(world)
+      factor(LAMBDA*S.score(utterance))
+      return world
+    }
+  })
+})
+
+var S4 = cache(function(world) {
+  Infer({
+    model() {
+      var utterance = utterancesPrior()
+      var L = L3(utterance)
+      factor(ALPHA*(L.score(world) - cost(utterance)))
+      return utterance
+    }
+  })
+})
+
+var L4 = cache(function(utterance) {
+  Infer({
+    model() {
+      var world = worldsPrior()
+      var S = S4(world)
+      factor(LAMBDA*S.score(utterance))
+      return world
+    }
+  })
+})
+
+var S5 = cache(function(world) {
+  Infer({
+    model() {
+      var utterance = utterancesPrior()
+      var L = L4(utterance)
+      factor(ALPHA*(L.score(world) - cost(utterance)))
+      return utterance
+    }
+  })
+})
+
+/*********************/
+/*********************/
+/**** CORPUS GEN *****/
+/*********************/
+/*********************/
+
+var runExperiment = function(speaker, world) {
+  return sample(speaker(world))
+}
+
+var runExperiments = function(worldGenerator, speaker, n, data) {
+  /*
+  Parameters
+  ----------
+  worldGenerator: fn
+    Generate a full world.
+  spekeaker: fn
+    RSA speaker function. Input worlds, output utterances.
+  n: int
+    Number of forward samples.
+  data: array
+    Data store (corpus).
+    
+  Returns
+  -------
+  array
+    Array of utterances.
+  
+  */
+  var world = worldGenerator()
+  var currUtt = runExperiment(speaker, world)  // really this should be a dict object with context
+  var success = utteranceMeaning(currUtt) == world['d']
+  var currData = {currUtterance:currUtt, isSuccess:success}
+  data.push(currData)
+  return n == 0 ? data : runExperiments(worldGenerator, speaker, n-1, data)
+}
+
+var worldGenerator = function() {
+  /* Note that this should eventually be different from `worldsPrior`. Ideally we will have more "complex"
+  worlds of (a) multiple objects and (b) objects with multiple dimensions. In the 
+  single object, single object case this will look just like a single prior over a dimension.
+  */
+  return worldsPrior()
+}
+
+/*********************/
+/*********************/
+/******** run ********/
+/*********************/
+/*********************/
+
+var getModel = function(modelName) {
+  var models = {
+    'L0': L0,
+    'S1': S1,
+    'L1': L1,
+    'S2': S2,
+    'L2': L2,
+    'S3': S3,
+    'L3': L3,
+    'S4': S4,
+    'L4': L4,
+    'S5': S5
+  }
+  return models[modelName]
+}
+
+var model = getModel(modelName)
+var data = []
+runExperiments(worldGenerator, model, N, data)
