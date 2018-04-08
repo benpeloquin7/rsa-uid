@@ -27,34 +27,17 @@ var getRData = function(varName) {
   return data[varName]
 }
 
-// getInput
-// ========
-// Get input to model.
-// Note for speaker, input will be a dict {d:'utterance'}
-// while for a listener input will be a str.
-//
-var getInput = function(modelName) {
-  if (modelName.includes('S')) {
-    return {d: getRData('input')}  
-  } else if (modelName.includes('L')) {
-    return getRData('input')
-  } else {
-    console.log("Error, bad inputType: ", inputType)
-  }
-}
-
 // Hyperparmas / Env vars
 var modelName = getRData('modelName')
-var INPUT = getInput(modelName)
 // Toggle between alpha and lambda for speaker and listener models
 var LAMBDA = modelName.includes('L') ? getRData('lambda') : 1
 var ALPHA = modelName.includes('S') ? getRData('alpha') : 1
 var THETA = getRData('theta')
-var N = getRData('n')
+var N = getRData('n') 
 
 // Utterances
 var utterances = ['X a', 'a', 'X b', 'b', 'X c', 'c', 'X d', 'd']
-var utteranceProbs = [0.5, 1, 0.5, 1, 0.5, 1, 0.5, 1]
+var utteranceProbs = [1, 1, 1, 1, 1, 1, 1, 1]
 var utterancesDistr = Categorical({vs:utterances, ps:utteranceProbs})
 var utterancesPrior = function() {return sample(utterancesDistr)}
 
@@ -98,12 +81,18 @@ var deleteNoiseModel = function(utterance) {
   return flip(THETA) ? deleteTransform(utterance) : utterance
 }
 
+
+var cost = function(utterance) {
+  return utterance.split(' ').length / 10
+}
+
 var decode = cache(function(utteranceProduced, noiseModel) {
   Infer({
     model() {
       var utteranceIntended = utterancesPrior()
       var noisyUtterance = noiseModel(utteranceIntended, THETA)
-      factor(utteranceProduced == noisyUtterance ? 0 : -Infinity)
+      // Note that we take production cost into consideration.
+      factor(utteranceProduced == noisyUtterance ? -cost(noisyUtterance) : -Infinity)
       return utteranceIntended
     }
   })
@@ -125,11 +114,6 @@ var utteranceMeaning = function(utterance) {
   }else {
     console.log("Error on", utterance)
   }
-}
-
-var cost = function(utterance) {
-  return 0
-  // return utterance.split(' ').length / 10
 }
 
 var meaning = function(utterance, world) {
@@ -265,9 +249,9 @@ var S5 = cache(function(world) {
 /*********************/
 /*********************/
 
-var runExperiment = cache(function(speaker, world) {
+var runExperiment = function(speaker, world) {
   return sample(speaker(world))
-})
+}
 
 var runExperiments = function(worldGenerator, speaker, n, data) {
   /*
@@ -293,7 +277,7 @@ var runExperiments = function(worldGenerator, speaker, n, data) {
   var success = utteranceMeaning(currUtt) == world['d']
   var currData = {currUtterance:currUtt, isSuccess:success}
   data.push(currData)
-  return n <= 1 ? data : runExperiments(worldGenerator, speaker, n-1, data)
+  return n == 0 ? data : runExperiments(worldGenerator, speaker, n-1, data)
 }
 
 var worldGenerator = function() {
