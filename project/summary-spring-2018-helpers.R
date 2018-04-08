@@ -4,9 +4,6 @@ library(ggplot2)
 library(ggthemes)
 library(tidyr)
 
-# Globals
-THETA <- 0.1
-
 # getModelFile()
 # ==============
 # Return a model string from a .wppl file
@@ -201,7 +198,7 @@ process_sims <- function(sims) {
 #    Data.frame containing multiple instantiations of bigram
 #    LM anlayses.
 #
-run_corpus_analysis <- function(df_lm, ci=0.975) {
+run_corpus_analysis <- function(df_lm, ci=0.95) {
   # browser()
   df_lm %>%
     group_by(expNum, second) %>%
@@ -212,7 +209,7 @@ run_corpus_analysis <- function(df_lm, ci=0.975) {
     mutate(postProb=log2(secondTotalProp/sum(prop))) %>%  # p(a)
     ungroup %>%
     select(expNum, first, second, lik, postProb) %>%
-    filter(second %in% c(letters[1:5], 'x', 'y'), first=='X') %>%
+    filter(second %in% c(letters[1:5], 'x', 'y'), first=='X') %>%  # Here we're just interested in marked utterances
     group_by(second) %>%
     summarise(
       avgPostProb=mean(postProb),
@@ -239,7 +236,7 @@ run_corpus_analysis <- function(df_lm, ci=0.975) {
 #    Data.frame containing multiple instantiations of bigram
 #    LM anlayses.
 #
-corpus_run_fn <- function(modelFile, modelName, alpha, lambda, theta, nUtterances=500, nSims=100){
+corpus_run_fn <- function(modelFile, modelName, alpha, lambda, theta, nUtterances=500, nSims=100, output=FALSE){
   modelStr <- getModelFile(modelFile)
   runFn <- createRunFn(modelStr)
   runExp_ <- runExperimentFn(runFn, modelName, alpha, lambda, theta, nUtterances)
@@ -250,13 +247,16 @@ corpus_run_fn <- function(modelFile, modelName, alpha, lambda, theta, nUtterance
   registerDoParallel(cl)
   
   # Run sims
-  nSims <- 100
   ptm <- proc.time()
-  cat("Running", nSims, "simulations each with", nUtterances, "samples.")
+  if (output) {
+    cat("Running", nSims, "simulations each with", nUtterances, "samples.")
+  }
   sims <- foreach(i=seq(1, nSims), .packages=c('dplyr', 'rwebppl'), .combine=rbind) %dopar% runExp_(i)
   stopCluster(cl)
   etm <- proc.time() - ptm
-  cat("runtime: ", etm[3] / 60)
+  if (output) {
+    cat("runtime: ", etm[3] / 60)
+  }
   
   # Create LMs
   df_lm <- process_sims(sims)
