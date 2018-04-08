@@ -10,7 +10,7 @@
     input: "a",
     alpha: 3,
     lambda: 1,
-    theta: 0.2
+    theta: 0.2,
     n: 10000
   }
 
@@ -122,11 +122,11 @@ var meaning = function(utterance, world) {
 }
 
 
-var L0 = cache(function(utterance) {
+var L0 = cache(function(producedUtterance) {
   Infer({
     model() {
       var world = worldsPrior()
-      var intendedUtterance = sample(decode(utterance, deleteNoiseModel))
+      var intendedUtterance = sample(decode(producedUtterance, deleteNoiseModel))
       var meaning = meaning(utteranceMeaning(intendedUtterance), world)
       factor(meaning ? 0 : -Infinity)
       return world
@@ -147,11 +147,11 @@ var S1 = cache(function(world) {
   })
 })
 
-var L1 = cache(function(utterance) {
+var L1 = cache(function(producedUtterance) {
   Infer({
     model() {
       var world = worldsPrior()
-      var intendedUtterance = sample(decode(utterance, deleteNoiseModel))
+      var intendedUtterance = sample(decode(producedUtterance, deleteNoiseModel))
       var S = S1(world)
       factor(LAMBDA*(S.score(intendedUtterance)))
       return world
@@ -171,11 +171,11 @@ var S2 = cache(function(world) {
   })
 })
 
-var L2 = cache(function(utterance) {
+var L2 = cache(function(producedUtterance) {
   Infer({
     model() {
       var world = worldsPrior()
-      var intendedUtterance = sample(decode(utterance, deleteNoiseModel))
+      var intendedUtterance = sample(decode(producedUtterance, deleteNoiseModel))
       var S = S2(world)
       factor(LAMBDA*S.score(intendedUtterance))
       return world
@@ -195,11 +195,11 @@ var S3 = cache(function(world) {
   })
 })
 
-var L3 = cache(function(utterance) {
+var L3 = cache(function(producedUtterance) {
   Infer({
     model() {
       var world = worldsPrior()
-      var intendedUtterance = sample(decode(utterance, deleteNoiseModel))
+      var intendedUtterance = sample(decode(producedUtterance, deleteNoiseModel))
       var S = S3(world)
       factor(LAMBDA*S.score(intendedUtterance))
       return world
@@ -219,11 +219,11 @@ var S4 = cache(function(world) {
   })
 })
 
-var L4 = cache(function(utterance) {
+var L4 = cache(function(producedUtterance) {
   Infer({
     model() {
       var world = worldsPrior()
-      var intendedUtterance = sample(decode(utterance, deleteNoiseModel))
+      var intendedUtterance = sample(decode(producedUtterance, deleteNoiseModel))
       var S = S4(world)
       factor(LAMBDA*S.score(intendedUtterance))
       return world
