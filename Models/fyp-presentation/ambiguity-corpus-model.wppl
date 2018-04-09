@@ -1,0 +1,449 @@
+/* 
+
+Ambiguity discourse model
+
+var rData = [{
+  'nUtterances': 50,
+  'resultType': 'contextAware',
+  'alpha': 10,
+  'theta': 0.5,
+  'targetDistr': 'T1',
+  'world': 'a',
+}]
+*/
+
+//
+// Helpers
+//
+
+// Generate a sequence of numbers
+var plusOne = function(n) {
+  return n + 1
+}
+
+// Return a sequence of numbers
+var range_ = function(start, end) {
+  if (start == end) {
+    return end
+  } else {
+    return [start].concat(range_(start+1, end))
+  }
+}
+var range = function(start, end) {
+  var res = range_(start, end)
+  return res.slice(0, res.length-1)
+}
+
+// Listener probability assignment to topic "T1"
+var getDataSizes = function(n) {
+  return range(0, n)
+}
+
+// getRData
+// ========
+// Get data passed from R. See corresponding runFn in .rmd
+//
+var getRData = function(key) {
+  return rData[0][key]
+}
+
+var createWorld = function(val) {
+  return {d:val}
+}
+
+// Env data
+var nUtterances = getRData('nUtterances')
+var resultType = getRData('resultType')
+var alpha = getRData('alpha')
+var theta = getRData('theta')
+var targetDistr = getRData('targetDistr')
+var world = createWorld(getRData('world'))
+var RECURSION_LEVEL = getRData('recursionLevel') ? getRData('recursionLevel') : 1
+
+// Topics
+var topicNames = ['T1', 'T2', 'T3', 'T4']
+var topicInitWeights = [0.1, 1, 1, 1]
+var topicNamesDistr = Categorical({vs:topicNames, ps:topicInitWeights})
+var topicNamesPrior = function() { 
+  return sample(topicNamesDistr)
+}
+
+// Worlds
+var worlds = [{d:'a'}, {d:'b'}, {d:'c'}, {d:'d'}]
+var wordsDistr = Categorical({vs:worlds, ps:[1, 1, 1, 1]})
+var worldsPrior = function() {return sample(wordsDistr)}
+
+// Utterances
+var utterances = ['a', 'b', 'c', 'd', 'x', 'y']
+var utteranceWeights = repeat(utterances.length, function(x) {1})
+var utterancesDistr = Categorical({vs:utterances, ps:utteranceWeights})
+var utterancesPrior = function() {return sample(utterancesDistr)}
+
+// Topics
+var T1 = Categorical({vs:worlds, ps:[0.6, 0.30, 0.15, 0.05]})
+var T2 = Categorical({vs:worlds, ps:[0.30, 0.15, 0.05, 0.6]}) 
+var T3 = Categorical({vs:worlds, ps:[0.15, 0.05, 0.6, 0.30]})
+var T4 = Categorical({vs:worlds, ps:[0.05, 0.6, 0.30, 0.15]})
+var topicDistr = {
+  'T1': T1,
+  'T2': T2,
+  'T3': T3,
+  'T4': T4
+}
+
+// General helpers
+var getTopicNameDistr = function(topicName) {
+  return topicDistr[topicName]
+}
+
+var litMeaning = function(utterance, world) {
+  return utterance == world['d']
+}
+
+var utteranceMeaning = function(utterance) {
+  if (utterance == '') {
+    console.log("Error on", utterance)
+  }
+  var lastCharIndex = utterance.length - 1
+  if (utterance.includes('a')) {
+    return 'a'
+  } else if (utterance.includes('b')) {
+    return 'b'
+  } else if (utterance.includes('c')) {
+    return 'c'
+  } else if (utterance.includes('d')) {
+    return 'd'
+  } else if (utterance.includes('x')) { // x is ambiguous between 'a' and 'd'
+    return uniformDraw(['a', 'd'])
+  } else if (utterance.includes('y')) { // y is ambiguous between 'b' and 'c'
+    return uniformDraw(['b', 'c'])
+  }
+  else {
+    console.log("Error on", utterance)
+  }
+}
+
+// P(w|T)
+var sampleWorldFromTopic = cache(function(topicName) {
+  return function() {
+    if (topicName == 'T1') {
+      return sample(T1)
+    } 
+    else if (topicName == 'T2') { 
+      return sample(T2)
+    } 
+    else if (topicName == 'T3') { 
+      return sample(T3)
+    } 
+    else if (topicName == 'T4') { 
+      return sample(T4)
+    } 
+    else {
+      error('No topic: ', topicName)
+    }
+  }
+})
+
+var cost = function(utterance) {
+  // Note cue cost is 0.2
+  // Amb utterance cost is 0.1
+  // Normal utterance cost is 0.2
+  var costs = {
+    'X a': 0.4, 
+    'X b': 0.4, 
+    'X c': 0.4, 
+    'X d': 0.4, 
+    'X x': 0.2, 
+    'X y': 0.2, 
+    'a':   0.2,
+    'b':   0.2,
+    'c':   0.2,
+    'd':   0.2,
+    'x':   0.1,
+    'y':   0.1
+  }
+  return costs[utterance]
+}
+
+// RSA agents
+//
+var L0 = cache(function(utterance) {
+  Infer({
+    model() {
+      var world = worldsPrior()
+      var meaning = litMeaning(utteranceMeaning(utterance), world)
+      factor(meaning ? 0 : -Infinity)
+      return world
+    }
+  })
+})
+
+var S1 = cache(function(world) {
+  Infer({
+    model(){
+      var utterance = utterancesPrior()
+      var L = L0(utterance)
+      factor(alpha * (L.score(world) - cost(utterance)))
+      return utterance
+    }
+  })
+})
+
+var L1 = cache(function(utterance) {
+  Infer({
+    model() {
+      var world = worldsPrior()
+      var S = S1(world)
+      factor(S.score(utterance))
+      return world
+    }
+  })
+})
+
+var S2 = cache(function(world) {
+  Infer({
+    model(){
+      var utterance = utterancesPrior()
+      var L = L1(utterance)
+      factor(alpha * (L.score(world) - cost(utterance)))
+      return utterance
+    }
+  })
+})
+
+var L2 = cache(function(utterance) {
+  Infer({
+    model() {
+      var world = worldsPrior()
+      var S = S2(world)
+      factor(S.score(utterance))
+      return world
+    }
+  })
+})
+
+var S3 = cache(function(world) {
+  Infer({
+    model(){
+      var utterance = utterancesPrior()
+      var L = L2(utterance)
+      factor(alpha * (L.score(world) - cost(utterance)))
+      return utterance
+    }
+  })
+})
+
+// S2Helper
+// ========
+// Cache the conditoinal P(u|T=t) marginalizing over worlds
+// where P(u|T=t) = \sum_w p_s1(u|w) * p_t(w|T=t)
+// Used during listener posterior updates.
+// 
+// Parameters
+// ----------
+// T: str
+//   topic name.
+//
+// Returns
+// -------
+// distr
+//   Marginal distr over sample from T.
+//   Note that when we have exact semantics this is
+//   equivalent to p_t.
+// 
+var SHelper = cache(function(T){
+  Infer({
+    model() {
+      var world = sampleWorldFromTopic(T)()
+      if (RECURSION_LEVEL == 3) {
+        return sample(S3(world))
+      } else if (RECURSION_LEVEL == 2) {
+        return sample(S2(world))
+      } else if (RECURSION_LEVEL == 1) {
+        return sample(S1(world))
+      } else {
+        console.log("Error, bad recursionLevel: ", RECURSION_LEVEL)
+      }
+    }
+  })
+})
+
+// listenerTopicDistrPosterior
+// ===========================
+// Get posterior probability over topics given data (utterances)
+// Note (BP): this function can be problematic when sampling
+// from S1 is exponential in the number of utterances.
+//
+var listenerTopicDistrPosterior = cache(function(observedData) {
+  return Infer({method: 'enumerate'}, function() {
+    var topicDistrName = topicNamesPrior()
+    if (observedData != []) {
+      var obsFn = function(datum){
+        condition(datum == sample(SHelper(topicDistrName)))}
+      mapData({data: observedData}, obsFn)
+    }
+    return topicDistrName
+  })
+})
+
+
+var LDiscourseAware = cache(function(utterance, data) {
+  Infer({
+    model() {
+      // Sample a topic distr given prev utterances (data).
+      var estTopicDistrName = sample(listenerTopicDistrPosterior(data))
+      // Sample world given topic.
+      var estWorld = sampleWorldFromTopic(estTopicDistrName)()
+      var S = S1(estWorld)
+      factor(S.score(utterance))
+      // Listener jointly reasons about (meaning, topic)
+      return {'estWorld': estWorld, 'estTopicDistrName': estTopicDistrName}
+    }
+  })
+})
+
+var SDiscourseAware = cache(function(world, T, data) {
+  Infer({
+    model() {
+      // var world = sampleWorldFromTopic(T)()
+      var utterance = utterancesPrior()
+      var L = LDiscourseAware(utterance, data)
+      factor(alpha * (L.score({'estWorld': world, 'estTopicDistrName': T}) - cost(utterance)))
+      return {'utterance': utterance}
+    }
+  })
+})
+
+//
+// Discourse speaker
+// Note (BP): Would be interseting to think about this as a speaker agent
+// 
+
+var d = []
+var speakerFn = cache(function(T, d) {
+  var world = sampleWorldFromTopic(T)()
+  return d.concat([sample(SDiscourseAware(world, T, d))['utterance']])
+})
+
+var speakerRecurse = function(T, d, n) {
+  if (n == 0) {
+    return d
+  } else {
+    return speakerRecurse(T, speakerFn(T, d), n-1)
+  }
+}
+
+//
+// Helpers
+//
+
+// Generate a sequence of numbers
+var plusOne = function(n) {
+  return n + 1
+}
+
+// Return a sequence of numbers
+var range_ = function(start, end) {
+  if (start == end) {
+    return end
+  } else {
+    return [start].concat(range_(start+1, end))
+  }
+}
+var range = function(start, end) {
+  var res = range_(start, end)
+  return res.slice(0, res.length-1)
+}
+
+// Listener probability assignment to topic "T1"
+var getDataSizes = function(n) {
+  return range(0, n)
+}
+// List of slice sizes
+var dataSizes = getDataSizes(nUtterances)
+// A context slice is the size of the preceding words (e.g. 0-3, 0-10, 0-n)
+var contextSlices = map(function(x) {return [0, x]}, dataSizes)
+
+// getListenerInferences
+// =====================
+// Given a slice of speaker utterance data, return listeners state of belief
+// about the intended topic distribution.
+//
+var getListenerInferences = function(utterances) {
+  var res = map(function(x) {
+    return {
+      "T1": Math.exp(listenerTopicDistrPosterior(utterances.slice(x[0], x[1])).score("T1")),
+      "T2": Math.exp(listenerTopicDistrPosterior(utterances.slice(x[0], x[1])).score("T2")),
+      "T3": Math.exp(listenerTopicDistrPosterior(utterances.slice(x[0], x[1])).score("T3")),
+      "T4": Math.exp(listenerTopicDistrPosterior(utterances.slice(x[0], x[1])).score("T4"))}
+  }, contextSlices)
+  return res
+}
+
+
+// processUtterances
+// =================
+// Return a list of dictionaries containing speaker utterance data
+// and corresponding state of listener inferences about topics.
+//
+var processUtterances = function(speakerData, listenerInferences) {
+  var dMap = map(function(x) {
+    return {
+      'utteranceNum': x, 
+      'utterance': speakerData[x], 
+      'T1': listenerInferences[x]['T1'],
+      'T2': listenerInferences[x]['T2'],
+      'T3': listenerInferences[x]['T3'],
+      'T4': listenerInferences[x]['T4']}
+  }, dataSizes)
+  return dMap
+}
+
+// runFn
+// =====
+// Return data of speaker utterances / listener inferences.
+//
+// Parameters
+// ----------
+// resultType : str
+//   One of (contextAwareSpeaker, contextUnawareSpeaker, baseline)
+//
+// Returns
+// --------
+// List of dicts
+//
+var runFn = function(resultType) {
+  // These is our model of interest -- the listener and speaker reason about discourse
+  if (resultType == 'contextAware') {
+    var utteranceList = speakerRecurse(targetDistr, [], nUtterances)
+    var listenerInferences = getListenerInferences(utteranceList)
+    return processUtterances(utteranceList, listenerInferences)
+  } 
+  // Comparison model 1 - Speaker never reasons about discrouse
+  else if (resultType == 'contextUnaware') {
+    var utteranceList = repeat(nUtterances, function(x) { 
+      var world = sampleWorldFromTopic(targetDistr)()
+      sample(SDiscourseAware(world, targetDistr, []))['utterance'] })
+    var listenerInferences = getListenerInferences(utteranceList)
+    return processUtterances(utteranceList, listenerInferences)
+  } 
+  else if (resultType == 'S') {
+    var utteranceList = repeat(nUtterances, (function(x) { return sample(SDiscourseAware(targetDistr)) }))
+    var listenerInferences = getListenerInferences(utteranceList)
+    return processUtterances(utteranceList, listenerInferences)
+  }
+  // Simply sample from prior over utterances
+  else if (resultType == 'baseline') {
+    var utteranceList = repeat(nUtterances, (function(x) { utterancesPrior() }))
+    var listenerInferences = getListenerInferences(utteranceList)
+    return processUtterances(utteranceList, listenerInferences)
+  } 
+  else {
+    error('Bad resultType:', resultType)
+  }
+}
+
+// 
+// run
+//
+runFn(resultType)
