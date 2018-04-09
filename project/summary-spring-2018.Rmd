@@ -6,6 +6,7 @@ output: html_document
 ---
 
 ```{r libraries, echo=FALSE, message=FALSE, warning=FALSE}
+library(directlabels)
 library(dplyr)
 library(knitr)
 
@@ -236,20 +237,189 @@ $$\mathbb{U}[u, T;w, D] = \exp(-\alpha(log(L_2(m|u,T))P(T|D)-cost(u)))$$
 
 #### Result 1: Listener gradually infers topic
 
-```{r plot4-rsa-CER-listeners-learn-topic}
+```{r plot4-setup-ambiguity-model, warning=FALSE, message=FALSE, echo=FALSE}
+fAmbiguityModelPath <- '/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/fyp-presentation/ambiguity-corpus-model.wppl'
+model_ambiguity <- getModelFile(fAmbiguityModelPath)
 
+runAmbiguity <- createRunFn(model_ambiguity)
+runAmbiguityFn <- function(i, targetDistr, nUtterances, resultType, alpha, recursionLevel) {
+  dTemp <- data.frame(targetDistr=targetDistr, 
+                      nUtterances=nUtterances, 
+                      resultType=resultType, 
+                      alpha=alpha, 
+                      recursionLevel=recursionLevel)
+  df <- runAmbiguity(dTemp) %>%
+    mutate(runNum=i, targetDistr=targetDistr, alpha=alpha, resultType=resultType, recursionLevel=recursionLevel)
+  df
+}
+```
+
+```{r plot4-run-simulations, warning=FALSE, message=FALSE, echo=FALSE}
+alpha <- 6
+topic <- 'T1'
+nUtterances <- 40
+recursionLevel <- 2
+
+df_baseline <- runAmbiguityFn(1,
+                              targetDistr=topic,
+                              nUtterances=nUtterances,
+                              resultType='baseline',
+                              alpha=alpha,
+                              recursionLevel=recursionLevel)
+df_contextUnaware <- runAmbiguityFn(1,
+                                    targetDistr=topic,
+                                    nUtterances=nUtterances,
+                                    resultType='contextUnaware',
+                                    alpha=alpha,
+                                    recursionLevel=recursionLevel)
+df_contextAware <- runAmbiguityFn(1, 
+                                  targetDistr=topic, 
+                                  nUtterances=nUtterances, 
+                                  resultType='contextAware', 
+                                  alpha=alpha,
+                                  recursionLevel=recursionLevel)
+
+df_amb <- rbind(df_contextUnaware, df_contextAware, df_baseline)
+```
+
+Note (BP 20180408): Intead of binning within a run, why not calcuate entropy between runs (so if we have 200 simulatsion check entropy of position 1.)
+```{r plot4a-rsa-CER-listeners-learn-topic, warning=FALSE, message=FALSE, echo=FALSE}
+lvls <- as.factor(df_amb$utterance)
+
+df_amb %>%
+  rowwise() %>%
+  mutate(utteranceYPos=which(utterance==levels(lvls))/10) %>%
+  ggplot(aes(x=utteranceNum, y=utteranceYPos, col=utterance)) +
+    geom_text(alpha=0.5, aes(label=utterance)) +
+    geom_line(aes(x=utteranceNum, y=T1), col='blue', size=1.5) +
+    geom_line(aes(x=utteranceNum, y=T2), col='red', alpha=0.25, size=1.5) +
+    geom_line(aes(x=utteranceNum, y=T3), col='green', alpha=0.25, size=1.5) +
+    geom_line(aes(x=utteranceNum, y=T4), col='purple', alpha=0.25, size=1.5) +
+    ylab("Listener topic posterior") +
+    xlab("Utterance position") +
+    theme_few() +
+    theme(legend.position='none', plot.title = element_text(hjust = 0.5)) +
+    ggtitle("Listener learns relevant topic as discourse proceeds") +
+    facet_grid(~resultType)
+```
+
+```{r run-CER-sims, warning=FALSE, message=FALSE, echo=FALSE}
+nSims <- 1000
+ALPHA <- 6
+TOPIC <- 'T1'
+nUtterances <- 40
+recursionLevel <- 2
+
+# Parallelization setup
+no_cores <- detectCores() - 1
+cl <- makeCluster(no_cores, type='FORK')
+registerDoParallel(cl)
+
+# Run sims
+ptm <- proc.time()
+sims <- foreach(i=seq(1, nSims), .packages=c('dplyr', 'rwebppl'), .combine=rbind) %dopar% 
+  runAmbiguityFn(i,
+                 targetDistr=TOPIC,
+                 nUtterances=nUtterances,
+                 resultType='contextAware',
+                 alpha=ALPHA,
+                 recursionLevel=recursionLevel)
+stopCluster(cl)
+etm <- proc.time() - ptm
+
+# Preprocess for entropy calculations.
+binSize <- 1
+df_binned <- addUtteranceBins(sims, nUtterances=NUM_UTTERANCES, binSize=binSize)
+df_filled <- fillUtteranceProportions(df_binned, binSize)
+```
+
+```{r plot4b-rsa-CER-listeners-learn-topic, warning=FALSE, message=FALSE, echo=FALSE}
+sims %>%
+  mutate(`P(Topic|Utterances)`=ifelse(utterance=='x' | utterance=='X x', 0.5, 
+                                      ifelse(utterance=='y' | utterance=='X y', 0.75, 0)),
+         utterance=ifelse(utterance=='x', '[a, d]', 
+                          ifelse(utterance=='X x', 'X[a, d]', 
+                                 ifelse(utterance=='y', '[b, c]', ifelse(utterance=='X y', 'X[b, c]', utterance))))) %>%
+  ggplot(aes(x=utteranceNum, y=`P(Topic|Utterances)`)) +
+    geom_smooth(method='loess', aes(y=T1)) +
+    geom_jitter(aes(col=utterance), width=0.5, height=0.1, alpha=0.25, size=2) +
+    ylab("Listener posterior probability of target topic") +
+    xlab("Utterance position") +
+    ggtitle(paste("S4 production (points) and listener topic inference (line)\nn=",nSims," simulations")) +
+    theme_few() +
+    theme(plot.title=element_text(hjust = 0.5))
 ```
 
 #### Result 2: Speaker more likley to use ambiguous utterance once listener is confident in topic
-
 ```{r plot4-rsa-CER-speakers-more-likely-to-use-ambiguous-utterances}
-
+sims %>%
+  mutate(isAmbiguous=(utterance=='x' | utterance=='y'),
+         isX=utterance=='x',
+         isA=utterance=='a',
+         isB=utterance=='b') %>%
+  group_by(utteranceNum) %>%
+  summarise(n=n(),
+            numAmb=sum(isAmbiguous),
+            probAmb=numAmb/n,
+            stdAmb=sqrt(probAmb*(1-probAmb)/n),
+            numX=sum(isX),
+            probX=numX/n,
+            stdX=sqrt(probX*(1-probX)/n),
+            numA=sum(isA),
+            probA=numA/n,
+            stdA=sqrt(probA*(1-probA)/n),
+            numB=sum(isB),
+            probB=numB/n,
+            stdB=sqrt(probB*(1-probB)/n),
+            avgT1=mean(T1),
+            avgT2=mean(T2),
+            avgT3=mean(T3),
+            avgT4=mean(T4)) %>%
+  # Check relations to other utterances here:
+  # gather(type, val, c(probX, probA, probB)) %>%
+  # ggplot(aes(x=utteranceNum, y=val, col=type)) +
+  ggplot(aes(x=utteranceNum, y=probAmb)) +
+    # geom_smooth(aes(y=avgT1), col='red', alpha=0.2) +
+    # geom_smooth(aes(y=avgT2), col='green', alpha=0.2) +
+    geom_point(size=2, alpha=0.75) +
+    geom_smooth(method='loess', alpha=0.5, col='blue') +
+    # geom_smooth(method = "lm", formula = y ~ poly(x, 2)) +
+    geom_errorbar(aes(ymin=probAmb-2*stdAmb, ymax=probAmb+2*stdAmb), alpha=0.5, width=0) +
+    ylab("Empirical probability \nof ambiguous utterance ['x', 'y']") +
+    xlab("Utterance position") +
+    ggtitle(paste0("Empirical probability Speaker uses ambiguous utterance\nn=", nSims," simulations")) +
+    theme_few() +
+    theme(plot.title=element_text(hjust = 0.5))
 ```
+
   
 #### Result 3: Unconditional entropy effect
 
 ```{r plot5-rsa-CER-unconditional-entropy-effect}
+getMI <- function(x, y) {
+  entropy::entropy(norm_(x), unit=c('log2')) + entropy::entropy(norm_(y), unit=c('log2')) -
+    entropy::entropy(c(norm_(x), norm_(y)), unit=c('log2'))
+}
 
+df_filled %>%
+  group_by(binVal, utterance) %>%
+  summarise(cnt=sum(n),
+            prop=cnt/nSims) %>%
+  group_by(binVal) %>%
+  summarise(ent=entropy::entropy(prop, unit=c('log2')),
+                            # a  , b,   c,   d,  x,     y
+            MI=getMI(prop, c(0.2, 0.15, 0.2, 0.1, 0.25, 0.1)),
+            diff=ent-MI) %>%
+  ggplot(aes(x=binVal, y=ent)) +
+    geom_line(col='blue', size=1.5, alpha=0.6) +
+    # geom_line(aes(y=MI), col='red', size=1.5, alpha=0.6) +
+    # geom_hline(aes(yintercept=mean(diff))) +
+    # geom_line(aes(y=diff), col='grey', size=1.5, alpha=0.6, lty=2) +
+    ylab("Entropy") +
+    xlab("Utterance position") +
+    ggtitle("Uncondtional entropy over discourse") +
+    theme_few() +
+    theme(plot.title=element_text(hjust = 0.5))
 ```
   
 #### Result 4 [OPTIONAL]: $H(Y)$ remains constant across discourse
