@@ -188,7 +188,7 @@ nSims <- 100
 df_nrsa_corpus <- corpus_run_fn(plot3NoiseModelFile, "S4", ALPHA, LAMBDA, THETA, nUtterances, nSims) %>%
   mutate(model='noisy_rsa')
 # Base model
-df_brsa_corpus <- corpus_run_fn(plot3BasicModelFile, "S3", ALPHA, LAMBDA, THETA, nUtterances, nSims)  %>%
+df_brsa_corpus <- corpus_run_fn(plot3BasicModelFile, "S4", ALPHA, LAMBDA, THETA, nUtterances, nSims)  %>%
   mutate(model='basic_rsa')
 # Combine
 df_plot3 <- rbind(df_nrsa_corpus, df_brsa_corpus)
@@ -351,7 +351,7 @@ sims %>%
 ```
 
 #### Result 2: Speaker more likley to use ambiguous utterance once listener is confident in topic
-```{r plot4-rsa-CER-speakers-more-likely-to-use-ambiguous-utterances}
+```{r plot4-rsa-CER-speakers-more-likely-to-use-ambiguous-utterances, warning=FALSE, message=FALSE, echo=FALSE}
 sims %>%
   mutate(isAmbiguous=(utterance=='x' | utterance=='y'),
          isX=utterance=='x',
@@ -404,12 +404,33 @@ Resources:
 * http://alumni.media.mit.edu/~bcroy/papers/bcroy_expected-entropy.pdf
 
 See Genzel & Charniak (2002) footnote 2.
+More specifically, what they're looking for is the cross entropy between all words at position $i$ and the true model of English to be the same for all $i$.
 
 $$H_{cross}(X^{(i)}, C) = K = H(X^{(i)}) + D_{KL}(X^{(i)}||C)$$
-where
 
-```{r plot5-rsa-CER-unconditional-entropy-effect}
+```{r plot5-rsa-CER-unconditional-entropy-effect, warning=FALSE, message=FALSE, echo=FALSE}
+# Note (BP): Manual calculation when listener knows topic.
+steadyStateProps <- c(0.24525,	0.2565,	0.1386,	0.0449955,	0.3002045,	0.0135)
 
+df_filled %>%
+  group_by(binVal, utterance) %>%
+  summarise(cnt=sum(n),
+            prop=cnt/nSims) %>%
+  group_by(binVal) %>%
+  summarise(`H(P(X))`=entropy::entropy.plugin(cnt, unit=c('log2')),
+            `KL divergence`=entropy::KL.empirical(cnt, steadyStateProps*nSims, unit=c('log2')),
+            `Cross entropy (H(P(X))+KL(P(X)||Q(X)))`=`H(P(X))`+`KL divergence`) %>%
+  ggplot(aes(x=binVal, y=`H(P(X))`)) +
+    geom_line(size=2, alpha=0.75, col='blue') +
+    xlab("Utterance position i") +
+    ylab("Measure (bits)") +
+    theme_few() +
+    theme(legend.position="none")
+```
+  
+#### Result 4 [OPTIONAL]: $H(Y)$ remains constant across discourse
+
+```{r plot6-rsa-CER-constant-entropy-full-effect, warning=FALSE, message=FALSE, echo=FALSE}
 # Note (BP): Manual calculation when listener knows topic.
 steadyStateProps <- c(0.24525,	0.2565,	0.1386,	0.0449955,	0.3002045,	0.0135)
 
@@ -433,148 +454,30 @@ df_filled %>%
     theme(legend.position="none")
 ```
 
-
 NOTE: This is just a playground for entropy stuff... still haven't figured it out
-```{r warning=FALSE, echo=FALSE}
-js_divergence <- function(x, y) {
-  m <- 0.5 * (x + y)
-  xm <- ifelse(log2(x/m) == 0 | log2(x/m) == -Inf, 0, log2(x/m))
-  ym <- ifelse(log2(y/m) == 0 | log2(y/m) == -Inf, 0, log2(y/m))
-  JS <- 0.5 * sum(x * xm) + sum(y * ym)
-  JS
-}
+```{r warning=FALSE, message=FALSE, echo=FALSE}
 
-
-(ks.test(x, y)$statistic)
-
-js_divergence(x, y)
-
-calcEntropy <- function(x) {
-  logX <- log2(x)
-  prod <- sum(x * logX)
-  return(-prod)
-}
-calcEntropy(x)
-calcJointEntropy(x, y)
-entropy::entropy(x, unit=c('log2'))
-entropy::entropy(rbind(x, y), unit=c('log2'))
-
-d2 <- rbind(x, y)
-
-e1 <- entropy::entropy.plugin(rowSums(d2), unit=c('log2'))
-e2 <- entropy::entropy.plugin(colSums(d2), unit=c('log2'))
-e12 <- entropy::entropy.plugin(d2, unit=c('log2'))
-
-
-x <- c(0.4, 0.4, 0.2, 0.0)
-y <- c(0.4, 0.5, 0.1, 0.05)
-
-
-
-t <- outer(x, y)
-tlog <- log2(t)
-sum(t*tlog)
-# Joint entropy
-# H(X,Y)=-\sum _{{x}}\sum _{{y}}P(x,y)\log _{2}[P(x,y)]\!
-calcJointEntropy <- function(x, y) {
-  # Note we treat x and y as independent and calculate joint as p(X, Y) = p(X) * p(Y)
-  t <- outer(x, y)
-  tlog <- log2(t)
-  sum(t*tlog)
-}
-
-calcMI <- function(x, y) {
-  xEnt <- calcEntropy(x)
-  yEnt <- calcEntropy(y)
-  jointEnt <- calcJointEntropy(x, y)
-  return(xEnt + yEnt - jointEnt)
-}
-
-getMI <- function(x, y) {
-  d2 <- entropy::discretize2d(x, y, numBins1=length(x), numBins2=length(y))
-  dx <- entropy::discretize(x, numBins=length(x))
-  dy <- entropy::discretize(y, numBins=length(y))
-  entropy::entropy(x, unit=c('log2')) + entropy::entropy(y, unit=c('log2')) -
-    entropy::entropy(rbind(x, y), unit=c('log2'))
-}
-
-# Note (BP): Manual calculation when listener knows topic.
-steadyStateProps <- c(0.24525,	0.2565,	0.1386,	0.0449955,	0.3002045,	0.0135)
-sims
-
-distrProbs <- c(0.1, 0.9)
-t1 <- c(0.1, 0.8, 0.1)
-t2 <- c(0.4, 0.5, 0.1)
-
-mixDistr <- function(probs) {
-  # t1 <- c(0.6, 0.30, 0.15, 0.05)
-  t1 <- c(0.24525,	0.2565,	0.1386,	0.0449955,	0.3002045,	0.0135)
-  # t2 <- c(0.30, 0.15, 0.05, 0.6)
-  t2 <- c(0.2673,	0.1218,	0.04455,	0.51775,	0.02995,	0.0182)
-  # t3 <- c(0.15, 0.05, 0.6, 0.30)
-  t3 <- c(0.1386,	0.04455,	0.24525,	0.2565,	0.0149,	0.00045)
-  # t4 <- c(0.05, 0.6, 0.30, 0.15)
-  t4 <- c(0.0449955,	0.53955,	0.1215,	0.133,	0.0074545,	0.00545)
-  d <- rbind(t1, t2, t3, t4)
-  dMixed <- t(d) %*% probs
-  t(dMixed)
-}
-
-calcListenerMI <- function(probs) {
-  mix <- as.vector(mixDistr(probs))
-  t1 <- c(0.24525,	0.2565,	0.1386,	0.0449955,	0.3002045,	0.0135)
-  cat(mix)
-  res <- getMI_(mix*nSims, t1*nSims)
-  res
-}
-
-as.vector(mixDistr(probs))
-
-probs1 <- c(0.013157895,	3.289474e-01,	3.289474e-01,	3.289474e-01)
-probs2 <- c(0.999998624,	1.376439e-06,	2.304833e-13,	1.135623e-12)
-
-mixDistr(probs1)
-mixDistr(probs2)
-t1
-
-calcListenerMI(c(0.013157895,	3.289474e-01,	3.289474e-01,	3.289474e-01))
-calcListenerMI(c(0.999998624,	1.376439e-06,	2.304833e-13,	1.135623e-12))
-calcListenerMI(c(1,	0,	0,	0))
-
-sims %>%
-  group_by(runNum, utteranceNum) %>%
-  rowwise %>%
-  mutate(distrEntropy=entropy::entropy(mixDistr(c(T1, T2, T3, T4))), unit=c('log2'))
-
-sims %>%
-  group_by(utteranceNum) %>%
-  summarise(avgT1=mean(T1),
-            avgT2=mean(T2),
-            avgT3=mean(T3),
-            avgT4=mean(T4)) %>%
-  
-
-```
-
-
-
-```{r}
-# MI tests
-df_filled %>%
-  group_by(binVal, utterance) %>%
-  summarise(cnt=sum(n),
-            prop=cnt/nSims) %>% 
-  filter(binVal==39)
-
-
-```
-
-
-
-  
-#### Result 4 [OPTIONAL]: $H(Y)$ remains constant across discourse
-
-```{r plot6-rsa-CER-constant-entropy-effect}
+# mixDistr <- function(probs) {
+#   # t1 <- c(0.6, 0.30, 0.15, 0.05)
+#   t1 <- c(0.24525,	0.2565,	0.1386,	0.0449955,	0.3002045,	0.0135)
+#   # t2 <- c(0.30, 0.15, 0.05, 0.6)
+#   t2 <- c(0.2673,	0.1218,	0.04455,	0.51775,	0.02995,	0.0182)
+#   # t3 <- c(0.15, 0.05, 0.6, 0.30)
+#   t3 <- c(0.1386,	0.04455,	0.24525,	0.2565,	0.0149,	0.00045)
+#   # t4 <- c(0.05, 0.6, 0.30, 0.15)
+#   t4 <- c(0.0449955,	0.53955,	0.1215,	0.133,	0.0074545,	0.00545)
+#   d <- rbind(t1, t2, t3, t4)
+#   dMixed <- t(d) %*% probs
+#   t(dMixed)
+# }
+# 
+# calcListenerMI <- function(probs) {
+#   mix <- as.vector(mixDistr(probs))
+#   t1 <- c(0.24525,	0.2565,	0.1386,	0.0449955,	0.3002045,	0.0135)
+#   cat(mix)
+#   res <- getMI_(mix*nSims, t1*nSims)
+#   res
+# }
 
 ```
 
@@ -584,7 +487,7 @@ df_filled %>%
 
 ## Results
 
-```{r summary-table-data, echo=FALSE}
+```{r summary-table-data, warning=FALSE, message=FALSE, echo=FALSE}
 behaviors <- c("Basic scalar implicature",
                "Speaker mark high-suprisal content",
                "Listener um-implicature",
