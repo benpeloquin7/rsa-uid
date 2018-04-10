@@ -43,7 +43,7 @@ If speakers are rational they should attempt to optimize communicative propertie
 
 If communication is optimal (efficient) then the most efficient way to send information is a constant rate.
 
-![Genzel & Charniak (2002) fig. 1](../img/genzel-charniak-2002-fig1.png)
+![Genzel & Charniak (2002) fig. 1](../img/genzel-charniak-2002-fig2.png)
 
   * Choice point - discourse
 
@@ -255,7 +255,7 @@ runAmbiguityFn <- function(i, targetDistr, nUtterances, resultType, alpha, recur
 ```
 
 ```{r plot4-run-simulations, warning=FALSE, message=FALSE, echo=FALSE}
-alpha <- 6
+alpha <- 10
 topic <- 'T1'
 nUtterances <- 40
 recursionLevel <- 2
@@ -305,7 +305,7 @@ df_amb %>%
 
 ```{r run-CER-sims, warning=FALSE, message=FALSE, echo=FALSE}
 nSims <- 1000
-ALPHA <- 6
+ALPHA <- 10
 TOPIC <- 'T1'
 nUtterances <- 40
 recursionLevel <- 2
@@ -329,11 +329,11 @@ etm <- proc.time() - ptm
 
 # Preprocess for entropy calculations.
 binSize <- 1
-df_binned <- addUtteranceBins(sims, nUtterances=NUM_UTTERANCES, binSize=binSize)
+df_binned <- addUtteranceBins(sims, nUtterances=nUtterances, binSize=binSize)
 df_filled <- fillUtteranceProportions(df_binned, binSize)
 ```
 
-```{r plot4b-rsa-CER-listeners-learn-topic, warning=FALSE, message=FALSE, echo=FALSE}
+```{r plot4b-rsa-CER-listeners-learn-topic, warning=FALSE, message=FALSE, echo=FALSE, eval=FALSE}
 sims %>%
   mutate(`P(Topic|Utterances)`=ifelse(utterance=='x' | utterance=='X x', 0.5, 
                                       ifelse(utterance=='y' | utterance=='X y', 0.75, 0)),
@@ -395,32 +395,182 @@ sims %>%
   
 #### Result 3: Unconditional entropy effect
 
+Resources:
+
+* https://math.stackexchange.com/questions/2221096/can-conditional-entropy-hy-mid-x-be-expressed-by-kullback-leibler-divergence?utm_medium=organic&utm_source=google_rich_qa&utm_campaign=google_rich_qa
+* https://ejde.math.txstate.edu/Volumes/2016/237/popescu.pdf
+* https://en.wikipedia.org/wiki/Inequalities_in_information_theory#Lower_bounds_for_the_Kullback%E2%80%93Leibler_divergence
+* https://en.wikipedia.org/wiki/Gibbs%27_inequality
+* http://alumni.media.mit.edu/~bcroy/papers/bcroy_expected-entropy.pdf
+
+See Genzel & Charniak (2002) footnote 2.
+
+$$H_{cross}(X^{(i)}, C) = K = H(X^{(i)}) + D_{KL}(X^{(i)}||C)$$
+where
+
 ```{r plot5-rsa-CER-unconditional-entropy-effect}
-getMI <- function(x, y) {
-  entropy::entropy(norm_(x), unit=c('log2')) + entropy::entropy(norm_(y), unit=c('log2')) -
-    entropy::entropy(c(norm_(x), norm_(y)), unit=c('log2'))
-}
+
+# Note (BP): Manual calculation when listener knows topic.
+steadyStateProps <- c(0.24525,	0.2565,	0.1386,	0.0449955,	0.3002045,	0.0135)
 
 df_filled %>%
   group_by(binVal, utterance) %>%
   summarise(cnt=sum(n),
             prop=cnt/nSims) %>%
   group_by(binVal) %>%
-  summarise(ent=entropy::entropy(prop, unit=c('log2')),
-                            # a  , b,   c,   d,  x,     y
-            MI=getMI(prop, c(0.2, 0.15, 0.2, 0.1, 0.25, 0.1)),
-            diff=ent-MI) %>%
-  ggplot(aes(x=binVal, y=ent)) +
-    geom_line(col='blue', size=1.5, alpha=0.6) +
-    # geom_line(aes(y=MI), col='red', size=1.5, alpha=0.6) +
-    # geom_hline(aes(yintercept=mean(diff))) +
-    # geom_line(aes(y=diff), col='grey', size=1.5, alpha=0.6, lty=2) +
-    ylab("Entropy") +
-    xlab("Utterance position") +
-    ggtitle("Uncondtional entropy over discourse") +
+  summarise(`H(P(X))`=entropy::entropy.plugin(cnt, unit=c('log2')),
+            `KL divergence`=entropy::KL.empirical(cnt, steadyStateProps*nSims, unit=c('log2')),
+            `Cross entropy (H(P(X))+KL(P(X)||Q(X)))`=`H(P(X))`+`KL divergence`) %>%
+  gather(typ, measure, c(`H(P(X))`, `KL divergence`, `Cross entropy (H(P(X))+KL(P(X)||Q(X)))`)) %>%
+  ggplot(aes(x=binVal, y=measure, col=typ)) +
+    geom_line(size=2, alpha=0.5) +
+    annotate("text", label = "HCross(P, Q)", x=4, y = 2.1, size=4, col="red") +
+    annotate("text", label = "H(P)", x=8, y = 1.6, size= 4, col="forest green") +
+    annotate("text", label = "KL(P||Q)", x=10, y = 0.6, size= 4, col="blue") +
+    xlab("Utterance position i") +
+    ylab("Measure (bits)") +
     theme_few() +
-    theme(plot.title=element_text(hjust = 0.5))
+    theme(legend.position="none")
 ```
+
+
+NOTE: This is just a playground for entropy stuff... still haven't figured it out
+```{r warning=FALSE, echo=FALSE}
+js_divergence <- function(x, y) {
+  m <- 0.5 * (x + y)
+  xm <- ifelse(log2(x/m) == 0 | log2(x/m) == -Inf, 0, log2(x/m))
+  ym <- ifelse(log2(y/m) == 0 | log2(y/m) == -Inf, 0, log2(y/m))
+  JS <- 0.5 * sum(x * xm) + sum(y * ym)
+  JS
+}
+
+
+(ks.test(x, y)$statistic)
+
+js_divergence(x, y)
+
+calcEntropy <- function(x) {
+  logX <- log2(x)
+  prod <- sum(x * logX)
+  return(-prod)
+}
+calcEntropy(x)
+calcJointEntropy(x, y)
+entropy::entropy(x, unit=c('log2'))
+entropy::entropy(rbind(x, y), unit=c('log2'))
+
+d2 <- rbind(x, y)
+
+e1 <- entropy::entropy.plugin(rowSums(d2), unit=c('log2'))
+e2 <- entropy::entropy.plugin(colSums(d2), unit=c('log2'))
+e12 <- entropy::entropy.plugin(d2, unit=c('log2'))
+
+
+x <- c(0.4, 0.4, 0.2, 0.0)
+y <- c(0.4, 0.5, 0.1, 0.05)
+
+
+
+t <- outer(x, y)
+tlog <- log2(t)
+sum(t*tlog)
+# Joint entropy
+# H(X,Y)=-\sum _{{x}}\sum _{{y}}P(x,y)\log _{2}[P(x,y)]\!
+calcJointEntropy <- function(x, y) {
+  # Note we treat x and y as independent and calculate joint as p(X, Y) = p(X) * p(Y)
+  t <- outer(x, y)
+  tlog <- log2(t)
+  sum(t*tlog)
+}
+
+calcMI <- function(x, y) {
+  xEnt <- calcEntropy(x)
+  yEnt <- calcEntropy(y)
+  jointEnt <- calcJointEntropy(x, y)
+  return(xEnt + yEnt - jointEnt)
+}
+
+getMI <- function(x, y) {
+  d2 <- entropy::discretize2d(x, y, numBins1=length(x), numBins2=length(y))
+  dx <- entropy::discretize(x, numBins=length(x))
+  dy <- entropy::discretize(y, numBins=length(y))
+  entropy::entropy(x, unit=c('log2')) + entropy::entropy(y, unit=c('log2')) -
+    entropy::entropy(rbind(x, y), unit=c('log2'))
+}
+
+# Note (BP): Manual calculation when listener knows topic.
+steadyStateProps <- c(0.24525,	0.2565,	0.1386,	0.0449955,	0.3002045,	0.0135)
+sims
+
+distrProbs <- c(0.1, 0.9)
+t1 <- c(0.1, 0.8, 0.1)
+t2 <- c(0.4, 0.5, 0.1)
+
+mixDistr <- function(probs) {
+  # t1 <- c(0.6, 0.30, 0.15, 0.05)
+  t1 <- c(0.24525,	0.2565,	0.1386,	0.0449955,	0.3002045,	0.0135)
+  # t2 <- c(0.30, 0.15, 0.05, 0.6)
+  t2 <- c(0.2673,	0.1218,	0.04455,	0.51775,	0.02995,	0.0182)
+  # t3 <- c(0.15, 0.05, 0.6, 0.30)
+  t3 <- c(0.1386,	0.04455,	0.24525,	0.2565,	0.0149,	0.00045)
+  # t4 <- c(0.05, 0.6, 0.30, 0.15)
+  t4 <- c(0.0449955,	0.53955,	0.1215,	0.133,	0.0074545,	0.00545)
+  d <- rbind(t1, t2, t3, t4)
+  dMixed <- t(d) %*% probs
+  t(dMixed)
+}
+
+calcListenerMI <- function(probs) {
+  mix <- as.vector(mixDistr(probs))
+  t1 <- c(0.24525,	0.2565,	0.1386,	0.0449955,	0.3002045,	0.0135)
+  cat(mix)
+  res <- getMI_(mix*nSims, t1*nSims)
+  res
+}
+
+as.vector(mixDistr(probs))
+
+probs1 <- c(0.013157895,	3.289474e-01,	3.289474e-01,	3.289474e-01)
+probs2 <- c(0.999998624,	1.376439e-06,	2.304833e-13,	1.135623e-12)
+
+mixDistr(probs1)
+mixDistr(probs2)
+t1
+
+calcListenerMI(c(0.013157895,	3.289474e-01,	3.289474e-01,	3.289474e-01))
+calcListenerMI(c(0.999998624,	1.376439e-06,	2.304833e-13,	1.135623e-12))
+calcListenerMI(c(1,	0,	0,	0))
+
+sims %>%
+  group_by(runNum, utteranceNum) %>%
+  rowwise %>%
+  mutate(distrEntropy=entropy::entropy(mixDistr(c(T1, T2, T3, T4))), unit=c('log2'))
+
+sims %>%
+  group_by(utteranceNum) %>%
+  summarise(avgT1=mean(T1),
+            avgT2=mean(T2),
+            avgT3=mean(T3),
+            avgT4=mean(T4)) %>%
+  
+
+```
+
+
+
+```{r}
+# MI tests
+df_filled %>%
+  group_by(binVal, utterance) %>%
+  summarise(cnt=sum(n),
+            prop=cnt/nSims) %>% 
+  filter(binVal==39)
+
+
+```
+
+
+
   
 #### Result 4 [OPTIONAL]: $H(Y)$ remains constant across discourse
 
