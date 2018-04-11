@@ -27,7 +27,7 @@ modelName <- 'S4'
 alpha <- 12
 lambda <- 1
 theta <- 0.3
-nUtterances <- 500
+nUtterances <- 1000
 nSims <- 1
 output <- FALSE
 
@@ -80,6 +80,7 @@ runRandomXsFn <- function(char_vector_no_xs, numXs) {
 # runRandomXsFn(allUtterancesXsRemoved, nXs)
 ```
 
+
 Randomizing sims
 ```{r}
 ng <- ngram::ngram(allUttarencesNoSpaces, n=2, sep='')
@@ -127,17 +128,6 @@ df_agg_summ <- df_agg %>%
 ```
 
 
-Entropy Plot
-```{r entropy-plot, eval=FALSE, warning=FALSE, message=FALSE}
-hline <- subset(df_agg_summ, runNum==0)$entrop
-df_agg_summ %>%
-  mutate(type=ifelse(runNum==0, "RSA", "Random")) %>%
-  ggplot(aes(x=runNum, y=entrop)) +
-    geom_bar(stat='identity', position='dodge', aes(fill=type)) +
-    geom_hline(yintercept=hline, lty=2, color='white', alpha=0.7) +
-    theme_few()
-```
-
 ```{r}
 df_bigrams <- sims %>%
   select(currUtterance) %>%
@@ -166,3 +156,164 @@ left_join(df_bigrams, df_agg %>% select(bigrams, bigramProb, runNum)) %>%
     geom_rug(alpha=0.5)
 ```
 
+
+Run full pipeline --> so that we can run this for n iterations.
+```{r}
+
+# countCharOccurrences
+# ====================
+# 
+# Parameters
+# ----------
+# char : char
+#    Character to count occurences of in string.
+# s : str
+#   String to search in.
+# 
+#  Returns
+#  -------
+#  int
+#     Number of occurances of 'char' in s
+#
+countCharOccurrences <- function(char, s) {
+  s2 <- gsub(char,"",s)
+  nchar(s) - nchar(s2)
+}
+
+# buildBigramsDf
+# ==============
+# 
+# Parameters
+# ----------
+# utteranceStrNoSpaces: string
+#   Character string with spaces removed.
+# 
+# Returns
+# -------
+# data.frame
+#   Data frame with bigram counts (modified from ngram package)
+# 
+buildBigramsDf <- function(utteranceStrNoSpaces) {
+  ng <- ngram::ngram(utteranceStrNoSpaces, n=2, sep='')
+  dfNgram <- data.frame(ngram::get.phrasetable(ng))
+  dfNgram$first <- sapply(dfNgram$ngrams, function(x) {strsplit(x, '')}[[1]][1])
+  dfNgram$second <- sapply(dfNgram$ngrams, function(x) {strsplit(x, '')}[[1]][3])
+  dfNgram <- dfNgram %>%
+    mutate(first=ifelse(first==' ', '*', first),
+           second=ifelse(second==' ', '*', second)) %>%
+    group_by(second) %>%
+    mutate(secondTotalProp=sum(prop),
+           bigramProb=prop/secondTotalProp) %>%
+    rename(bigrams=ngrams)  %>%
+    ungroup %>%
+    select(bigrams, freq, prop, secondTotalProp, bigramProb) %>%
+    mutate(runNum=0)
+  dfNgram
+}
+
+# runRandomXsFn
+# =============
+# 
+# Parameters
+# ----------
+# char_vector_no_xs: str
+#   Character vector (assume UID cues have been removed).
+# numXs: int
+#   Number of cues in string.
+# 
+# Returns
+# -------
+# str
+#   Character vector with numXs inserted.
+# 
+runRandomXsFn <- function(char_vector_no_xs, numXs) {
+  X_positions <- sample(nchar(char_vector_no_xs), numXs)
+  newVector <- strsplit(char_vector_no_xs, split="")[[1]]
+  for (i in X_positions) {
+    newVector[i] <- paste0("X", newVector[i])
+  }
+  newVector <- paste(newVector, collapse="")
+  newVector
+}
+
+# buildRandomLMs
+# ==============
+# 
+# Parameters
+# ----------
+# df: data.frame
+#   Data frame from previous run with LM counts
+# allUtterancesCuesRemoved: str
+#   Character vector with cues (e.g. 'X's) removed
+# nComparison: int
+#   Number of random comparisons to make.
+# expNum: int
+#   Meta data for simulation tracking
+# 
+# Returns
+# -------
+# data.frame
+#   New data frame of original df ('df') and nComparisos LMs
+# 
+buildRandomLMs <- function(df, allUtterancesCuesRemoved, nCues, nComparisons, expNum) {
+  df_agg <- df
+  for (i in seq(1, nComparisons)) {
+    randomSample <- runRandomXsFn(allUtterancesCuesRemoved, nCues)
+    df_random <- buildBigramsDf(randomSample) %>%
+      mutate(runNum=i,
+             expNum=expNum,
+             type="random")
+    df_agg <- rbind(df_agg, df_random)
+  }
+  df_agg <- df_agg %>%
+    mutate(bigrams=gsub(" $", "", bigrams))
+  df_agg
+}
+
+runLMExp <- function(modelFile, modelName, alpha, lambda, theta, nUtterances, nComparisons, expNum) {
+  # Setup
+  modelStr <- getModelFile(modelFile)
+  runFn <- createRunFn(modelStr)
+  runExp_ <- runExperimentFn(runFn, modelName, alpha, lambda, theta, nUtterances)
+  
+  # Simulation data frame
+  df_run <- runExp_(expNum)
+  # RSA Bigrams dataframe 
+  df_bigrams <- buildBigramLM(df_run) %>%
+    mutate(expNum=expNum,
+           runNum=0,
+           type='RSA')
+  
+  # LM Data
+  # (1) All utterances as a string
+  # (2) All utterances no spaces
+  # (3) All utterances no X (UID cues)
+  # (4) Number of UID cues
+  # (5) Non UID character as vector
+  # (6) All character as vector (same as df_sim$currUtterance)
+  allUtterances <- paste(df_run$currUtterance, collapse= " ")
+  allUttarencesNoSpaces <- gsub(" ", "", allUtterances)
+  allUtterancesXsRemoved <- gsub("X",'', allUttarencesNoSpaces)
+  nXs <- countCharOccurrences('X', allUtterances)
+  noXsChars <- strsplit(allUtterancesXsRemoved, split=" ")[[1]]
+  chars <- strsplit(allUtterances, split=" ")[[1]]
+  
+  df_lm_sims <- buildRandomLMs(df_bigrams, allUtterancesXsRemoved, nXs, nComparisons, expNum)
+  df_lm_sims
+}
+
+# modelFile, modelName, alpha, lambda, theta, nUtterances, nComparisons, expNum
+df0 <- runLMExp(plot3NoiseModelFile, "S4", 10, 1, 0.2, 500, 30, 0)
+
+```
+
+Entropy Plot
+```{r entropy-plot, eval=FALSE, warning=FALSE, message=FALSE}
+hline <- subset(df_agg_summ, runNum==0)$entrop
+df_agg_summ %>%
+  mutate(type=ifelse(runNum==0, "RSA", "Random")) %>%
+  ggplot(aes(x=runNum, y=entrop)) +
+    geom_bar(stat='identity', position='dodge', aes(fill=type)) +
+    geom_hline(yintercept=hline, lty=2, color='white', alpha=0.7) +
+    theme_few()
+```
