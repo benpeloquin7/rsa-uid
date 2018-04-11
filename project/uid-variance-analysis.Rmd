@@ -26,7 +26,7 @@ plot3BasicModelFile <- "/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/fyp-p
 modelName <- 'S4'
 alpha <- 12
 lambda <- 1
-theta <- 0.2
+theta <- 0.3
 nUtterances <- 500
 nSims <- 1
 output <- FALSE
@@ -128,7 +128,7 @@ df_agg_summ <- df_agg %>%
 
 
 Entropy Plot
-```{r entropy-plot}
+```{r entropy-plot, eval=FALSE, warning=FALSE, message=FALSE}
 hline <- subset(df_agg_summ, runNum==0)$entrop
 df_agg_summ %>%
   mutate(type=ifelse(runNum==0, "RSA", "Random")) %>%
@@ -162,6 +162,7 @@ left_join(df_bigrams, df_agg %>% select(bigrams, bigramProb, runNum)) %>%
             s2Info=sd(info)^2)  %>%
   mutate(type=ifelse(runNum==0, "RSA", "Random")) %>%
   ggplot(aes(x=avgInfo, y=s2Info, col=type)) +
-    geom_point()
+    geom_point(alpha=0.5, size=2) +
+    geom_rug(alpha=0.5)
 ```
 
