@@ -17,13 +17,15 @@ library(tidytext)
 source("summary-spring-2018-helpers.R")
 ```
 
+UID predicts rational speakers should attempt to produce utterances that are approximately uniform in their information rate. One way of doing this is by providing cues before high-surprisal content. We examine the degree to which RSA models display provide cues before high-suprisal content in [`summary-spring-2018.Rmd`](https://htmlpreview.github.io/?https://github.com/benpeloquin7/rsa-uid/blob/master/project/summary-spring-2018.html). Relatdely, we can examine another measure of smoothness -- looking at the degree to which ngram units vary in their surprisal over a discourse. Smaller variance means "smoother" production. We pursue this idea in the current notebook.
+
+Simulate `n` corpora from `noisy-RSA` model of length `n_tokens`. Given a particular string of tokens we can randomly shuffle the UID cues. If part of what RSA is doing is optimizing for smoothness we should see lower variance in ngram surprisals among the `RSA ordering` vs a `random ordering` of cues. For each corpora $i$ of the $n$ simulations we randomly shuffle the UID cues $n_comparison$ times, comparing the average ngram surprisal variance across these simulations.
 
 ```{r model-files, warning=FALSE, message=FALSE, echo=FALSE}
 plot3NoiseModelFile <- "/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/fyp-presentation/noisy-rsa-corpus-model.wppl"
-plot3BasicModelFile <- "/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/fyp-presentation/basic-rsa-corpus-model.wppl"
 ```
 
-```{r helpers warning=FALSE, message=FALSE, echo=FALSE}
+```{r helpers, warning=FALSE, message=FALSE, echo=FALSE}
 
 # countCharOccurrences
 # ====================
@@ -66,12 +68,14 @@ buildBigramsDf <- function(utteranceStrNoSpaces) {
   dfNgram <- dfNgram %>%
     mutate(first=ifelse(first==' ', '*', first),
            second=ifelse(second==' ', '*', second)) %>%
-    group_by(second) %>%
-    mutate(secondTotalProp=sum(prop),
-           bigramProb=prop/secondTotalProp) %>%
+    # I think this should be first instead of second
+    # we want P(a|x) not P(x|a) (as in the UID likelihood)
+    group_by(first) %>%
+    mutate(firstTotalProp=sum(prop),
+           bigramProb=prop/firstTotalProp) %>%
     rename(bigrams=ngrams)  %>%
     ungroup %>%
-    select(bigrams, freq, prop, secondTotalProp, bigramProb) %>%
+    select(bigrams, freq, prop, firstTotalProp, bigramProb) %>%
     mutate(runNum=0)
   dfNgram
 }
@@ -195,11 +199,13 @@ runLMExp <- function(modelFile, modelName, alpha, lambda, theta, nUtterances, nC
 ```
 
 Run simulations
-```{r run-sims, warning=FALSE, message=FALSE}
-exps <- seq(1, 20)
+```{r run-sims, warning=FALSE, message=FALSE, echo=FALSE}
+nSims <- 50
+exps <- seq(1, nSims)
 dfAll <- data.frame()
 for (expNum in exps) {
-  df_curr <- runLMExp(plot3NoiseModelFile, "S4", 12, 1, 0.3, 500, 30, expNum)
+  cat(expNum, ' ')
+  df_curr <- runLMExp(plot3NoiseModelFile, "S4", 6, 1, 0.2, 500, 30, expNum)
   dfAll <- rbind(dfAll, df_curr)
 }
 ```
@@ -208,34 +214,58 @@ for (expNum in exps) {
 dfAllSummary <- dfAll %>%
   mutate(info=-log2(bigramProb)) %>%
   group_by(expNum, runNum, type) %>%
-  summarise(avgInfo=mean(info),
+  summarise(avgInfo=median(info),
             s2Info=sd(info)^2)
 ```
 
 
-Plot first 10 simulations
+# Simulations
+
+Plot first 10 simulations. Green dot is the RSA `informativity` mean and variance measures. Red dots are the shuffled cue language model variance and informativity measures. While there is consistent variation between the experimental discourses the `RSA` ordering are consistently among the lowest variance.
+
 ```{r plot-sims, warning=FALSE, message=FALSE, echo=FALSE}
 dfAllSummary %>%
+  filter(expNum < 13) %>%
   ggplot(aes(x=avgInfo, y=s2Info, col=type)) +
-    geom_point(alpha=0.5, size=2) +
+    geom_point(alpha=0.75, size=2) +
     # geom_rug(alpha=0.5) +
+    xlab("Corpora surprisal average (median)") +
+    ylab("Corpora surprisal variance") +
     facet_wrap(~expNum, ncol=4) +
-    theme_few()
+    ggtitle("RSA vs random cue orderings surprisal variance and expectation.") +
+    theme_few() +
+    theme(plot.title = element_text(hjust = 0.5))
 ```
-```{r}
-dfAllSummary %>%
+
+
+Compare RSA cue ordering variance vs average cue ordering variance for the shuffled models. Again, RSA consistently produces lower variance corpora.
+```{r plot2-variance, warning=FALSE, message=FALSE, echo=FALSE}
+dfAllSummary2 <- dfAllSummary %>%
   group_by(expNum, type) %>%
   summarise(avgS2=mean(s2Info)) %>%
-  spread(type, avgS2) %>%
+  spread(type, avgS2)
+
+limMaxDiff <- 1 - max(max(dfAllSummary2$RSA), max(dfAllSummary2$random))
+limMin <- min(min(dfAllSummary2$RSA), min(dfAllSummary2$random)) - 0.025
+lmUsed <- limMin - limMaxDiff
+
+dfAllSummary2 %>%
   ggplot(aes(x=random, RSA)) +
-    geom_point() +
-    ylim(0.7, 1) +
-    xlim(0.7, 1) +
-    geom_abline(slope=1, intercept=0, lty=2, alpha=0.7)
+    geom_point(size=3, shape=21, stroke=1, col='white', fill='blue', alpha=0.5) +
+    ylim(lmUsed, 1) +
+    xlim(lmUsed, 1) +
+    ylab("Average LM information variance\nRSA cue position") +
+    xlab("Average LM information variance\nRandom cue position") +
+    geom_abline(slope=1, intercept=0, lty=2, alpha=0.7) +
+    theme_few() +
+    ggtitle(paste("Noisy-RSA corpora minimize information variance\nn=", nSims, "simulations")) +
+    theme(plot.title = element_text(hjust = 0.5))
+  
 ```
 
+We can test this in a mixed-effects model with `experiment`- and `shuffled number` random effets. We're interested in whether the type of ordering (`RSA` vs `random`) predicts variance.
 
-
+`info variance ~ runType (1|experiment) + (1|run number)`
 ```{r lmer-model, warning=FALSE, message=FALSE, echo=FALSE}
 dfAllSummary <- dfAll %>%
   mutate(info=-log2(bigramProb)) %>%
@@ -245,150 +275,4 @@ dfAllSummary <- dfAll %>%
 
 summary(lmer(s2Info~as.factor(type)+(1|expNum)+(1|runNum), data=dfAllSummary))
 ```
-
-
-
-Old Stuff
-```{r eval=FALSE}
-modelName <- 'S4'
-alpha <- 12
-lambda <- 1
-theta <- 0.3
-nUtterances <- 1000
-nSims <- 1
-output <- FALSE
-
-modelStr <- getModelFile(plot3NoiseModelFile)
-runFn <- createRunFn(modelStr)
-runExp_ <- runExperimentFn(runFn, modelName, alpha, lambda, theta, nUtterances)
-
-# Register cores
-no_cores <- detectCores() - 1
-cl <- makeCluster(no_cores, type='FORK')
-registerDoParallel(cl)
-
-# Run sims
-ptm <- proc.time()
-if (output) {
-  cat("Running", nSims, "simulations each with", nUtterances, "samples.")
-}
-sims <- foreach(i=seq(1, nSims), .packages=c('dplyr', 'rwebppl'), .combine=rbind) %dopar% runExp_(i)
-stopCluster(cl)
-etm <- proc.time() - ptm
-if (output) {
-  cat("runtime: ", etm[3] / 60)
-}
-
-```
-
-
-```{r eval=FALSE}
-countCharOccurrences <- function(char, s) {
-  s2 <- gsub(char,"",s)
-  return (nchar(s) - nchar(s2))
-}
-allUtterances <- paste(sims$currUtterance, collapse= " ")
-allUttarencesNoSpaces <- gsub(" ", "", allUtterances)
-allUtterancesXsRemoved <- gsub("X",'', allUttarencesNoSpaces)
-nXs <- countCharOccurrences('X', allUtterances)
-noXsChars <- strsplit(allUtterancesXsRemoved, split=" ")[[1]]
-chars <- strsplit(allUtterances, split=" ")[[1]]
-
-set.seed(0)
-runRandomXsFn <- function(char_vector_no_xs, numXs) {
-  X_positions <- sample(nchar(char_vector_no_xs), numXs)
-  newVector <- strsplit(char_vector_no_xs, split="")[[1]]
-  for (i in X_positions) {
-    newVector[i] <- paste0("X", newVector[i])
-  }
-  newVector <- paste(newVector, collapse="")
-  newVector
-}
-# runRandomXsFn(allUtterancesXsRemoved, nXs)
-```
-
-
-Randomizing sims
-```{r eval=FALSE}
-ng <- ngram::ngram(allUttarencesNoSpaces, n=2, sep='')
-dfNgramRSA <- data.frame(ngram::get.phrasetable(ng))
-dfNgramRSA$first <- sapply(dfNgramRSA$ngrams, function(x) {strsplit(x, '')}[[1]][1])
-dfNgramRSA$second <- sapply(dfNgramRSA$ngrams, function(x) {strsplit(x, '')}[[1]][3])
-dfNgramRSA <- dfNgramRSA %>%
-  mutate(first=ifelse(first==' ', '*', first),
-         second=ifelse(second==' ', '*', second)) %>%
-  group_by(second) %>%
-  mutate(secondTotalProp=sum(prop),       # p(a|X) + p(a|^)
-         bigramProb=prop/secondTotalProp) %>%
-  rename(bigrams=ngrams)  %>%
-  ungroup %>%
-  select(bigrams, freq, prop, secondTotalProp, bigramProb) %>%
-  mutate(runNum=0)
-
-df_agg <- dfNgramRSA
-nSamples <- 100
-for (i in seq(1, nSamples)) {
-  # randomSample <- paste(sample(noXsChars), collapse="")
-  randomSample <- runRandomXsFn(allUtterancesXsRemoved, nXs)
-  ng <- ngram::ngram(randomSample, n=2, sep='')
-  dfNgramRaw <- data.frame(ngram::get.phrasetable(ng))
-  dfNgramRaw$first <- sapply(dfNgramRaw$ngrams, function(x) {strsplit(x, '')}[[1]][1])
-  dfNgramRaw$second <- sapply(dfNgramRaw$ngrams, function(x) {strsplit(x, '')}[[1]][3])
-  dfNgramRaw <- dfNgramRaw %>%
-    mutate(first=ifelse(first==' ', '*', first),
-           second=ifelse(second==' ', '*', second)) %>%
-    group_by(second) %>%
-    mutate(secondTotalProp=sum(prop),       # p(a|X) + p(a|^)
-           bigramProb=prop/secondTotalProp) %>%
-    rename(bigrams=ngrams)  %>%
-    ungroup %>%
-    select(bigrams, freq, prop, secondTotalProp, bigramProb) %>%
-    mutate(runNum=i)
-  df_agg <- rbind(df_agg, dfNgramRaw)
-}
-df_agg <- df_agg %>%
-  mutate(bigrams=gsub(" $", "", bigrams))
-
-df_agg_summ <- df_agg %>%
-  group_by(runNum) %>%
-  summarise(entrop=sum(bigramProb*-log2(bigramProb)))
-```
-
-
-```{r eval=FALSE}
-df_bigrams <- sims %>%
-  select(currUtterance) %>%
-  unnest_tokens("text", currUtterance, token="ngrams", n=2, to_lower=FALSE) %>%
-  rename(bigrams=text)
-df_bigrams$i  <- seq(1, nrow(df_bigrams))
-
-left_join(df_bigrams, df_agg %>% select(bigrams, bigramProb, runNum)) %>%
-  filter(runNum < 4) %>%
-  mutate(info=-log2(bigramProb)) %>%
-  ggplot(aes(x=i, y=info)) +
-    geom_line(aes(col=as.factor(runNum)), alpha=0.4) +
-    facet_grid(~runNum)
-```
-
-Avg information by average variance
-```{r eval=FALSE}
-left_join(df_bigrams, df_agg %>% select(bigrams, bigramProb, runNum)) %>%
-  mutate(info=-log2(bigramProb)) %>%
-  group_by(runNum) %>%
-  summarise(avgInfo=mean(info),
-            s2Info=sd(info)^2)  %>%
-  mutate(type=ifelse(runNum==0, "RSA", "Random")) %>%
-  ggplot(aes(x=avgInfo, y=s2Info, col=type)) +
-    geom_point(alpha=0.5, size=2) +
-    geom_rug(alpha=0.5)
-```
-Entropy Plot
-```{r entropy-plot, eval=FALSE, warning=FALSE, message=FALSE}
-hline <- subset(df_agg_summ, runNum==0)$entrop
-df_agg_summ %>%
-  mutate(type=ifelse(runNum==0, "RSA", "Random")) %>%
-  ggplot(aes(x=runNum, y=entrop)) +
-    geom_bar(stat='identity', position='dodge', aes(fill=type)) +
-    geom_hline(yintercept=hline, lty=2, color='white', alpha=0.7) +
-    theme_few()
-```
+RSA orderings have typically ~-0.05 bits less variance.
