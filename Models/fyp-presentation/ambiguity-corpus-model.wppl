@@ -62,7 +62,7 @@ var RECURSION_LEVEL = getRData('recursionLevel') ? getRData('recursionLevel') : 
 
 // Topics
 var topicNames = ['T1', 'T2', 'T3', 'T4']
-var topicInitWeights = [0.1, 1, 1, 1]
+var topicInitWeights = [1, 25, 25, 25]
 var topicNamesDistr = Categorical({vs:topicNames, ps:topicInitWeights})
 var topicNamesPrior = function() { 
   return sample(topicNamesDistr)
@@ -428,13 +428,13 @@ var runFn = function(resultType) {
     return processUtterances(utteranceList, listenerInferences)
   } 
   else if (resultType == 'S') {
-    var utteranceList = repeat(nUtterances, (function(x) { return sample(SDiscourseAware(targetDistr)) }))
+    var utteranceList = repeat(nUtterances, function(x) { return sample(SHelper(targetDistr)) })
     var listenerInferences = getListenerInferences(utteranceList)
     return processUtterances(utteranceList, listenerInferences)
   }
   // Simply sample from prior over utterances
   else if (resultType == 'baseline') {
-    var utteranceList = repeat(nUtterances, (function(x) { utterancesPrior() }))
+    var utteranceList = repeat(nUtterances, (function(x) { return utterancesPrior() }))
     var listenerInferences = getListenerInferences(utteranceList)
     return processUtterances(utteranceList, listenerInferences)
   } 

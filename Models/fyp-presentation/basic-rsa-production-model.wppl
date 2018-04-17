@@ -21,11 +21,6 @@
 /*********************/
 /*********************/
 
-/*********************/
-/*********************/
-/******* SETUP *******/
-/*********************/
-/*********************/
 
 var getRData = function(varName) {
   var data = rData[0]
@@ -58,7 +53,7 @@ var ALPHA = modelName.includes('S') ? getRData('alpha') : 1
 // Utterances
 // Note (BP): We add the cue utternace 'X' for comparison with noise models.
 var utterances = ['X a', 'a', 'X b', 'b', 'X c', 'c', 'X d', 'd', 'X']
-var utteranceProbs = [1, 1, 1, 1, 1, 1, 1, 1, 1]
+var utteranceProbs = [0.25, 1, 0.25, 1, 0.25, 1, 0.25, 1, 1]
 var utterancesDistr = Categorical({vs:utterances, ps:utteranceProbs})
 var utterancesPrior = function() {return sample(utterancesDistr)}
 
@@ -92,11 +87,8 @@ var utteranceMeaning = function(utterance) {
 }
 
 var cost = function(utterance) {
-  return utterance.split(' ').length / 10
-}
-
-var nullNoiseModel = function(utterance) {
-  return utterance
+  return 0
+  // return utterance.split(' ').length / 10
 }
 
 var L0 = cache(function(utterance) {

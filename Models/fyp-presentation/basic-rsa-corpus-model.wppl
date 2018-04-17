@@ -37,7 +37,7 @@ var N = getRData('n')
 
 // Utterances
 var utterances = ['X a', 'a', 'X b', 'b', 'X c', 'c', 'X d', 'd']
-var utteranceProbs = [1, 1, 1, 1, 1, 1, 1, 1]
+var utteranceProbs = [0.25, 1, 0.25, 1, 0.25, 1, 0.25, 1]
 var utterancesDistr = Categorical({vs:utterances, ps:utteranceProbs})
 var utterancesPrior = function() {return sample(utterancesDistr)}
 
@@ -55,7 +55,8 @@ var worldsPrior = function() {return sample(worldsDistr)}
 
 
 var cost = function(utterance) {
-  return utterance.split(' ').length / 10
+  return 0
+  // return utterance.split(' ').length / 10
 }
 
 var utteranceMeaning = function(utterance) {
