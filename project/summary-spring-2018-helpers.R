@@ -126,19 +126,27 @@ runExperimentFn <- function(runFn, modelName, alpha, lambda, theta, n) {
 # data.frame
 #    Data.frame language model.
 #
-createLM <- function(dfCorpus) {
+createLM <- function(dfCorpus, annotateUtterances=TRUE) {
   annotateUtterance <- function(x) {
     x <- gsub(' ', '', x)
     x <- paste0('^', x)
     x <- paste0(x, '$')
     return(x)
   }
-  stream <- dfCorpus %>%
-    mutate(annotatedUtterance=annotateUtterance(currUtterance)) %>%
-    select(annotatedUtterance) %>%
-    unlist %>%
-    paste0(collapse='') %>%
-    gsub(' ', '', ., fixed=TRUE)
+  if (annotateUtterances) {
+    stream <- dfCorpus %>%
+      mutate(annotatedUtterance=annotateUtterance(currUtterance)) %>%
+      select(annotatedUtterance) %>%
+      unlist %>%
+      paste0(collapse='') %>%
+      gsub(' ', '', ., fixed=TRUE)
+  } else {
+    stream <- dfCorpus %>%
+      select(currUtterance) %>%
+      unlist %>%
+      paste0(collapse='') %>%
+      gsub(' ', '', ., fixed=TRUE)
+  }
   ng <- ngram::ngram(stream, n=2, sep='')  # bigram model
   dfNgramRaw <- data.frame(ngram::get.phrasetable(ng))
   dfNgramRaw$first <- sapply(dfNgramRaw$ngrams, function(x) {strsplit(x, '')}[[1]][1])
@@ -202,8 +210,8 @@ run_corpus_analysis <- function(df_lm, ci=0.95) {
   # browser()
   df_lm %>%
     group_by(expNum, second) %>%
-    mutate(secondTotalProp=sum(prop),       # p(a|X) + p(a|^)
-           lik=prop/secondTotalProp) %>%    # p(X|a) = p(X, a) / (p(a, X) + p(a, ^))
+    mutate(secondTotalProp=sum(prop),       # p(a, X) + p(a, ^)
+           lik=prop/secondTotalProp) %>%    # p(X|a) = p(X, a) / p(a)
     ungroup %>%
     group_by(expNum) %>%
     mutate(postProb=log2(secondTotalProp/sum(prop))) %>%  # p(a)
