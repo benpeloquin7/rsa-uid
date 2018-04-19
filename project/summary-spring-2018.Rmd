@@ -13,27 +13,34 @@ library(knitr)
 source("summary-spring-2018-helpers.R")
 ```
 
+# Deriving efficient communication behavior in rational pragmatic agents
+
+# Abstract
+The combinatorial expressivity of natural language allows speakers to communicate about an unbounded set of potential meanings using a finite lexicon. But, by this same mechanism, a speaker may be confronted with multiple forms to express just a single meaning. How do speakers choose which form to use? Theories emphasizing communicative efficiency suggest rational speakers should attempt to optimize communicative properties of their utterances (Aylett & Turk, 2004; Levy & Jaeger, 2007; Genzel & Charniak, 2002). We evaluate the hypothesis that efficient production signatures arise from rational pragmatic agents and propose agent- and language-level features necessary to derive these signatures. We adopt a computational approach -- simulating production behavior in pragmatic agents while manipulating agent- and language-level components of interest.
+
 # Introduction
 
-The combinatorial expressivity of natural language allows speakers to communicate about an unbounded set of potential meanings using a finite lexicon (CITATION). But, by this same mechanism, a speaker may be confronted with multiple forms to express just a single meaning. How do speakers choose which form to use?
+The combinatorial expressivity of natural language allows speakers to communicate about an unbounded set of potential meanings using a finite lexicon. But, by this same mechanism, a speaker may be confronted with multiple forms to express just a single meaning. At least two questions emerge from this observation: How do speakers choose which forms to use? And how does the accumulation of these choices give rise to statistical patterns found in natural language?
 
-This question is deeply related to the question of the *function* of language -- what exactly is language for? While one perspective highlights properties of language design (such as ambiguity), which appear to be at odds with a system optimized for communiction, functionalist theories, which attempt to explain proporties of linguistic systems in terms of communicative pressures, have increasingly pointed to evidence of optimal speaker behavior (e.g. dependency length minimization, NEED OTHERS HERE). 
+A subset of functionalist approaches to language science emphasize communicative efficiency as a guiding principle for production behavior (beginning with Zipf, 19XX). In particular, theories such as the Smooth Signal Redundancy Hypothesis (SSRH) (Aylett & Turk, 2004), Uniform Information Density (UID) (Levy & Jaeger, 2007; Jaeger, 2010) and the Constant Entropy Rate Hypothesis (CER) (Genzel & Charniak, 2002; Xu & Reitter, 2018) frame communication in more general information theoretic terms -- if speakers are rational they should choose forms that optimize communicative properties of their utterances (Levy & Jaeger, 2007). 
 
-One family of functionalist theories including the Smooth Redundancy Hypothesis (SRH), Uniform Information Density (UID) and the Constant Entropy Rate Hypothesis (CER), frame speaker production (at multiple levels) in general information-theoretic terms. They propose that if speakers are rational and communication takes place in a limited-capacity noisy channel, then speakers should attempt to optimize communicative properties of their utterances. Such optimization may take place at different linguistic choice points by using prosidic emphasis (Aylett & Turk, 2004), using marked morphological or syntactic forms (Frank & Jaeger, 2008; Levy & Jeager, 2007; Jaeger, 2008) and maintining consant sentence entropy over the course of a discourse. Taken together, this family of theories argue that given multiple forms to choose from, speakers should choose the most efficient form.
+Evidence for these hypotheses have largely been taken from observational studies of naturalistic corpora, focusing on empirical measurements of "optimal" behavior at signature **linguistic choice-points**. While such evidence is compelling in its scope across levels of production, a question remains -- why do speakers behave optimally?
 
-Evidence for these hypotheses is taken from observational studies of natural corpora, typically focusing on empirical measurements of "optimal" behavior at signature production choice-points. We adopt a functionalist view of these behaviors, but from a different perspective. We evaluate the hypothesis that efficient production signatures arise from rational pragmatic agents and describe the agent- and language-level features necessary to derive these signatures. We adopt a fully computational approach -- simulating production behavior in pragmatic agents while manipulating agent- and langauge-level components of interest. 
+We evaluate the hypothesis that efficient production signatures arise from rational pragmatic agents and describe the agent- and language-level features necessary to derive these signatures. We adopt a computational approach -- simulating production behavior in pragmatic agents while manipulating agent- and language-level features. 
 
-We begin with an introduction to the family of functionalist theories which frame aspects of production behavior in information-theoretic terms, highlighting the empirical signatures of each theory. We then present a rational-pragmatic interpretation of these behaviors. Next we introduce the basic form of the family of computational pragmatics models we adopt in this study and then outline the particular extensions used in subsequent simulations. Following the sequence of simulations we discuss the necessary ingredients required to generate efficient behavior, linking these to previous work. We end with a summary of our findings and proposal for next steps.
+We begin with an introduction to the subset of functionalist theories which frame aspects of production behavior in light of efficiency, highlighting the empirical signatures of each theory. We then present a rational-pragmatic interpretation of these behaviors. Next we introduce the basic form of the family of computational pragmatics models we adopt in this study and then outline the particular extensions used in subsequent simulations. Following the sequence of simulations we discuss the necessary ingredients required to generate efficient behavior, linking these to previous work. We end with a summary of our findings and proposal for next steps.
 
 # Optimal speaker production
 
 ### Introduction
 
-How might communication be optimized for the task of communication? Maybe look at Piantadosi (2012) and others for more here.
+To what extent is language organized around efficiency? Zipf's (1939) observation that more frequently occuring words tend to have shorter forms served as the basis for perhaps the earliest analysis of languge design in terms of efficiency. Subsequent theories have extended this anlaysis showing that word length is better predicted by a word's average predictability in context (Piantadosi, Tilly & Gibson, 2009). The link between communicative efficiency and linguistic form is now seen as a compelling source of explanation at multiple time-courses of speaker production. 
+
+For example, Aylett & Turk (2004) showed that word predictability had significant impacts on production behavior at the level phonological detail and duration. Speakers appeared to manage the amount of information encoded in a linguistic signal, attempting to avoid extreme peaks or troughs in their signal. [PERHAPS MORE HERE INTRODUCING THE IDEA OF A LINGUISTIC CHOICE POINT] While further evidence for optimal articulatory beahvior, Levy & Jaeger (2007) began in investigate a similar theory instead focusing on linguistic choice-points at the level of syntax.
 
 ### Uniform Information Density (Levy & Jaeger, 2007; Jaeger, 2010, OTHERS)
 
-If speakers are rational they should attempt to optimize communicative properties of their utterances.
+
 
 ![Levy & Jaeger (2007) fig. 1](../img/levy-jaeger-2007-fig1.png)
 
@@ -66,16 +73,16 @@ $$S_n(u|m) \propto \exp(-\alpha(-log(L_{n-1}(m|u)) - cost(u)))$$
 ### Model (Noisy RSA)
 
 The literal listener evaluates an utterance with respect to their literal meanings $\delta(\cdot)$. Because noise $P_{noise}(\cdot)$ will sometimes corrupt the speakers utterances, the listener evaluates the likely intended utterance, inferred in the context of noise.
-$$L_{0}(m|u_p) \propto P(m) \sum_{u_i}\delta(u_i, m)P_{noise}(u_i|u_p)$$
+$$L_{0}(m|u_p) \propto P(m) \sum_{u_i}\delta(u_i, m)P_{\text{noise}}(u_i|u_p)$$
 
 where $\delta(u_i, m) = True$ if $m \in [[u_i]]$.
 
-Higher-order speakers choose utterances $u$ in accordance with their expected utility $\mathbb{U}(u;m)$ that a listener will recover the intended meaning $m$, while minimzing cost $cost(u)$.
-$$S_n(u|m) \propto \mathbb{U}(u;m)$$
+Higher-order speakers choose utterances $u$ in accordance with their expected utility $\mathbb{U}(u;m)$ that a listener will recover the intended meaning $m$, while minimizing cost $cost(u)$.
+$$S_n(u|m) \propto e^{\alpha\mathbb{U(u;m)}}$$
 where the speaker is aware that noise may corrupt their intended utterance $u_i$ and the listener will need to recover that intended utterances from the produced utterance $u_p$.
-$$\mathbb{U}(u;m) = \exp(-\alpha(\sum_{u_p}log(L_{n-1}(m|u_p))\times P_{noise}(u_p|u_i) - cost(u_i))))$$
+$$\mathbb{U}(u;m) = \sum_{u_p}log(L_{n-1}(m|u_p))\times P_{\text{noise}}(u_p|u_i) - \text{cost}(u_i))$$
 Higher-order listeners infer the intended meaning $m$ of an utterance $u$ by inferring the likely intended utterance $u_i$ given the possibility of noise.
-$$L_{n-1}(m|u_p) \propto P(m) \sum_{u_i}S_{n-1}(u_i|m)P_{noise}(u_i|u_p)$$ 
+$$L_{n}(m|u_p) \propto P(m) \sum_{u_i}S_{n}(u_i|m)P_{\text{noise}}(u_i|u_p)$$ 
 
 ### Results
 
@@ -92,7 +99,7 @@ basic_rsa_production_model_run_fn <- createRunFn(basic_rsa_production_model)
 
 ```{r plot1-data, warning=FALSE, message=FALSE, echo=FALSE}
 THETA <- 0.2
-ALPHA <- 4
+ALPHA <- 6
 LAMBDA <- 1
 inputs <- c('a', 'b', 'c', 'd')
 df_plot1 <- data.frame()
@@ -212,7 +219,7 @@ df_plot3 %>%
 ## CER-effects
 
   * Unconditional entropy $H(X|L)$ should increase with sentence position.
-  * [SECONDARY MAYBE DON'T INCLUDE] $H(Y)$ remains consant over discourse.
+  * [SECONDARY MAYBE DON'T INCLUDE] $H(Y)$ remains constant over discourse.
 
 ### Model (Ambiguity+Topic RSA)
 
@@ -224,11 +231,11 @@ $$L_0(m |u) \propto \delta(u)P(m)$$
 The lowest level speaker chooses an utterance in proportion to the expected utility such that a listener will infer the correct intended meaning given that utterance.
 $$S_1(u|m) \propto \exp(-\alpha(-log(L_0(m|u)) - cost(u)))$$
 
-Higher orders listeners jointly infer the meaning $m$ of the current utterance $u$ as well as the topic under discussion $T$ taking into account the complete discrouse history $D$.
+Higher orders listeners jointly infer the meaning $m$ of the current utterance $u$ as well as the topic under discussion $T$ taking into account the complete discourse history $D$.
 $$L_{1}(m, T|u, D) \propto S_1(u|m)P(m|T)P(T|D)$$
 where the listener updates there posterior over topics given the complete history of utterances made by the speaker.
 $$P(T|D) \propto P(T)\prod_{i}^{|D|}S_{n-1}(u_i|w_i)P(w_i|T)$$
-Higher order speakers choose an utterance $u$ in accordance to the expected utilty of using that utterance to convey a particular meaning $m$ within the context of a particular topic $T$ and the complete discourse history $D$.
+Higher order speakers choose an utterance $u$ in accordance to the expected utility of using that utterance to convey a particular meaning $m$ within the context of a particular topic $T$ and the complete discourse history $D$.
 $$S_{2}(u|w, T, D) \propto \mathbb{U}[u, T ;w, D]$$
 
 $$\mathbb{U}[u, T;w, D] = \exp(-\alpha(log(L_2(m|u,T))P(T|D)-cost(u)))$$
@@ -279,10 +286,17 @@ df_contextAware <- runAmbiguityFn(1,
                                   alpha=alpha,
                                   recursionLevel=recursionLevel)
 
-df_amb <- rbind(df_contextUnaware, df_contextAware, df_baseline)
+df_SBasic <- runAmbiguityFn(1, 
+                            targetDistr=topic, 
+                            nUtterances=nUtterances, 
+                            resultType='S', 
+                            alpha=alpha,
+                            recursionLevel=recursionLevel)
+
+df_amb <- rbind(df_contextUnaware, df_contextAware, df_baseline, df_SBasic)
 ```
 
-Note (BP 20180408): Intead of binning within a run, why not calcuate entropy between runs (so if we have 200 simulatsion check entropy of position 1.)
+Note (BP 20180408): Instead of binning within a run, why not calculate entropy between runs (so if we have 200 simulations check entropy of position 1.)
 ```{r plot4a-rsa-CER-listeners-learn-topic, warning=FALSE, message=FALSE, echo=FALSE}
 lvls <- as.factor(df_amb$utterance)
 
@@ -303,56 +317,266 @@ df_amb %>%
     facet_grid(~resultType)
 ```
 
-```{r run-CER-sims, warning=FALSE, message=FALSE, echo=FALSE}
-nSims <- 1000
-ALPHA <- 10
-TOPIC <- 'T1'
-nUtterances <- 40
-recursionLevel <- 2
-
-# Parallelization setup
-no_cores <- detectCores() - 1
-cl <- makeCluster(no_cores, type='FORK')
-registerDoParallel(cl)
-
-# Run sims
-ptm <- proc.time()
-sims <- foreach(i=seq(1, nSims), .packages=c('dplyr', 'rwebppl'), .combine=rbind) %dopar% 
-  runAmbiguityFn(i,
-                 targetDistr=TOPIC,
-                 nUtterances=nUtterances,
-                 resultType='contextAware',
-                 alpha=ALPHA,
-                 recursionLevel=recursionLevel)
-stopCluster(cl)
-etm <- proc.time() - ptm
-
-# Preprocess for entropy calculations.
-binSize <- 1
-df_binned <- addUtteranceBins(sims, nUtterances=nUtterances, binSize=binSize)
-df_filled <- fillUtteranceProportions(df_binned, binSize)
+```{r run-CER-sims-setup, warning=FALSE, message=FALSE, echo=FALSE}
+runAmibguityCorpus <- function(topic, alpha, resultType, recursionLevel, nUtterances, nSims) {
+  # Parallelization setup
+  no_cores <- detectCores() - 1
+  cl <- makeCluster(no_cores, type='FORK')
+  registerDoParallel(cl)
+  
+  # Run sims
+  ptm <- proc.time()
+  sims <- foreach(i=seq(1, nSims), .packages=c('dplyr', 'rwebppl'), .combine=rbind) %dopar% 
+    runAmbiguityFn(i,
+                   targetDistr=topic,
+                   nUtterances=nUtterances,
+                   resultType=resultType,
+                   alpha=alpha,
+                   recursionLevel=recursionLevel)
+  stopCluster(cl)
+  etm <- proc.time() - ptm
+  
+  # Preprocess for entropy calculations.
+  binSize <- 1
+  df_binned <- addUtteranceBins(sims, nUtterances=nUtterances, binSize=binSize)
+  df_filled <- fillUtteranceProportions(df_binned, binSize)
+  list(sims, df_filled)
+}
 ```
 
+```{r run-CER-sims, warning=FALSE, message=FALSE, echo=FALSE}
+TOPIC <- 'T1'
+ALPHA <- 10
+recursionLevel <- 2
+nUtterances <- 40
+nSims <- 100
+
+# topic, alpha, resultType, recursionLevel, nUtterances, nSims
+L_AmbiguityCorpusContextAware <- runAmibguityCorpus(TOPIC, ALPHA, 'contextAware', recursionLevel, nUtterances, nSims)
+L_AmbiguityCorpusContextUnAware <- runAmibguityCorpus(TOPIC, ALPHA, 'contextUnaware', recursionLevel, nUtterances, nSims)
+L_AmbiguityCorpusSBasic <- runAmibguityCorpus(TOPIC, ALPHA, 'S', recursionLevel, nUtterances, nSims)
+L_AmbiguityCorpusBaseline <- runAmibguityCorpus(TOPIC, ALPHA, 'baseline', recursionLevel, nUtterances, nSims)  
+
+simsAmbiguityCorpusContextAware <- L_AmbiguityCorpusContextAware[[1]]
+dfAmbiguityCorpusContextAware <- L_AmbiguityCorpusContextAware[[2]]
+
+simsAmbiguityCorpusContextUnAware <- L_AmbiguityCorpusContextUnAware[[1]]
+dfAmbiguityCorpusContextUnAware <- L_AmbiguityCorpusContextUnAware[[2]]
+
+simsAmbiguityCorpusSBasic <- L_AmbiguityCorpusSBasic[[1]]
+dfAmbiguityCorpusSBasic <- L_AmbiguityCorpusSBasic[[2]]
+
+simsAmbiguityCorpusBaseline <- L_AmbiguityCorpusBaseline[[1]]
+dfAmbiguityCorpusBaseline <- L_AmbiguityCorpusBaseline[[2]]
+
+simsCmbd <- rbind(simsAmbiguityCorpusContextAware,
+                  simsAmbiguityCorpusContextUnAware,
+                  simsAmbiguityCorpusSBasic,
+                  simsAmbiguityCorpusBaseline)
+                  
+dfAmbiguityCorpusCmbd <- rbind(dfAmbiguityCorpusContextAware, 
+                               dfAmbiguityCorpusContextUnAware, 
+                               dfAmbiguityCorpusSBasic, 
+                               dfAmbiguityCorpusBaseline)
+```
+
+
 ```{r plot4b-rsa-CER-listeners-learn-topic, warning=FALSE, message=FALSE, echo=FALSE, eval=FALSE}
-sims %>%
-  mutate(`P(Topic|Utterances)`=ifelse(utterance=='x' | utterance=='X x', 0.5, 
-                                      ifelse(utterance=='y' | utterance=='X y', 0.75, 0)),
-         utterance=ifelse(utterance=='x', '[a, d]', 
-                          ifelse(utterance=='X x', 'X[a, d]', 
-                                 ifelse(utterance=='y', '[b, c]', ifelse(utterance=='X y', 'X[b, c]', utterance))))) %>%
-  ggplot(aes(x=utteranceNum, y=`P(Topic|Utterances)`)) +
-    geom_smooth(method='loess', aes(y=T1)) +
-    geom_jitter(aes(col=utterance), width=0.5, height=0.1, alpha=0.25, size=2) +
-    ylab("Listener posterior probability of target topic") +
-    xlab("Utterance position") +
-    ggtitle(paste("S4 production (points) and listener topic inference (line)\nn=",nSims," simulations")) +
-    theme_few() +
-    theme(plot.title=element_text(hjust = 0.5))
+# sims %>%
+#   mutate(`P(Topic|Utterances)`=ifelse(utterance=='x' | utterance=='X x', 0.5, 
+#                                       ifelse(utterance=='y' | utterance=='X y', 0.75, 0)),
+#          utterance=ifelse(utterance=='x', '[a, d]', 
+#                           ifelse(utterance=='X x', 'X[a, d]', 
+#                                  ifelse(utterance=='y', '[b, c]', ifelse(utterance=='X y', 'X[b, c]', utterance))))) %>%
+#   ggplot(aes(x=utteranceNum, y=`P(Topic|Utterances)`)) +
+#     geom_smooth(method='loess', aes(y=T1)) +
+#     geom_jitter(aes(col=utterance), width=0.5, height=0.1, alpha=0.25, size=2) +
+#     ylab("Listener posterior probability of target topic") +
+#     xlab("Utterance position") +
+#     ggtitle(paste("S4 production (points) and listener topic inference (line)\nn=",nSims," simulations")) +
+#     theme_few() +
+#     theme(plot.title=element_text(hjust = 0.5))
 ```
 
 #### Result 2: Speaker more likley to use ambiguous utterance once listener is confident in topic
 ```{r plot4-rsa-CER-speakers-more-likely-to-use-ambiguous-utterances, warning=FALSE, message=FALSE, echo=FALSE}
-sims %>%
+simsCmbd %>%
+  group_by(resultType) %>%
+  mutate(isAmbiguous=(utterance=='x' | utterance=='y'),
+         isX=utterance=='x',
+         isA=utterance=='a',
+         isB=utterance=='b') %>%
+  group_by(resultType, utteranceNum) %>%
+  summarise(n=n(),
+            numAmb=sum(isAmbiguous),
+            probAmb=numAmb/n,
+            stdAmb=sqrt(probAmb*(1-probAmb)/n),
+            numX=sum(isX),
+            probX=numX/n,
+            stdX=sqrt(probX*(1-probX)/n),
+            numA=sum(isA),
+            probA=numA/n,
+            stdA=sqrt(probA*(1-probA)/n),
+            numB=sum(isB),
+            probB=numB/n,
+            stdB=sqrt(probB*(1-probB)/n),
+            avgT1=mean(T1),
+            avgT2=mean(T2),
+            avgT3=mean(T3),
+            avgT4=mean(T4)) %>%
+  # Check relations to other utterances here:
+  # gather(type, val, c(probX, probA, probB)) %>%
+  # ggplot(aes(x=utteranceNum, y=val, col=type)) +
+  ggplot(aes(x=utteranceNum, y=probAmb)) +
+    # geom_smooth(aes(y=avgT1), col='red', alpha=0.2) +
+    # geom_smooth(aes(y=avgT2), col='green', alpha=0.2) +
+    geom_point(size=2, alpha=0.75) +
+    geom_smooth(method='loess', alpha=0.5, col='blue') +
+    # geom_smooth(method = "lm", formula = y ~ poly(x, 2)) +
+    geom_errorbar(aes(ymin=probAmb-2*stdAmb, ymax=probAmb+2*stdAmb), alpha=0.5, width=0) +
+    ylab("Empirical probability \nof ambiguous utterance ['x', 'y']") +
+    xlab("Utterance position") +
+    ggtitle(paste0("Empirical probability Speaker uses ambiguous utterance\nn=", nSims," simulations")) +
+    theme_few() +
+    theme(plot.title=element_text(hjust = 0.5)) +
+    facet_grid(~resultType)
+```
+
+  
+#### Result 3: Unconditional entropy effect
+
+Resources:
+
+* https://math.stackexchange.com/questions/2221096/can-conditional-entropy-hy-mid-x-be-expressed-by-kullback-leibler-divergence?utm_medium=organic&utm_source=google_rich_qa&utm_campaign=google_rich_qa
+* https://ejde.math.txstate.edu/Volumes/2016/237/popescu.pdf
+* https://en.wikipedia.org/wiki/Inequalities_in_information_theory#Lower_bounds_for_the_Kullback%E2%80%93Leibler_divergence
+* https://en.wikipedia.org/wiki/Gibbs%27_inequality
+* http://alumni.media.mit.edu/~bcroy/papers/bcroy_expected-entropy.pdf
+
+See Genzel & Charniak (2002) footnote 2.
+More specifically, what they're looking for is the cross entropy between all words at position $i$ and the true model of English to be the same for all $i$.
+
+$$H_{cross}(X^{(i)}, C) = K = H(X^{(i)}) + D_{KL}(X^{(i)}||C)$$
+
+```{r plot5-rsa-CER-unconditional-entropy-effect, warning=FALSE, message=FALSE, echo=FALSE}
+# Note (BP): Manual calculation when listener knows topic.
+steadyStateProps <- c(0.24525,	0.2565,	0.1386,	0.0449955,	0.3002045,	0.0135)
+
+dfAmbiguityCorpusCmbd %>%
+  group_by(resultType, binVal, utterance) %>%
+  summarise(cnt=sum(n),
+            prop=cnt/nSims) %>%
+  group_by(resultType, binVal) %>%
+  summarise(`H(P(X))`=entropy::entropy.plugin(cnt, unit=c('log2')),
+            `KL divergence`=entropy::KL.empirical(cnt, steadyStateProps*nSims, unit=c('log2')),
+            `Cross entropy (H(P(X))+KL(P(X)||Q(X)))`=`H(P(X))`+`KL divergence`) %>%
+  ggplot(aes(x=binVal, y=`H(P(X))`)) +
+    geom_line(size=2, alpha=0.75, col='blue') +
+    geom_smooth(method='loess', col='red', alpha=0.5, lty=2) +
+    xlab("Utterance position i") +
+    ylab("Measure (bits)") +
+    theme_few() +
+    theme(legend.position="none") +
+    facet_wrap(~resultType, ncol=2)
+```
+  
+#### Result 4 [OPTIONAL]: $H(Y)$ remains constant across discourse
+
+```{r plot6-rsa-CER-constant-entropy-full-effect, warning=FALSE, message=FALSE, echo=FALSE, eval=FALSE}
+# Note (BP): Manual calculation when listener knows topic.
+steadyStateProps <- c(0.24525,	0.2565,	0.1386,	0.0449955,	0.3002045,	0.0135)
+
+df_filled %>%
+  group_by(binVal, utterance) %>%
+  summarise(cnt=sum(n),
+            prop=cnt/nSims) %>%
+  group_by(binVal) %>%
+  summarise(`H(P(X))`=entropy::entropy.plugin(cnt, unit=c('log2')),
+            `KL divergence`=entropy::KL.empirical(cnt, steadyStateProps*nSims, unit=c('log2')),
+            `Cross entropy (H(P(X))+KL(P(X)||Q(X)))`=`H(P(X))`+`KL divergence`) %>%
+  gather(typ, measure, c(`H(P(X))`, `KL divergence`, `Cross entropy (H(P(X))+KL(P(X)||Q(X)))`)) %>%
+  ggplot(aes(x=binVal, y=measure, col=typ)) +
+    geom_line(size=2, alpha=0.5) +
+    annotate("text", label = "HCross(P, Q)", x=4, y = 2.1, size=4, col="red") +
+    annotate("text", label = "H(P)", x=8, y = 1.6, size= 4, col="forest green") +
+    annotate("text", label = "KL(P||Q)", x=10, y = 0.6, size= 4, col="blue") +
+    xlab("Utterance position i") +
+    ylab("Measure (bits)") +
+    theme_few() +
+    theme(legend.position="none")
+```
+
+## Combined model
+
+### Model (Ambiguity+Topic Noisy RSA)
+
+```{r plot6-setup-FULL-model, warning=FALSE, message=FALSE, echo=FALSE}
+fFullModelPath <- '/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/fyp-presentation/full-corpus-model.wppl'
+model_full <- getModelFile(fFullModelPath)
+
+runFull <- createRunFn(model_full)
+runFullFn <- function(i, targetDistr, nUtterances, resultType, alpha, theta, recursionLevel) {
+  dTemp <- data.frame(targetDistr=targetDistr, 
+                      nUtterances=nUtterances, 
+                      resultType=resultType, 
+                      alpha=alpha, 
+                      theta=theta,
+                      recursionLevel=recursionLevel)
+  df <- runFull(dTemp) %>%
+    mutate(runNum=i, targetDistr=targetDistr, 
+           alpha=alpha, theta=theta, resultType=resultType, recursionLevel=recursionLevel)
+  df
+}
+```
+
+```{r plot6-setup-FULL-model-par-run-fn, warning=FALSE, message=FALSE, echo=FALSE}
+runFullCorpus <- function(topic, alpha, theta, resultType, recursionLevel, nUtterances, nSims) {
+  # Parallelization setup
+  no_cores <- detectCores() - 1
+  cl <- makeCluster(no_cores, type='FORK')
+  registerDoParallel(cl)
+  
+  # Run sims
+  ptm <- proc.time()
+  sims <- foreach(i=seq(1, nSims), .packages=c('dplyr', 'rwebppl'), .combine=rbind) %dopar% 
+    runFullFn(i,
+              targetDistr=topic,
+              nUtterances=nUtterances,
+              resultType=resultType,
+              alpha=alpha,
+              theta=theta,
+              recursionLevel=recursionLevel)
+  stopCluster(cl)
+  etm <- proc.time() - ptm
+  
+  # Preprocess for entropy calculations.
+  binSize <- 1
+  df_binned <- addUtteranceBins(sims, nUtterances=nUtterances, binSize=binSize)
+  df_filled <- fillUtteranceProportions(df_binned, binSize)
+  list(sims, df_filled)
+}
+# topic, alpha, theta, resultType, recursionLevel, nUtterances, nSims
+# runFullCorpus('T1', 10, 0.2, 'contextAware', 2, 40, 10)
+```
+
+
+```{r plot6-run-full-model, warning=FALSE, message=FALSE, echo=FALSE}
+TOPIC <- 'T1'
+ALPHA <- 10
+THETA <- 0.2
+RESULT_TYPE <- 'contextAware'
+recursionLevel <- 2
+nUtterances <- 100
+nSims <- 100
+
+# topic, alpha, theta, resultType, recursionLevel, nUtterances, nSims
+full_model_sims <- runFullCorpus(TOPIC, ALPHA, THETA, RESULT_TYPE, recursionLevel, nUtterances, nSims)
+full_sims <- full_model_sims[[1]]
+df_filled_full <- full_model_sims[[2]]
+```
+
+```{r plot6a-use-of-ambiguous-items, warning=FALSE, message=FALSE, echo=FALSE}
+full_sims %>%
   mutate(isAmbiguous=(utterance=='x' | utterance=='y'),
          isX=utterance=='x',
          isA=utterance=='a',
@@ -392,102 +616,49 @@ sims %>%
     theme(plot.title=element_text(hjust = 0.5))
 ```
 
-  
-#### Result 3: Unconditional entropy effect
-
-Resources:
-
-* https://math.stackexchange.com/questions/2221096/can-conditional-entropy-hy-mid-x-be-expressed-by-kullback-leibler-divergence?utm_medium=organic&utm_source=google_rich_qa&utm_campaign=google_rich_qa
-* https://ejde.math.txstate.edu/Volumes/2016/237/popescu.pdf
-* https://en.wikipedia.org/wiki/Inequalities_in_information_theory#Lower_bounds_for_the_Kullback%E2%80%93Leibler_divergence
-* https://en.wikipedia.org/wiki/Gibbs%27_inequality
-* http://alumni.media.mit.edu/~bcroy/papers/bcroy_expected-entropy.pdf
-
-See Genzel & Charniak (2002) footnote 2.
-More specifically, what they're looking for is the cross entropy between all words at position $i$ and the true model of English to be the same for all $i$.
-
-$$H_{cross}(X^{(i)}, C) = K = H(X^{(i)}) + D_{KL}(X^{(i)}||C)$$
-
-```{r plot5-rsa-CER-unconditional-entropy-effect, warning=FALSE, message=FALSE, echo=FALSE}
-# Note (BP): Manual calculation when listener knows topic.
-steadyStateProps <- c(0.24525,	0.2565,	0.1386,	0.0449955,	0.3002045,	0.0135)
-
-df_filled %>%
+```{r plot6b-unconditional-entropy, warning=FALSE, message=FALSE, echo=FALSE}
+df_filled_full %>%
   group_by(binVal, utterance) %>%
   summarise(cnt=sum(n),
             prop=cnt/nSims) %>%
   group_by(binVal) %>%
-  summarise(`H(P(X))`=entropy::entropy.plugin(cnt, unit=c('log2')),
-            `KL divergence`=entropy::KL.empirical(cnt, steadyStateProps*nSims, unit=c('log2')),
-            `Cross entropy (H(P(X))+KL(P(X)||Q(X)))`=`H(P(X))`+`KL divergence`) %>%
+  summarise(`H(P(X))`=entropy::entropy.plugin(cnt, unit=c('log2'))) %>%
   ggplot(aes(x=binVal, y=`H(P(X))`)) +
     geom_line(size=2, alpha=0.75, col='blue') +
+    geom_smooth(method='loess', col='red', alpha=0.5, lty=2) +
     xlab("Utterance position i") +
     ylab("Measure (bits)") +
+    ggtitle(paste0("Unconditional sentence entropy estimates by position\nn=", nSims," simulations")) +
     theme_few() +
-    theme(legend.position="none")
+    theme(plot.title=element_text(hjust = 0.5))
 ```
-  
-#### Result 4 [OPTIONAL]: $H(Y)$ remains constant across discourse
 
-```{r plot6-rsa-CER-constant-entropy-full-effect, warning=FALSE, message=FALSE, echo=FALSE}
-# Note (BP): Manual calculation when listener knows topic.
-steadyStateProps <- c(0.24525,	0.2565,	0.1386,	0.0449955,	0.3002045,	0.0135)
+````{r plot6c-negative-correlation, warning=FALSE, message=FALSE, echo=FALSE}
+full_sims_lm <- full_sims %>%
+  mutate(currUtterance=utterance,
+         expNum=runNum) %>%
+  process_sims(.) %>%
+  run_corpus_analysis(., ci=0.90) %>%
+  mutate(simType='full')
+```
 
-df_filled %>%
-  group_by(binVal, utterance) %>%
-  summarise(cnt=sum(n),
-            prop=cnt/nSims) %>%
-  group_by(binVal) %>%
-  summarise(`H(P(X))`=entropy::entropy.plugin(cnt, unit=c('log2')),
-            `KL divergence`=entropy::KL.empirical(cnt, steadyStateProps*nSims, unit=c('log2')),
-            `Cross entropy (H(P(X))+KL(P(X)||Q(X)))`=`H(P(X))`+`KL divergence`) %>%
-  gather(typ, measure, c(`H(P(X))`, `KL divergence`, `Cross entropy (H(P(X))+KL(P(X)||Q(X)))`)) %>%
-  ggplot(aes(x=binVal, y=measure, col=typ)) +
-    geom_line(size=2, alpha=0.5) +
-    annotate("text", label = "HCross(P, Q)", x=4, y = 2.1, size=4, col="red") +
-    annotate("text", label = "H(P)", x=8, y = 1.6, size= 4, col="forest green") +
-    annotate("text", label = "KL(P||Q)", x=10, y = 0.6, size= 4, col="blue") +
-    xlab("Utterance position i") +
-    ylab("Measure (bits)") +
+```{r}
+full_sims_lm %>% 
+  ggplot(aes(x=avgPostProb, y=avgLikelihood, col=as.factor(second))) +
+    geom_point(size=2.5) +
+    geom_errorbar(aes(ymax=ymax, ymin=ymin, alpha=0.2), width=0) +
+    geom_errorbarh(aes(xmax=xmax, xmin=xmin, alpha=0.2), height=0) +
+    ylab('Likelihood of marked version') +
+    xlab('mean(log(p(utt))') +
+    ylim(0, 1) +
+    ggtitle(paste0(nSims, " corpus simulations (", nUtterances, " utterances)", "\n90% boostrapped CIs.")) +
     theme_few() +
-    theme(legend.position="none")
+    theme(plot.title=element_text(hjust = 0.5))
 ```
-
-NOTE: This is just a playground for entropy stuff... still haven't figured it out
-```{r warning=FALSE, message=FALSE, echo=FALSE}
-
-# mixDistr <- function(probs) {
-#   # t1 <- c(0.6, 0.30, 0.15, 0.05)
-#   t1 <- c(0.24525,	0.2565,	0.1386,	0.0449955,	0.3002045,	0.0135)
-#   # t2 <- c(0.30, 0.15, 0.05, 0.6)
-#   t2 <- c(0.2673,	0.1218,	0.04455,	0.51775,	0.02995,	0.0182)
-#   # t3 <- c(0.15, 0.05, 0.6, 0.30)
-#   t3 <- c(0.1386,	0.04455,	0.24525,	0.2565,	0.0149,	0.00045)
-#   # t4 <- c(0.05, 0.6, 0.30, 0.15)
-#   t4 <- c(0.0449955,	0.53955,	0.1215,	0.133,	0.0074545,	0.00545)
-#   d <- rbind(t1, t2, t3, t4)
-#   dMixed <- t(d) %*% probs
-#   t(dMixed)
-# }
-# 
-# calcListenerMI <- function(probs) {
-#   mix <- as.vector(mixDistr(probs))
-#   t1 <- c(0.24525,	0.2565,	0.1386,	0.0449955,	0.3002045,	0.0135)
-#   cat(mix)
-#   res <- getMI_(mix*nSims, t1*nSims)
-#   res
-# }
-
-```
-
-## Combined model
-
-### Model (Ambiguity+Topic Noisy RSA)
 
 ## Results
 
-```{r summary-table-data, warning=FALSE, message=FALSE, echo=FALSE}
+```{r , warning=FALSE, message=FALSE, echo=FALSE}
 behaviors <- c("Basic scalar implicature",
                "Speaker mark high-suprisal content",
                "Listener um-implicature",
