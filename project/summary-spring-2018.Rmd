@@ -354,7 +354,7 @@ nSims <- 100
 # topic, alpha, resultType, recursionLevel, nUtterances, nSims
 L_AmbiguityCorpusContextAware <- runAmibguityCorpus(TOPIC, ALPHA, 'contextAware', recursionLevel, nUtterances, nSims)
 L_AmbiguityCorpusContextUnAware <- runAmibguityCorpus(TOPIC, ALPHA, 'contextUnaware', recursionLevel, nUtterances, nSims)
-L_AmbiguityCorpusSBasic <- runAmibguityCorpus(TOPIC, ALPHA, 'S', recursionLevel, nUtterances, nSims)
+# L_AmbiguityCorpusSBasic <- runAmibguityCorpus(TOPIC, ALPHA, 'S', recursionLevel, nUtterances, nSims)
 L_AmbiguityCorpusBaseline <- runAmibguityCorpus(TOPIC, ALPHA, 'baseline', recursionLevel, nUtterances, nSims)  
 
 simsAmbiguityCorpusContextAware <- L_AmbiguityCorpusContextAware[[1]]
@@ -363,20 +363,20 @@ dfAmbiguityCorpusContextAware <- L_AmbiguityCorpusContextAware[[2]]
 simsAmbiguityCorpusContextUnAware <- L_AmbiguityCorpusContextUnAware[[1]]
 dfAmbiguityCorpusContextUnAware <- L_AmbiguityCorpusContextUnAware[[2]]
 
-simsAmbiguityCorpusSBasic <- L_AmbiguityCorpusSBasic[[1]]
-dfAmbiguityCorpusSBasic <- L_AmbiguityCorpusSBasic[[2]]
+# simsAmbiguityCorpusSBasic <- L_AmbiguityCorpusSBasic[[1]]
+# dfAmbiguityCorpusSBasic <- L_AmbiguityCorpusSBasic[[2]]
 
 simsAmbiguityCorpusBaseline <- L_AmbiguityCorpusBaseline[[1]]
 dfAmbiguityCorpusBaseline <- L_AmbiguityCorpusBaseline[[2]]
 
 simsCmbd <- rbind(simsAmbiguityCorpusContextAware,
                   simsAmbiguityCorpusContextUnAware,
-                  simsAmbiguityCorpusSBasic,
+                  # simsAmbiguityCorpusSBasic,
                   simsAmbiguityCorpusBaseline)
                   
 dfAmbiguityCorpusCmbd <- rbind(dfAmbiguityCorpusContextAware, 
                                dfAmbiguityCorpusContextUnAware, 
-                               dfAmbiguityCorpusSBasic, 
+                               # dfAmbiguityCorpusSBasic, 
                                dfAmbiguityCorpusBaseline)
 ```
 
@@ -460,50 +460,50 @@ $$H_{cross}(X^{(i)}, C) = K = H(X^{(i)}) + D_{KL}(X^{(i)}||C)$$
 
 ```{r plot5-rsa-CER-unconditional-entropy-effect, warning=FALSE, message=FALSE, echo=FALSE}
 # Note (BP): Manual calculation when listener knows topic.
-steadyStateProps <- c(0.24525,	0.2565,	0.1386,	0.0449955,	0.3002045,	0.0135)
 
 dfAmbiguityCorpusCmbd %>%
   group_by(resultType, binVal, utterance) %>%
   summarise(cnt=sum(n),
             prop=cnt/nSims) %>%
   group_by(resultType, binVal) %>%
-  summarise(`H(P(X))`=entropy::entropy.plugin(cnt, unit=c('log2')),
-            `KL divergence`=entropy::KL.empirical(cnt, steadyStateProps*nSims, unit=c('log2')),
-            `Cross entropy (H(P(X))+KL(P(X)||Q(X)))`=`H(P(X))`+`KL divergence`) %>%
+  summarise(`H(P(X))`=entropy::entropy.plugin(cnt, unit=c('log2'))) %>%
+  ungroup %>%
+  mutate(resultType=ifelse(resultType=='baseline', 'Baseline', 
+                ifelse(resultType=='contextAware', 'Context Aware', 'Context Unaware'))) %>%
   ggplot(aes(x=binVal, y=`H(P(X))`)) +
     geom_line(size=2, alpha=0.75, col='blue') +
     geom_smooth(method='loess', col='red', alpha=0.5, lty=2) +
     xlab("Utterance position i") +
-    ylab("Measure (bits)") +
+    ylab("Unconditional entropy H(X_i)") +
     theme_few() +
     theme(legend.position="none") +
-    facet_wrap(~resultType, ncol=2)
+    facet_wrap(~resultType, ncol=3)
 ```
   
 #### Result 4 [OPTIONAL]: $H(Y)$ remains constant across discourse
 
 ```{r plot6-rsa-CER-constant-entropy-full-effect, warning=FALSE, message=FALSE, echo=FALSE, eval=FALSE}
 # Note (BP): Manual calculation when listener knows topic.
-steadyStateProps <- c(0.24525,	0.2565,	0.1386,	0.0449955,	0.3002045,	0.0135)
-
-df_filled %>%
-  group_by(binVal, utterance) %>%
-  summarise(cnt=sum(n),
-            prop=cnt/nSims) %>%
-  group_by(binVal) %>%
-  summarise(`H(P(X))`=entropy::entropy.plugin(cnt, unit=c('log2')),
-            `KL divergence`=entropy::KL.empirical(cnt, steadyStateProps*nSims, unit=c('log2')),
-            `Cross entropy (H(P(X))+KL(P(X)||Q(X)))`=`H(P(X))`+`KL divergence`) %>%
-  gather(typ, measure, c(`H(P(X))`, `KL divergence`, `Cross entropy (H(P(X))+KL(P(X)||Q(X)))`)) %>%
-  ggplot(aes(x=binVal, y=measure, col=typ)) +
-    geom_line(size=2, alpha=0.5) +
-    annotate("text", label = "HCross(P, Q)", x=4, y = 2.1, size=4, col="red") +
-    annotate("text", label = "H(P)", x=8, y = 1.6, size= 4, col="forest green") +
-    annotate("text", label = "KL(P||Q)", x=10, y = 0.6, size= 4, col="blue") +
-    xlab("Utterance position i") +
-    ylab("Measure (bits)") +
-    theme_few() +
-    theme(legend.position="none")
+# steadyStateProps <- c(0.24525,	0.2565,	0.1386,	0.0449955,	0.3002045,	0.0135)
+# 
+# df_filled %>%
+#   group_by(binVal, utterance) %>%
+#   summarise(cnt=sum(n),
+#             prop=cnt/nSims) %>%
+#   group_by(binVal) %>%
+#   summarise(`H(P(X))`=entropy::entropy.plugin(cnt, unit=c('log2')),
+#             `KL divergence`=entropy::KL.empirical(cnt, steadyStateProps*nSims, unit=c('log2')),
+#             `Cross entropy (H(P(X))+KL(P(X)||Q(X)))`=`H(P(X))`+`KL divergence`) %>%
+#   gather(typ, measure, c(`H(P(X))`, `KL divergence`, `Cross entropy (H(P(X))+KL(P(X)||Q(X)))`)) %>%
+#   ggplot(aes(x=binVal, y=measure, col=typ)) +
+#     geom_line(size=2, alpha=0.5) +
+#     annotate("text", label = "HCross(P, Q)", x=4, y = 2.1, size=4, col="red") +
+#     annotate("text", label = "H(P)", x=8, y = 1.6, size= 4, col="forest green") +
+#     annotate("text", label = "KL(P||Q)", x=10, y = 0.6, size= 4, col="blue") +
+#     xlab("Utterance position i") +
+#     ylab("Measure (bits)") +
+#     theme_few() +
+#     theme(legend.position="none")
 ```
 
 ## Combined model
@@ -627,7 +627,7 @@ df_filled_full %>%
     geom_line(size=2, alpha=0.75, col='blue') +
     geom_smooth(method='loess', col='red', alpha=0.5, lty=2) +
     xlab("Utterance position i") +
-    ylab("Measure (bits)") +
+    ylab("Unconditional entropy H(X_i)") +
     ggtitle(paste0("Unconditional sentence entropy estimates by position\nn=", nSims," simulations")) +
     theme_few() +
     theme(plot.title=element_text(hjust = 0.5))
@@ -648,12 +648,12 @@ full_sims_lm %>%
     geom_point(size=2.5) +
     geom_errorbar(aes(ymax=ymax, ymin=ymin, alpha=0.2), width=0) +
     geom_errorbarh(aes(xmax=xmax, xmin=xmin, alpha=0.2), height=0) +
-    ylab('Likelihood of marked version') +
-    xlab('mean(log(p(utt))') +
+    xlab("Language model surprisal (log( P( u1 | u2 )))") +
+    ylab("Likelihood of full form") +
     ylim(0, 1) +
     ggtitle(paste0(nSims, " corpus simulations (", nUtterances, " utterances)", "\n90% boostrapped CIs.")) +
     theme_few() +
-    theme(plot.title=element_text(hjust = 0.5))
+    theme(plot.title=element_text(hjust = 0.5), legend.position='none')
 ```
 
 ## Results
