@@ -245,17 +245,24 @@ for (m in models) {
 ```
 
 ```{r sensitivity-analysis, warning=FALSE, message=FALSE, echo=FALSE}
+# write.csv(df_sensitivity, file="df_sensitivity-20180423.csv")
 df_heat <- df_sensitivity %>%
-  group_by(model, alpha) %>%
+  group_by(model, alpha, theta) %>%
   summarise(correl=cor(postProb, lik))
 ```
 
 ```{r plot-sensitivity-analysis, warning=FALSE, message=FALSE, echo=FALSE}
-df_heat %>%
-  mutate(alpha=as.factor(alpha)) %>%
-  ggplot(aes(model, alpha)) +
+plt_sensitivity <- df_heat %>%
+  ungroup %>%
+  mutate(alpha=as.factor(alpha),
+         theta=as.factor(theta)) %>%
+  ggplot(aes(theta, alpha)) +
     geom_tile(aes(fill=correl)) +
-    scale_fill_gradient(low="red", high="blue")
+    scale_fill_gradient(low="red", high="white") +
+    facet_wrap(~model) +
+    theme_few()
+
+ggsave("plots/uid-plot-sensitivity.png", plot=plt_sensitivity, device='png', width=8, height=4)
 ```
 
 ## CER-effects
