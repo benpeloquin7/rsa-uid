@@ -206,9 +206,9 @@ process_sims <- function(sims) {
 #    Data.frame containing multiple instantiations of bigram
 #    LM anlayses.
 #
-run_corpus_analysis <- function(df_lm, ci=0.95) {
+run_corpus_analysis <- function(df_lm, ci=0.95, runSummarise=TRUE) {
   # browser()
-  df_lm %>%
+  df1 <- df_lm %>%
     group_by(expNum, second) %>%
     mutate(secondTotalProp=sum(prop),       # p(a, X) + p(a, ^)
            lik=prop/secondTotalProp) %>%    # p(X|a) = p(X, a) / p(a)
@@ -217,26 +217,34 @@ run_corpus_analysis <- function(df_lm, ci=0.95) {
     mutate(postProb=log2(secondTotalProp/sum(prop))) %>%  # p(a)
     ungroup %>%
     select(expNum, first, second, lik, postProb) %>%
-    filter(second %in% c(letters[1:5], 'x', 'y'), first=='X') %>%  # Here we're just interested in marked utterances
-    group_by(second) %>%
-    summarise(
-      avgPostProb=mean(postProb),
-      xmin=quantile(postProb, probs=c(1-ci)),
-      xmax=quantile(postProb, probs=c(ci)),
-      avgLikelihood=mean(lik),
-      ymin=quantile(lik, probs=c(1-ci)),
-      ymax=quantile(lik, probs=c(ci)),
-      n=n())
+    filter(second %in% c(letters[1:5], 'x', 'y'), first=='X')  # Here we're just interested in marked utterances
+  if (!runSummarise) {
+    return(df1)
+  } else {
+    df1 %>%
+      group_by(second) %>%
+      summarise(
+        avgPostProb=mean(postProb),
+        xmin=quantile(postProb, probs=c(1-ci)),
+        xmax=quantile(postProb, probs=c(ci)),
+        avgLikelihood=mean(lik),
+        ymin=quantile(lik, probs=c(1-ci)),
+        ymax=quantile(lik, probs=c(ci)),
+        n=n())
+  }
 }
 
-# run_corpus_analysis()
-# =====================
+
+
+# corpus_run_fn()
+# ===============
 # Process multiple corpus simulations.
 #
 # Parameters
 # ----------
 # sims: data.frame
 #   Data.frame containing simulations (output of runExperimentFn)
+# Need to completed others....
 #
 # Returns
 # -------
@@ -244,7 +252,7 @@ run_corpus_analysis <- function(df_lm, ci=0.95) {
 #    Data.frame containing multiple instantiations of bigram
 #    LM anlayses.
 #
-corpus_run_fn <- function(modelFile, modelName, alpha, lambda, theta, nUtterances=500, nSims=100, output=FALSE){
+corpus_run_fn <- function(modelFile, modelName, alpha, lambda, theta, nUtterances=500, nSims=100, justSummary=TRUE, output=FALSE){
   modelStr <- getModelFile(modelFile)
   runFn <- createRunFn(modelStr)
   runExp_ <- runExperimentFn(runFn, modelName, alpha, lambda, theta, nUtterances)
@@ -272,6 +280,13 @@ corpus_run_fn <- function(modelFile, modelName, alpha, lambda, theta, nUtterance
   # LM analysis
   df_summary <- run_corpus_analysis(df_lm)
   df_summary
+  
+  # Default output is just summary df
+  if (justSummary) {
+    return(df_summary) 
+  } else {
+    return(list(df_lm, df_summary))
+  }
 }
 
 # norm
