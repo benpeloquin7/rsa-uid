@@ -215,6 +215,48 @@ df_plot3 %>%
       theme(plot.title = element_text(hjust = 0.5))
 ```
 
+# RSA-UID sensitivity analysis
+```{r run-sensitivity-analysis, warning=FALSE, message=FALSE, echo=FALSE}
+noiseModelFile <- "/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/fyp-presentation/noisy-rsa-corpus-model.wppl"
+THETA <- 0.2
+LAMBDA <- 1
+nUtterances <- 100
+nSims <- 30
+
+models <- c("S1", "S2", "S3", "S4")
+thetas <- seq(0.1, 0.9, by=0.1)
+alphas <- c(1, 3, 6, 12, 24)
+
+df_sensitivity = data.frame()
+for (m in models) {
+  for (t in thetas) {
+    for (a in alphas) {
+      cat("\nmodel:", m, "alpha", a, 'theta', t)
+      curr_run <- corpus_run_fn(noiseModelFile, m, a, LAMBDA, t, nUtterances, nSims, FALSE, FALSE)
+      df_raw <- curr_run[[1]]
+      df_processed <- run_corpus_analysis(df_raw, runSummarise=FALSE) %>%
+        mutate(model=m,
+               alpha=a,
+               theta=t)
+      df_sensitivity <- rbind(df_sensitivity, df_processed)
+    }
+  }
+}
+```
+
+```{r sensitivity-analysis, warning=FALSE, message=FALSE, echo=FALSE}
+df_heat <- df_sensitivity %>%
+  group_by(model, alpha) %>%
+  summarise(correl=cor(postProb, lik))
+```
+
+```{r plot-sensitivity-analysis, warning=FALSE, message=FALSE, echo=FALSE}
+df_heat %>%
+  mutate(alpha=as.factor(alpha)) %>%
+  ggplot(aes(model, alpha)) +
+    geom_tile(aes(fill=correl)) +
+    scale_fill_gradient(low="red", high="blue")
+```
 
 ## CER-effects
 
@@ -293,28 +335,98 @@ df_SBasic <- runAmbiguityFn(1,
                             alpha=alpha,
                             recursionLevel=recursionLevel)
 
-df_amb <- rbind(df_contextUnaware, df_contextAware, df_baseline, df_SBasic)
+df_amb <- rbind(df_contextAware, df_baseline)
 ```
 
 Note (BP 20180408): Instead of binning within a run, why not calculate entropy between runs (so if we have 200 simulations check entropy of position 1.)
+
+First plot -- just speaker utterances across a single discourse.
 ```{r plot4a-rsa-CER-listeners-learn-topic, warning=FALSE, message=FALSE, echo=FALSE}
 lvls <- as.factor(df_amb$utterance)
 
-df_amb %>%
+df_ambg_plot4 <- df_amb %>%
   rowwise() %>%
-  mutate(utteranceYPos=which(utterance==levels(lvls))/10) %>%
-  ggplot(aes(x=utteranceNum, y=utteranceYPos, col=utterance)) +
-    geom_text(alpha=0.5, aes(label=utterance)) +
-    geom_line(aes(x=utteranceNum, y=T1), col='blue', size=1.5) +
-    geom_line(aes(x=utteranceNum, y=T2), col='red', alpha=0.25, size=1.5) +
-    geom_line(aes(x=utteranceNum, y=T3), col='green', alpha=0.25, size=1.5) +
-    geom_line(aes(x=utteranceNum, y=T4), col='purple', alpha=0.25, size=1.5) +
-    ylab("Listener topic posterior") +
-    xlab("Utterance position") +
+  mutate(utteranceYPos=which(utterance==levels(lvls))/10,
+         resultType=ifelse(resultType=='baseline', 'Baseline',
+                           ifelse(resultType=='contextUnaware', 'Context Unaware', 'Context Aware')),
+         resultType=factor(resultType, levels=c('Baseline', 'Context Unaware', 'Context Aware')),
+         utterance_name=ifelse(utterance=='a', 'Alex', 
+                               ifelse(utterance=='b', 'Balloon',
+                                      ifelse(utterance=='c', 'Cookie', 
+                                             ifelse(utterance=='d', 'Pat',
+                                                    ifelse(utterance=='x', 'they', 'it'))))),
+         utterance_name=factor(utterance_name, levels=c("they", "it", "Alex", "Balloon", "Cookie", "Pat")))
+cer_plt_1a <- df_ambg_plot4 %>%
+  ggplot(aes(x=utteranceNum, y=utteranceYPos, col=utterance_name)) +
+    geom_text(alpha=0.8, aes(label=utterance_name), position=position_jitter(height=0.25)) +
+    # geom_line(aes(x=utteranceNum, y=T1), col='blue', size=1.5) +
+    # geom_line(aes(x=utteranceNum, y=T2), col='red', alpha=0.25, size=1.5) +
+    # geom_line(aes(x=utteranceNum, y=T3), col='green', alpha=0.25, size=1.5) +
+    # geom_line(aes(x=utteranceNum, y=T4), col='purple', alpha=0.25, size=1.5) +
+    ylab("Utterance") +
+    xlab("Utterance position in discourse") +
+    ylim(-0.5, 1) +
+    xlim(0, 40) +
     theme_few() +
     theme(legend.position='none', plot.title = element_text(hjust = 0.5)) +
-    ggtitle("Listener learns relevant topic as discourse proceeds") +
-    facet_grid(~resultType)
+    ggtitle("Speaker utterances across discourse") +
+    facet_wrap(~resultType, ncol=1)
+
+cer_plt_1b <- df_ambg_plot4 %>%
+  filter(utterance_name=='they') %>%
+  # filter(utterance_name=='it' | utterance_name=='Alex') %>%
+  ggplot(aes(x=utteranceNum, y=utteranceYPos, col=utterance_name)) +
+    geom_text(alpha=0.8, aes(label=utterance_name), position=position_jitter(height=0.25)) +
+    # geom_line(aes(x=utteranceNum, y=T1), col='blue', size=1.5) +
+    # geom_line(aes(x=utteranceNum, y=T2), col='red', alpha=0.25, size=1.5) +
+    # geom_line(aes(x=utteranceNum, y=T3), col='green', alpha=0.25, size=1.5) +
+    # geom_line(aes(x=utteranceNum, y=T4), col='purple', alpha=0.25, size=1.5) +
+    ylab("Utterance") +
+    xlab("Utterance position in discourse") +
+    ylim(-0.5, 1) +
+    xlim(0, 40) +
+    theme_few() +
+    theme(legend.position='none', plot.title = element_text(hjust = 0.5)) +
+    ggtitle("Speaker utterances across discourse") +
+    facet_wrap(~resultType, ncol=1)
+
+ggsave("plots/cer-plot-1a.png", plot=cer_plt_1a, device='png', width=8, height=4)
+ggsave("plots/cer-plot-1b.png", plot=cer_plt_1b, device='png', width=8, height=4)
+```
+
+Second plot listener infers topic.
+```{r plot4b-rsa-CER-listeners-learn-topic, warning=FALSE, message=FALSE, echo=FALSE}
+first_above_90 <- which(subset(df_ambg_plot4, resultType=='Context Aware')$T1 > 0.9)[1]
+df_vline <- data.frame(x_inter=first_above_90, resultType='Context Aware')
+
+cer_plot_1c <- df_ambg_plot4 %>%
+  ggplot(aes(x=utteranceNum, y=utteranceYPos, col=utterance_name)) +
+    geom_text(alpha=0.5, aes(label=utterance_name)) +
+    geom_line(aes(x=utteranceNum, y=T1), col='blue', size=1.5) +
+    # geom_line(aes(x=utteranceNum, y=T2), col='red', alpha=0.25, size=1.5) +
+    # geom_line(aes(x=utteranceNum, y=T3), col='green', alpha=0.25, size=1.5) +
+    # geom_line(aes(x=utteranceNum, y=T4), col='purple', alpha=0.25, size=1.5) +
+    ylab("P( topic | discourse )") +
+    xlab("Utterance position in discourse") +
+    ylim(0, 1) +
+    theme_few() +
+    theme(legend.position='none', plot.title = element_text(hjust = 0.5)) +
+    ggtitle("Listener posterior over target topic")
+ggsave("plots/cer-plot-1c.png", plot=cer_plot_1c, device='png', width=8, height=4)
+
+cer_plot_1d <- df_ambg_plot4 %>%
+  ggplot(aes(x=utteranceNum, y=T1, col=resultType)) +
+    geom_line(size=1.5, alpha=0.8) +
+    # geom_line(aes(x=utteranceNum, y=T2), col='red', alpha=0.25, size=1.5) +
+    # geom_line(aes(x=utteranceNum, y=T3), col='green', alpha=0.25, size=1.5) +
+    # geom_line(aes(x=utteranceNum, y=T4), col='purple', alpha=0.25, size=1.5) +
+    ylab("P( topic | discourse )") +
+    xlab("Utterance position in discourse") +
+    ylim(0, 1) +
+    theme_few() +
+    theme(legend.position='none', plot.title = element_text(hjust = 0.5)) +
+    ggtitle("Listener posterior over target topic")
+ggsave("plots/cer-plot-1d.png", plot=cer_plot_1d, device='png', width=8, height=4)
 ```
 
 ```{r run-CER-sims-setup, warning=FALSE, message=FALSE, echo=FALSE}
@@ -349,7 +461,7 @@ TOPIC <- 'T1'
 ALPHA <- 10
 recursionLevel <- 2
 nUtterances <- 40
-nSims <- 100
+nSims <- 250
 
 # topic, alpha, resultType, recursionLevel, nUtterances, nSims
 L_AmbiguityCorpusContextAware <- runAmibguityCorpus(TOPIC, ALPHA, 'contextAware', recursionLevel, nUtterances, nSims)
@@ -360,8 +472,8 @@ L_AmbiguityCorpusBaseline <- runAmibguityCorpus(TOPIC, ALPHA, 'baseline', recurs
 simsAmbiguityCorpusContextAware <- L_AmbiguityCorpusContextAware[[1]]
 dfAmbiguityCorpusContextAware <- L_AmbiguityCorpusContextAware[[2]]
 
-simsAmbiguityCorpusContextUnAware <- L_AmbiguityCorpusContextUnAware[[1]]
-dfAmbiguityCorpusContextUnAware <- L_AmbiguityCorpusContextUnAware[[2]]
+# simsAmbiguityCorpusContextUnAware <- L_AmbiguityCorpusContextUnAware[[1]]
+# dfAmbiguityCorpusContextUnAware <- L_AmbiguityCorpusContextUnAware[[2]]
 
 # simsAmbiguityCorpusSBasic <- L_AmbiguityCorpusSBasic[[1]]
 # dfAmbiguityCorpusSBasic <- L_AmbiguityCorpusSBasic[[2]]
@@ -370,12 +482,12 @@ simsAmbiguityCorpusBaseline <- L_AmbiguityCorpusBaseline[[1]]
 dfAmbiguityCorpusBaseline <- L_AmbiguityCorpusBaseline[[2]]
 
 simsCmbd <- rbind(simsAmbiguityCorpusContextAware,
-                  simsAmbiguityCorpusContextUnAware,
+                  # simsAmbiguityCorpusContextUnAware,
                   # simsAmbiguityCorpusSBasic,
                   simsAmbiguityCorpusBaseline)
                   
 dfAmbiguityCorpusCmbd <- rbind(dfAmbiguityCorpusContextAware, 
-                               dfAmbiguityCorpusContextUnAware, 
+                               # dfAmbiguityCorpusContextUnAware, 
                                # dfAmbiguityCorpusSBasic, 
                                dfAmbiguityCorpusBaseline)
 ```
@@ -424,9 +536,12 @@ simsCmbd %>%
             avgT2=mean(T2),
             avgT3=mean(T3),
             avgT4=mean(T4)) %>%
+  ungroup %>%
   # Check relations to other utterances here:
   # gather(type, val, c(probX, probA, probB)) %>%
-  # ggplot(aes(x=utteranceNum, y=val, col=type)) +
+  mutate(resultType=ifelse(resultType=='baseline', 'Baseline',
+                           ifelse(resultType=='contextUnaware', 'Context Unaware', 'Context Aware')),
+         resultType=factor(resultType, levels=c('Baseline', 'Context Unaware', 'Context Aware'))) %>%
   ggplot(aes(x=utteranceNum, y=probAmb)) +
     # geom_smooth(aes(y=avgT1), col='red', alpha=0.2) +
     # geom_smooth(aes(y=avgT2), col='green', alpha=0.2) +
@@ -440,6 +555,8 @@ simsCmbd %>%
     theme_few() +
     theme(plot.title=element_text(hjust = 0.5)) +
     facet_grid(~resultType)
+
+ggsave("plots/cer-plot-2a.png", plot=last_plot(), device='png', width=8, height=4)
 ```
 
   
@@ -469,7 +586,8 @@ dfAmbiguityCorpusCmbd %>%
   summarise(`H(P(X))`=entropy::entropy.plugin(cnt, unit=c('log2'))) %>%
   ungroup %>%
   mutate(resultType=ifelse(resultType=='baseline', 'Baseline', 
-                ifelse(resultType=='contextAware', 'Context Aware', 'Context Unaware'))) %>%
+                ifelse(resultType=='contextAware', 'Context Aware', 'Context Unaware')),
+         resultType=factor(resultType, levels=c('Baseline', 'Context Unaware', 'Context Aware'))) %>%
   ggplot(aes(x=binVal, y=`H(P(X))`)) +
     geom_line(size=2, alpha=0.75, col='blue') +
     geom_smooth(method='loess', col='red', alpha=0.5, lty=2) +
@@ -477,7 +595,11 @@ dfAmbiguityCorpusCmbd %>%
     ylab("Unconditional entropy H(X_i)") +
     theme_few() +
     theme(legend.position="none") +
-    facet_wrap(~resultType, ncol=3)
+    facet_wrap(~resultType, ncol=3) +
+    ggtitle(paste0("Unconditional entropy across discourse\nn=", nSims," simulations")) +
+    theme(plot.title=element_text(hjust = 0.5))
+
+ggsave("plots/cer-plot-2b.png", plot=last_plot(), device='png', width=8, height=4)
 ```
   
 #### Result 4 [OPTIONAL]: $H(Y)$ remains constant across discourse
