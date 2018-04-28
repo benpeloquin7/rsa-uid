@@ -140,6 +140,8 @@ left_join(df_plot1, surprisals, by=c('input'='input')) %>%
     xlab("object (-log(P(object))") +
     ylab("Likelihood of UID cue") +
     theme_few()
+
+ggsave("plots/uid-speaker-prefer-cue.png", plot=last_plot(), device='png', width=8, height=4)
 ```
 
 #### Result 2: Listener infer oncoming item is high-surprisal given cue
@@ -175,6 +177,7 @@ left_join(df_plot2, surprisals, by=c('d'='input')) %>%
     xlab("object (-log(P(object))") +
     ylab("p(obj|UID-cue)") +
     theme_few()
+ggsave("plots/uid-listener-infer.png", plot=last_plot(), device='png', width=8, height=4)
 ```
   
 #### Result 3: Corpus analysis reflects UID relationship between likelihood to mark and surprisal
@@ -213,12 +216,13 @@ df_plot3 %>%
       ggtitle(paste0(nSims, " corpus simulations (", nUtterances, " utterances)", "\n95% boostrapped CIs.")) +
       theme_few() +
       theme(plot.title = element_text(hjust = 0.5))
+
+ggsave("plots/uid-corpus.png", plot=last_plot(), device='png', width=8, height=4)
 ```
 
 # RSA-UID sensitivity analysis
-```{r run-sensitivity-analysis, warning=FALSE, message=FALSE, echo=FALSE}
+```{r run-sensitivity-analysis, warning=FALSE, message=FALSE, echo=FALSE, eval=FALSE}
 noiseModelFile <- "/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/fyp-presentation/noisy-rsa-corpus-model.wppl"
-THETA <- 0.2
 LAMBDA <- 1
 nUtterances <- 100
 nSims <- 30
@@ -245,10 +249,10 @@ for (m in models) {
 ```
 
 ```{r sensitivity-analysis, warning=FALSE, message=FALSE, echo=FALSE}
-# write.csv(df_sensitivity, file="df_sensitivity-20180423.csv")
 df_heat <- df_sensitivity %>%
   group_by(model, alpha, theta) %>%
   summarise(correl=cor(postProb, lik))
+# write.csv(df_sensitivity, file="df_sensitivity-20180427.csv")
 ```
 
 ```{r plot-sensitivity-analysis, warning=FALSE, message=FALSE, echo=FALSE}
@@ -258,7 +262,7 @@ plt_sensitivity <- df_heat %>%
          theta=as.factor(theta)) %>%
   ggplot(aes(theta, alpha)) +
     geom_tile(aes(fill=correl)) +
-    scale_fill_gradient(low="red", high="white") +
+    scale_fill_gradient2(low="red", high="blue", mid='white') +
     facet_wrap(~model) +
     theme_few()
 
@@ -500,23 +504,6 @@ dfAmbiguityCorpusCmbd <- rbind(dfAmbiguityCorpusContextAware,
 ```
 
 
-```{r plot4b-rsa-CER-listeners-learn-topic, warning=FALSE, message=FALSE, echo=FALSE, eval=FALSE}
-# sims %>%
-#   mutate(`P(Topic|Utterances)`=ifelse(utterance=='x' | utterance=='X x', 0.5, 
-#                                       ifelse(utterance=='y' | utterance=='X y', 0.75, 0)),
-#          utterance=ifelse(utterance=='x', '[a, d]', 
-#                           ifelse(utterance=='X x', 'X[a, d]', 
-#                                  ifelse(utterance=='y', '[b, c]', ifelse(utterance=='X y', 'X[b, c]', utterance))))) %>%
-#   ggplot(aes(x=utteranceNum, y=`P(Topic|Utterances)`)) +
-#     geom_smooth(method='loess', aes(y=T1)) +
-#     geom_jitter(aes(col=utterance), width=0.5, height=0.1, alpha=0.25, size=2) +
-#     ylab("Listener posterior probability of target topic") +
-#     xlab("Utterance position") +
-#     ggtitle(paste("S4 production (points) and listener topic inference (line)\nn=",nSims," simulations")) +
-#     theme_few() +
-#     theme(plot.title=element_text(hjust = 0.5))
-```
-
 #### Result 2: Speaker more likley to use ambiguous utterance once listener is confident in topic
 ```{r plot4-rsa-CER-speakers-more-likely-to-use-ambiguous-utterances, warning=FALSE, message=FALSE, echo=FALSE}
 simsCmbd %>%
@@ -691,10 +678,10 @@ runFullCorpus <- function(topic, alpha, theta, resultType, recursionLevel, nUtte
 
 ```{r plot6-run-full-model, warning=FALSE, message=FALSE, echo=FALSE}
 TOPIC <- 'T1'
-ALPHA <- 10
+ALPHA <- 8
 THETA <- 0.2
 RESULT_TYPE <- 'contextAware'
-recursionLevel <- 2
+recursionLevel <- 3
 nUtterances <- 100
 nSims <- 100
 
@@ -743,6 +730,7 @@ full_sims %>%
     ggtitle(paste0("Empirical probability Speaker uses ambiguous utterance\nn=", nSims," simulations")) +
     theme_few() +
     theme(plot.title=element_text(hjust = 0.5))
+
 ```
 
 ```{r plot6b-unconditional-entropy, warning=FALSE, message=FALSE, echo=FALSE}
@@ -760,6 +748,8 @@ df_filled_full %>%
     ggtitle(paste0("Unconditional sentence entropy estimates by position\nn=", nSims," simulations")) +
     theme_few() +
     theme(plot.title=element_text(hjust = 0.5))
+
+ggsave("plots/full-CER.png", plot=last_plot(), device='png', width=8, height=4)
 ```
 
 ````{r plot6c-negative-correlation, warning=FALSE, message=FALSE, echo=FALSE}
@@ -783,6 +773,8 @@ full_sims_lm %>%
     ggtitle(paste0(nSims, " corpus simulations (", nUtterances, " utterances)", "\n90% boostrapped CIs.")) +
     theme_few() +
     theme(plot.title=element_text(hjust = 0.5), legend.position='none')
+
+ggsave("plots/full-UID.png", plot=last_plot(), device='png', width=8, height=4)
 ```
 
 ## Results
