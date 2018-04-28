@@ -50,6 +50,7 @@ var INPUT = getInput(modelName)
 var LAMBDA = modelName.includes('L') ? getRData('lambda') : 1
 var ALPHA = modelName.includes('S') ? getRData('alpha') : 1
 var THETA = getRData('theta')
+var K = 10
 
 // Utterances
 var utterances = ['X a', 'a', 'X b', 'b', 'X c', 'c', 'X d', 'd']
@@ -103,14 +104,28 @@ var cueNoiseModel = function(utterance) {
     if (flip(THETA)) {                              // cue deleted
       return flip(THETA) ? '' : tokens[1]           // content item deleted with prob THETA
     } else {                                        // cue retained, noise diminished
-      return flip(THETA/10) ? tokens[0] : utterance  // cue retained, content item deleted
+      return flip(THETA/K) ? tokens[0] : utterance  // cue retained, content item deleted
     }
   } else {
     return flip(THETA) ? '' : utterance
   }
 }
 
-var NOISE_MODEL = cueNoiseModel
+var cueUnifNoiseModel = function(utterance) {
+  var tokens = utterance.split(' ')
+  if (tokens.length == 2) {
+    if (flip(THETA)) {                              // cue deleted
+      return flip(THETA) ? '' : tokens[1]           // content item deleted with prob THETA
+    } else {
+      var newTheta = sample(Uniform({a:0, b:THETA})) // cue retained, noise diminished
+      return flip(newTheta) ? tokens[0] : utterance  // cue retained, content item deleted
+    }
+  } else {
+    return flip(THETA) ? '' : utterance
+  }
+}
+
+var NOISE_MODEL = deleteNoiseModel
 
 var decode = cache(function(utteranceProduced, noiseModel) {
   Infer({

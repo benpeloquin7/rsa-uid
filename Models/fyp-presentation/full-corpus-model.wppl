@@ -213,7 +213,7 @@ var cueNoiseModel = function(utterance) {
   }
 }
 
-var NOISE_MODEL = cueNoiseModel
+var NOISE_MODEL = deleteNoiseModel
 
 var decode = cache(function(utteranceProduced, noiseModel) {
   Infer({

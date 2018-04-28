@@ -34,6 +34,7 @@ var LAMBDA = modelName.includes('L') ? getRData('lambda') : 1
 var ALPHA = modelName.includes('S') ? getRData('alpha') : 1
 var THETA = getRData('theta')
 var N = getRData('n') 
+var K = 10 // speaker noise reduction
 
 // Utterances
 var utterances = ['X a', 'a', 'X b', 'b', 'X c', 'c', 'X d', 'd']
@@ -88,14 +89,14 @@ var cueNoiseModel = function(utterance) {
     if (flip(THETA)) {                               // cue deleted
       return flip(THETA) ? '' : tokens[1]            // content item deleted with prob THETA
     } else {                                         // cue retained, noise diminished
-      return flip(THETA/10) ? tokens[0] : utterance  // cue retained, content item deleted
+      return flip(THETA/K) ? tokens[0] : utterance  // cue retained, content item deleted
     }
   } else {                                           // single token utterance
     return flip(THETA) ? '' : utterance
   }
 }
 
-var NOISE_MODEL = cueNoiseModel
+var NOISE_MODEL = deleteNoiseModel
 
 var cost = function(utterance) {
   return 0
