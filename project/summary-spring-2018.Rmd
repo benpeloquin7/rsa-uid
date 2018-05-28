@@ -359,16 +359,16 @@ df_ambg_plot4 <- df_amb %>%
   rowwise() %>%
   mutate(utteranceYPos=which(utterance==levels(lvls))/10,
          resultType=ifelse(resultType=='baseline', 'Baseline',
-                           ifelse(resultType=='contextUnaware', 'Context Unaware', 'Context Aware')),
-         resultType=factor(resultType, levels=c('Baseline', 'Context Unaware', 'Context Aware')),
+                           ifelse(resultType=='contextUnaware', 'Context Unaware', 'Pragmatic')),
+         resultType=factor(resultType, levels=c('Baseline', 'Context Unaware', 'Pragmatic')),
          utterance_name=ifelse(utterance=='a', 'Alex', 
                                ifelse(utterance=='b', 'Balloon',
                                       ifelse(utterance=='c', 'Cookie', 
-                                             ifelse(utterance=='d', 'Pat',
+                                             ifelse(utterance=='d', 'Drew',
                                                     ifelse(utterance=='x', 'they', 'it'))))),
-         utterance_name=factor(utterance_name, levels=c("they", "it", "Alex", "Balloon", "Cookie", "Pat")))
+         utterance_name=factor(utterance_name, levels=c("they", "it", "Alex", "Balloon", "Cookie", "Drew")))
 cer_plt_1a <- df_ambg_plot4 %>%
-  ggplot(aes(x=utteranceNum, y=utteranceYPos, col=utterance_name)) +
+  ggplot(aes(x=utteranceNum, y=utteranceYPos, col=utterance)) +
     geom_text(alpha=0.8, aes(label=utterance_name), position=position_jitter(height=0.25)) +
     # geom_line(aes(x=utteranceNum, y=T1), col='blue', size=1.5) +
     # geom_line(aes(x=utteranceNum, y=T2), col='red', alpha=0.25, size=1.5) +
@@ -386,7 +386,7 @@ cer_plt_1a <- df_ambg_plot4 %>%
 cer_plt_1b <- df_ambg_plot4 %>%
   filter(utterance_name=='they') %>%
   # filter(utterance_name=='it' | utterance_name=='Alex') %>%
-  ggplot(aes(x=utteranceNum, y=utteranceYPos, col=utterance_name)) +
+  ggplot(aes(x=utteranceNum, y=utteranceYPos, col=utterance)) +
     geom_text(alpha=0.8, aes(label=utterance_name), position=position_jitter(height=0.25)) +
     # geom_line(aes(x=utteranceNum, y=T1), col='blue', size=1.5) +
     # geom_line(aes(x=utteranceNum, y=T2), col='red', alpha=0.25, size=1.5) +
@@ -407,8 +407,8 @@ ggsave("plots/cer-plot-1b.png", plot=cer_plt_1b, device='png', width=8, height=4
 
 Second plot listener infers topic.
 ```{r plot4b-rsa-CER-listeners-learn-topic, warning=FALSE, message=FALSE, echo=FALSE}
-first_above_90 <- which(subset(df_ambg_plot4, resultType=='Context Aware')$T1 > 0.9)[1]
-df_vline <- data.frame(x_inter=first_above_90, resultType='Context Aware')
+first_above_90 <- which(subset(df_ambg_plot4, resultType=='Pragmatic')$T1 > 0.9)[1]
+df_vline <- data.frame(x_inter=first_above_90, resultType='Pragmatic')
 
 cer_plot_1c <- df_ambg_plot4 %>%
   ggplot(aes(x=utteranceNum, y=utteranceYPos, col=utterance_name)) +
