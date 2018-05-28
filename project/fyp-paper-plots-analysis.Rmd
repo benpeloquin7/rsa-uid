@@ -1,0 +1,700 @@
+---
+title: "Fyp-paper-plots-analysis"
+author: "Ben"
+date: "5/28/2018"
+output: html_document
+---
+
+```{r libraries, echo=FALSE, message=FALSE, warning=FALSE}
+library(directlabels)
+library(dplyr)
+library(knitr)
+
+source("summary-spring-2018-helpers.R")
+```
+
+# UID / Noisy-RSA
+
+```{r plot1-setup, warning=FALSE, message=FALSE, echo=FALSE}
+# Get model file
+noisy_rsa_production_model <- getModelFile("/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/fyp-presentation/noisy-rsa-production-model.wppl")
+noisy_rsa_production_model_run_fn <- createRunFn(noisy_rsa_production_model)
+basic_rsa_production_model <- getModelFile("/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/fyp-presentation/basic-rsa-production-model.wppl")
+basic_rsa_production_model_run_fn <- createRunFn(basic_rsa_production_model)
+```
+
+
+```{r plot1-data, warning=FALSE, message=FALSE, echo=FALSE}
+THETA <- 0.2
+ALPHA <- 6
+LAMBDA <- 1
+inputs <- c('a', 'b', 'c', 'd')
+df_plot1 <- data.frame()
+for (i in inputs) {
+  runData <- data.frame(modelName='S3',
+                       input=i,
+                       alpha=ALPHA,
+                       lambda=LAMBDA,
+                       theta=THETA)
+  currNoise <- noisy_rsa_production_model_run_fn(runData, 'rData') %>%
+    mutate(modelType='noise',
+           input=i)
+  currBasic <- basic_rsa_production_model_run_fn(runData, 'rData')  %>%
+    mutate(modelType='basic',
+           input=i)
+  df_plot1 <- rbind(df_plot1, rbind(currNoise, currBasic))
+}
+```
+
+Speaker is more likely to use cue when the intended object is high surprisal.
+```{r plot1, warning=FALSE, message=FALSE, echo=FALSE}
+df_plot1$support <- factor(df_plot1$support, levels=c("a", "X a", "b", "X b", "c", "X c", "d", "X d"))
+# Suprisal vals for plotting
+surprisals <- data.frame(input=as.character(c('a', 'b', 'c', 'd')), 
+                         vals=c(0.2, 0.5, 1, 2.5)) %>%
+  mutate(normed_vals=vals/sum(vals),
+         surprisal=-log2(normed_vals))
+# Plot
+left_join(df_plot1, surprisals, by=c('input'='input')) %>%
+  mutate(referent=ifelse(support %in% c('X a', 'a'), 'a', 
+                         ifelse(support %in% c('X b', 'b'), 'b',
+                                ifelse(support %in% c('X c', 'c'), 'c', 
+                                       ifelse(support %in% c('X d', 'd'), 'd', 'none')))),
+         marked=grepl('X', support)) %>%
+  filter(referent==input, marked) %>%
+  ggplot(aes(x=paste0(referent, ' (', round(surprisal, 2), ')'), y=prob)) +
+    geom_bar(aes(fill=modelType), position='dodge', stat='identity') +
+    xlab("object (-log(P(object))") +
+    ylab("Likelihood of UID cue") +
+    theme_few()
+
+ggsave("paper-plots/uid-speaker-prefer-cue.png", plot=last_plot(), device='png', width=8, height=4)
+```
+
+#### Result 2: Listener infer oncoming item is high-surprisal given cue
+
+```{r plot2-data, warning=FALSE, message=FALSE, echo=FALSE}
+THETA <- 0.3
+ALPHA <- 1
+LAMBDA <- 16
+currInput <- 'X'
+
+runData <- data.frame(modelName='L1',
+                     input=currInput,
+                     alpha=ALPHA,
+                     lambda=LAMBDA,
+                     theta=THETA)
+
+df_noisy_plot2 <- noisy_rsa_production_model_run_fn(runData, 'rData') %>%
+  mutate(modelType='noise',
+         input=currInput)
+df_basic_plot2 <-  basic_rsa_production_model_run_fn(runData, 'rData')  %>%
+  mutate(modelType='basic',
+         input=currInput)
+
+df_plot2 <- rbind(df_noisy_plot2, df_basic_plot2)
+```
+
+Listener is more likely to infer that oncoming material is high-surprisal given a cue.
+```{r plot2, warning=FALSE, message=FALSE, echo=FALSE}
+# Plot
+left_join(df_plot2, surprisals, by=c('d'='input')) %>%
+  ggplot(aes(x=paste0(d, ' (', round(surprisal, 2), ')'), y=prob, fill=modelType)) +
+    geom_bar(stat='identity', position='dodge') +
+    xlab("object (-log(P(object))") +
+    ylab("p(obj|UID-cue)") +
+    theme_few()
+ggsave("paper-plots/uid-listener-infer.png", plot=last_plot(), device='png', width=8, height=4)
+```
+  
+#### Result 3: Corpus analysis reflects UID relationship between likelihood to mark and surprisal
+```{r plot3-setup, warning=FALSE, message=FALSE, echo=FALSE}
+plot3NoiseModelFile <- "/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/fyp-presentation/noisy-rsa-corpus-model.wppl"
+plot3BasicModelFile <- "/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/fyp-presentation/basic-rsa-corpus-model.wppl"
+# plot3ModelFile <- "/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/testing/noisy-rsa1-corpus.wppl"
+```
+
+```{r plot3-data, warning=FALSE, message=FALSE, echo=FALSE}
+THETA <- 0.2
+ALPHA <- 6
+LAMBDA <- 1
+nUtterances <- 2000
+nSims <- 100
+
+# Noise model
+df_nrsa_corpus <- corpus_run_fn(plot3NoiseModelFile, "S4", ALPHA, LAMBDA, THETA, nUtterances, nSims) %>%
+  mutate(model='noisy_rsa')
+# Base model
+df_brsa_corpus <- corpus_run_fn(plot3BasicModelFile, "S4", ALPHA, LAMBDA, THETA, nUtterances, nSims)  %>%
+  mutate(model='basic_rsa')
+# Combine
+df_plot3 <- rbind(df_nrsa_corpus, df_brsa_corpus)
+```
+
+```{r plot3-rsa-uid-corpus-analysis, warning=FALSE, message=FALSE, echo=FALSE}
+df_plot3 %>%
+  ggplot(aes(x=avgPostProb, y=avgLikelihood, col=model)) +
+      geom_line(lty=2, alpha=0.7) +
+      geom_errorbar(aes(ymax=ymax, ymin=ymin, width=0)) +
+      geom_errorbarh(aes(xmax=xmax, xmin=xmin, height=0)) +
+      xlab("Language model surprisal (log( P( u1 | u2 )))") +
+      ylab("Likelihood of full form") +
+      ylim(0, 1) +
+      ggtitle(paste0(nSims, " corpus simulations (", nUtterances, " utterances)", "\n95% boostrapped CIs.")) +
+      theme_few() +
+      theme(plot.title = element_text(hjust = 0.5))
+
+ggsave("paper-plots/uid-corpus.png", plot=last_plot(), device='png', width=8, height=4)
+```
+
+# RSA-UID sensitivity analysis
+```{r run-sensitivity-analysis, warning=FALSE, message=FALSE, echo=FALSE, eval=FALSE}
+noiseModelFile <- "/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/fyp-presentation/noisy-rsa-corpus-model.wppl"
+LAMBDA <- 1
+nUtterances <- 100
+nSims <- 30
+
+models <- c("S1", "S2", "S3", "S4")
+thetas <- seq(0.1, 0.9, by=0.1)
+alphas <- c(1, 3, 6, 12, 24)
+
+df_sensitivity = data.frame()
+for (m in models) {
+  for (t in thetas) {
+    for (a in alphas) {
+      cat("\nmodel:", m, "alpha", a, 'theta', t)
+      curr_run <- corpus_run_fn(noiseModelFile, m, a, LAMBDA, t, nUtterances, nSims, FALSE, FALSE)
+      df_raw <- curr_run[[1]]
+      df_processed <- run_corpus_analysis(df_raw, runSummarise=FALSE) %>%
+        mutate(model=m,
+               alpha=a,
+               theta=t)
+      df_sensitivity <- rbind(df_sensitivity, df_processed)
+    }
+  }
+}
+```
+
+```{r sensitivity-analysis, warning=FALSE, message=FALSE, echo=FALSE}
+df_heat <- df_sensitivity %>%
+  group_by(model, alpha, theta) %>%
+  summarise(correl=cor(postProb, lik))
+# write.csv(df_sensitivity, file="df_sensitivity-20180427.csv")
+```
+
+```{r plot-sensitivity-analysis, warning=FALSE, message=FALSE, echo=FALSE}
+plt_sensitivity <- df_heat %>%
+  ungroup %>%
+  mutate(alpha=as.factor(alpha),
+         theta=as.factor(theta)) %>%
+  ggplot(aes(theta, alpha)) +
+    geom_tile(aes(fill=correl)) +
+    scale_fill_gradient2(low="red", high="blue", mid='white') +
+    facet_wrap(~model) +
+    theme_few()
+
+ggsave("paper-plots/uid-plot-sensitivity.png", plot=plt_sensitivity, device='png', width=8, height=4)
+```
+
+
+# CER / topics + ambiguity RSA
+
+
+```{r plot4-setup-ambiguity-model, warning=FALSE, message=FALSE, echo=FALSE}
+fAmbiguityModelPath <- '/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/fyp-presentation/ambiguity-corpus-model.wppl'
+model_ambiguity <- getModelFile(fAmbiguityModelPath)
+
+runAmbiguity <- createRunFn(model_ambiguity)
+runAmbiguityFn <- function(i, targetDistr, nUtterances, resultType, alpha, recursionLevel) {
+  dTemp <- data.frame(targetDistr=targetDistr, 
+                      nUtterances=nUtterances, 
+                      resultType=resultType, 
+                      alpha=alpha, 
+                      recursionLevel=recursionLevel)
+  df <- runAmbiguity(dTemp) %>%
+    mutate(runNum=i, targetDistr=targetDistr, alpha=alpha, resultType=resultType, recursionLevel=recursionLevel)
+  df
+}
+```
+
+```{r plot4-run-simulations, warning=FALSE, message=FALSE, echo=FALSE}
+alpha <- 10
+topic <- 'T1'
+nUtterances <- 40
+recursionLevel <- 2
+
+df_baseline <- runAmbiguityFn(1,
+                              targetDistr=topic,
+                              nUtterances=nUtterances,
+                              resultType='baseline',
+                              alpha=alpha,
+                              recursionLevel=recursionLevel)
+df_contextUnaware <- runAmbiguityFn(1,
+                                    targetDistr=topic,
+                                    nUtterances=nUtterances,
+                                    resultType='contextUnaware',
+                                    alpha=alpha,
+                                    recursionLevel=recursionLevel)
+df_contextAware <- runAmbiguityFn(1, 
+                                  targetDistr=topic, 
+                                  nUtterances=nUtterances, 
+                                  resultType='contextAware', 
+                                  alpha=alpha,
+                                  recursionLevel=recursionLevel)
+
+df_SBasic <- runAmbiguityFn(1, 
+                            targetDistr=topic, 
+                            nUtterances=nUtterances, 
+                            resultType='S', 
+                            alpha=alpha,
+                            recursionLevel=recursionLevel)
+
+df_amb <- rbind(df_contextAware, df_baseline)
+```
+
+Note (BP 20180408): Instead of binning within a run, why not calculate entropy between runs (so if we have 200 simulations check entropy of position 1.)
+
+First plot -- just speaker utterances across a single discourse.
+```{r plot4a-rsa-CER-listeners-learn-topic, warning=FALSE, message=FALSE, echo=FALSE}
+lvls <- as.factor(df_amb$utterance)
+
+df_ambg_plot4 <- df_amb %>%
+  rowwise() %>%
+  mutate(utteranceYPos=which(utterance==levels(lvls))/10,
+         resultType=ifelse(resultType=='baseline', 'Baseline',
+                           ifelse(resultType=='contextUnaware', 'Context Unaware', 'Pragmatic')),
+         resultType=factor(resultType, levels=c('Baseline', 'Context Unaware', 'Pragmatic')),
+         utterance_name=ifelse(utterance=='a', 'Alex', 
+                               ifelse(utterance=='b', 'Balloon',
+                                      ifelse(utterance=='c', 'Cookie', 
+                                             ifelse(utterance=='d', 'Drew',
+                                                    ifelse(utterance=='x', 'they', 'it'))))),
+         utterance_name=factor(utterance_name, levels=c("they", "it", "Alex", "Balloon", "Cookie", "Drew")))
+cer_plt_1a <- df_ambg_plot4 %>%
+  ggplot(aes(x=utteranceNum, y=utteranceYPos, col=utterance)) +
+    geom_text(alpha=0.8, aes(label=utterance_name), position=position_jitter(height=0.25)) +
+    # geom_line(aes(x=utteranceNum, y=T1), col='blue', size=1.5) +
+    # geom_line(aes(x=utteranceNum, y=T2), col='red', alpha=0.25, size=1.5) +
+    # geom_line(aes(x=utteranceNum, y=T3), col='green', alpha=0.25, size=1.5) +
+    # geom_line(aes(x=utteranceNum, y=T4), col='purple', alpha=0.25, size=1.5) +
+    ylab("Utterance") +
+    xlab("Utterance position in discourse") +
+    ylim(-0.5, 1) +
+    xlim(0, 40) +
+    theme_few() +
+    theme(legend.position='none', plot.title = element_text(hjust = 0.5)) +
+    ggtitle("Speaker utterances across discourse") +
+    facet_wrap(~resultType, ncol=1)
+
+cer_plt_1b <- df_ambg_plot4 %>%
+  filter(utterance_name=='they') %>%
+  # filter(utterance_name=='it' | utterance_name=='Alex') %>%
+  ggplot(aes(x=utteranceNum, y=utteranceYPos, col=utterance)) +
+    geom_text(alpha=0.8, aes(label=utterance_name), position=position_jitter(height=0.25)) +
+    # geom_line(aes(x=utteranceNum, y=T1), col='blue', size=1.5) +
+    # geom_line(aes(x=utteranceNum, y=T2), col='red', alpha=0.25, size=1.5) +
+    # geom_line(aes(x=utteranceNum, y=T3), col='green', alpha=0.25, size=1.5) +
+    # geom_line(aes(x=utteranceNum, y=T4), col='purple', alpha=0.25, size=1.5) +
+    ylab("Utterance") +
+    xlab("Utterance position in discourse") +
+    ylim(-0.5, 1) +
+    xlim(0, 40) +
+    theme_few() +
+    theme(legend.position='none', plot.title = element_text(hjust = 0.5)) +
+    ggtitle("Speaker utterances across discourse") +
+    facet_wrap(~resultType, ncol=1)
+
+ggsave("paper-plots/cer-plot-1a.png", plot=cer_plt_1a, device='png', width=8, height=4)
+ggsave("paper-plots/cer-plot-1b.png", plot=cer_plt_1b, device='png', width=8, height=4)
+```
+
+Second plot listener infers topic.
+```{r plot4b-rsa-CER-listeners-learn-topic, warning=FALSE, message=FALSE, echo=FALSE}
+first_above_90 <- which(subset(df_ambg_plot4, resultType=='Pragmatic')$T1 > 0.9)[1]
+df_vline <- data.frame(x_inter=first_above_90, resultType='Pragmatic')
+
+cer_plot_1c <- df_ambg_plot4 %>%
+  ggplot(aes(x=utteranceNum, y=utteranceYPos, col=utterance_name)) +
+    geom_text(alpha=0.5, aes(label=utterance_name)) +
+    geom_line(aes(x=utteranceNum, y=T1), col='blue', size=1.5) +
+    # geom_line(aes(x=utteranceNum, y=T2), col='red', alpha=0.25, size=1.5) +
+    # geom_line(aes(x=utteranceNum, y=T3), col='green', alpha=0.25, size=1.5) +
+    # geom_line(aes(x=utteranceNum, y=T4), col='purple', alpha=0.25, size=1.5) +
+    ylab("P( topic | discourse )") +
+    xlab("Utterance position in discourse") +
+    ylim(0, 1) +
+    theme_few() +
+    theme(legend.position='none', plot.title = element_text(hjust = 0.5)) +
+    ggtitle("Listener posterior over target topic")
+ggsave("paper-plots/cer-plot-1c.png", plot=cer_plot_1c, device='png', width=8, height=4)
+
+cer_plot_1d <- df_ambg_plot4 %>%
+  ggplot(aes(x=utteranceNum, y=T1, col=resultType)) +
+    geom_line(size=1.5, alpha=0.8) +
+    # geom_line(aes(x=utteranceNum, y=T2), col='red', alpha=0.25, size=1.5) +
+    # geom_line(aes(x=utteranceNum, y=T3), col='green', alpha=0.25, size=1.5) +
+    # geom_line(aes(x=utteranceNum, y=T4), col='purple', alpha=0.25, size=1.5) +
+    ylab("P( topic | discourse )") +
+    xlab("Utterance position in discourse") +
+    ylim(0, 1) +
+    theme_few() +
+    theme(legend.position='none', plot.title = element_text(hjust = 0.5)) +
+    ggtitle("Listener posterior over target topic")
+ggsave("paper-plots/cer-plot-1d.png", plot=cer_plot_1d, device='png', width=8, height=4)
+```
+
+```{r run-CER-sims-setup, warning=FALSE, message=FALSE, echo=FALSE}
+runAmibguityCorpus <- function(topic, alpha, resultType, recursionLevel, nUtterances, nSims) {
+  # Parallelization setup
+  no_cores <- detectCores() - 1
+  cl <- makeCluster(no_cores, type='FORK')
+  registerDoParallel(cl)
+  
+  # Run sims
+  ptm <- proc.time()
+  sims <- foreach(i=seq(1, nSims), .packages=c('dplyr', 'rwebppl'), .combine=rbind) %dopar% 
+    runAmbiguityFn(i,
+                   targetDistr=topic,
+                   nUtterances=nUtterances,
+                   resultType=resultType,
+                   alpha=alpha,
+                   recursionLevel=recursionLevel)
+  stopCluster(cl)
+  etm <- proc.time() - ptm
+  
+  # Preprocess for entropy calculations.
+  binSize <- 1
+  df_binned <- addUtteranceBins(sims, nUtterances=nUtterances, binSize=binSize)
+  df_filled <- fillUtteranceProportions(df_binned, binSize)
+  list(sims, df_filled)
+}
+```
+
+```{r run-CER-sims, warning=FALSE, message=FALSE, echo=FALSE}
+TOPIC <- 'T1'
+ALPHA <- 10
+recursionLevel <- 2
+nUtterances <- 40
+nSims <- 100
+
+# topic, alpha, resultType, recursionLevel, nUtterances, nSims
+L_AmbiguityCorpusContextAware <- runAmibguityCorpus(TOPIC, ALPHA, 'contextAware', recursionLevel, nUtterances, nSims)
+# L_AmbiguityCorpusContextUnAware <- runAmibguityCorpus(TOPIC, ALPHA, 'contextUnaware', recursionLevel, nUtterances, nSims)
+# L_AmbiguityCorpusSBasic <- runAmibguityCorpus(TOPIC, ALPHA, 'S', recursionLevel, nUtterances, nSims)
+L_AmbiguityCorpusBaseline <- runAmibguityCorpus(TOPIC, ALPHA, 'baseline', recursionLevel, nUtterances, nSims)  
+
+simsAmbiguityCorpusContextAware <- L_AmbiguityCorpusContextAware[[1]]
+dfAmbiguityCorpusContextAware <- L_AmbiguityCorpusContextAware[[2]]
+
+# simsAmbiguityCorpusContextUnAware <- L_AmbiguityCorpusContextUnAware[[1]]
+# dfAmbiguityCorpusContextUnAware <- L_AmbiguityCorpusContextUnAware[[2]]
+
+# simsAmbiguityCorpusSBasic <- L_AmbiguityCorpusSBasic[[1]]
+# dfAmbiguityCorpusSBasic <- L_AmbiguityCorpusSBasic[[2]]
+
+simsAmbiguityCorpusBaseline <- L_AmbiguityCorpusBaseline[[1]]
+dfAmbiguityCorpusBaseline <- L_AmbiguityCorpusBaseline[[2]]
+
+simsCmbd <- rbind(simsAmbiguityCorpusContextAware,
+                  # simsAmbiguityCorpusContextUnAware,
+                  # simsAmbiguityCorpusSBasic,
+                  simsAmbiguityCorpusBaseline)
+                  
+dfAmbiguityCorpusCmbd <- rbind(dfAmbiguityCorpusContextAware, 
+                               # dfAmbiguityCorpusContextUnAware, 
+                               # dfAmbiguityCorpusSBasic, 
+                               dfAmbiguityCorpusBaseline)
+```
+
+
+#### Result 2: Speaker more likley to use ambiguous utterance once listener is confident in topic
+```{r plot4-rsa-CER-speakers-more-likely-to-use-ambiguous-utterances, warning=FALSE, message=FALSE, echo=FALSE}
+simsCmbd %>%
+  group_by(resultType) %>%
+  mutate(isAmbiguous=(utterance=='x' | utterance=='y'),
+         isX=utterance=='x',
+         isA=utterance=='a',
+         isB=utterance=='b') %>%
+  group_by(resultType, utteranceNum) %>%
+  summarise(n=n(),
+            numAmb=sum(isAmbiguous),
+            probAmb=numAmb/n,
+            stdAmb=sqrt(probAmb*(1-probAmb)/n),
+            numX=sum(isX),
+            probX=numX/n,
+            stdX=sqrt(probX*(1-probX)/n),
+            numA=sum(isA),
+            probA=numA/n,
+            stdA=sqrt(probA*(1-probA)/n),
+            numB=sum(isB),
+            probB=numB/n,
+            stdB=sqrt(probB*(1-probB)/n),
+            avgT1=mean(T1),
+            avgT2=mean(T2),
+            avgT3=mean(T3),
+            avgT4=mean(T4)) %>%
+  ungroup %>%
+  # Check relations to other utterances here:
+  # gather(type, val, c(probX, probA, probB)) %>%
+  mutate(resultType=ifelse(resultType=='baseline', 'Baseline',
+                           ifelse(resultType=='contextUnaware', 'Context Unaware', 'Context Aware')),
+         resultType=factor(resultType, levels=c('Baseline', 'Context Unaware', 'Context Aware'))) %>%
+  ggplot(aes(x=utteranceNum, y=probAmb)) +
+    # geom_smooth(aes(y=avgT1), col='red', alpha=0.2) +
+    # geom_smooth(aes(y=avgT2), col='green', alpha=0.2) +
+    geom_point(size=2, alpha=0.75) +
+    geom_smooth(method='loess', alpha=0.5, col='blue') +
+    # geom_smooth(method = "lm", formula = y ~ poly(x, 2)) +
+    geom_errorbar(aes(ymin=probAmb-2*stdAmb, ymax=probAmb+2*stdAmb), alpha=0.5, width=0) +
+    ylab("Empirical probability \nof ambiguous utterance ['x', 'y']") +
+    xlab("Utterance position") +
+    ggtitle(paste0("Empirical probability Speaker uses ambiguous utterance\nn=", nSims," simulations")) +
+    theme_few() +
+    theme(plot.title=element_text(hjust = 0.5)) +
+    facet_grid(~resultType)
+
+ggsave("paper-plots/cer-plot-2a.png", plot=last_plot(), device='png', width=8, height=4)
+```
+
+```{r plot5-rsa-CER-unconditional-entropy-effect, warning=FALSE, message=FALSE, echo=FALSE}
+# Note (BP): Manual calculation when listener knows topic.
+
+dfAmbiguityCorpusCmbd %>%
+  group_by(resultType, binVal, utterance) %>%
+  summarise(cnt=sum(n),
+            prop=cnt/nSims) %>%
+  group_by(resultType, binVal) %>%
+  summarise(`H(P(X))`=entropy::entropy.plugin(cnt, unit=c('log2'))) %>%
+  ungroup %>%
+  mutate(resultType=ifelse(resultType=='baseline', 'Baseline', 
+                ifelse(resultType=='contextAware', 'Context Aware', 'Context Unaware')),
+         resultType=factor(resultType, levels=c('Baseline', 'Context Unaware', 'Context Aware'))) %>%
+  ggplot(aes(x=binVal, y=`H(P(X))`)) +
+    geom_line(size=2, alpha=0.75, col='blue') +
+    geom_smooth(method='loess', col='red', alpha=0.5, lty=2) +
+    xlab("Utterance position i") +
+    ylab("Unconditional entropy H(X_i)") +
+    theme_few() +
+    theme(legend.position="none") +
+    facet_wrap(~resultType, ncol=3) +
+    ggtitle(paste0("Unconditional entropy across discourse\nn=", nSims," simulations")) +
+    theme(plot.title=element_text(hjust = 0.5))
+
+ggsave("paper-plots/cer-plot-2b.png", plot=last_plot(), device='png', width=8, height=4)
+```
+  
+#### Result 4 [OPTIONAL]: $H(Y)$ remains constant across discourse
+
+```{r plot6-rsa-CER-constant-entropy-full-effect, warning=FALSE, message=FALSE, echo=FALSE, eval=FALSE}
+# Note (BP): Manual calculation when listener knows topic.
+# steadyStateProps <- c(0.24525,	0.2565,	0.1386,	0.0449955,	0.3002045,	0.0135)
+# 
+# df_filled %>%
+#   group_by(binVal, utterance) %>%
+#   summarise(cnt=sum(n),
+#             prop=cnt/nSims) %>%
+#   group_by(binVal) %>%
+#   summarise(`H(P(X))`=entropy::entropy.plugin(cnt, unit=c('log2')),
+#             `KL divergence`=entropy::KL.empirical(cnt, steadyStateProps*nSims, unit=c('log2')),
+#             `Cross entropy (H(P(X))+KL(P(X)||Q(X)))`=`H(P(X))`+`KL divergence`) %>%
+#   gather(typ, measure, c(`H(P(X))`, `KL divergence`, `Cross entropy (H(P(X))+KL(P(X)||Q(X)))`)) %>%
+#   ggplot(aes(x=binVal, y=measure, col=typ)) +
+#     geom_line(size=2, alpha=0.5) +
+#     annotate("text", label = "HCross(P, Q)", x=4, y = 2.1, size=4, col="red") +
+#     annotate("text", label = "H(P)", x=8, y = 1.6, size= 4, col="forest green") +
+#     annotate("text", label = "KL(P||Q)", x=10, y = 0.6, size= 4, col="blue") +
+#     xlab("Utterance position i") +
+#     ylab("Measure (bits)") +
+#     theme_few() +
+#     theme(legend.position="none")
+```
+
+# Full model
+
+```{r plot6-setup-FULL-model, warning=FALSE, message=FALSE, echo=FALSE}
+fFullModelPath <- '/Users/benpeloquin/Desktop/Projects/rsa_uid/Models/fyp-presentation/full-corpus-model.wppl'
+model_full <- getModelFile(fFullModelPath)
+
+runFull <- createRunFn(model_full)
+runFullFn <- function(i, targetDistr, nUtterances, resultType, alpha, theta, recursionLevel) {
+  dTemp <- data.frame(targetDistr=targetDistr, 
+                      nUtterances=nUtterances, 
+                      resultType=resultType, 
+                      alpha=alpha, 
+                      theta=theta,
+                      recursionLevel=recursionLevel)
+  df <- runFull(dTemp) %>%
+    mutate(runNum=i, targetDistr=targetDistr, 
+           alpha=alpha, theta=theta, resultType=resultType, recursionLevel=recursionLevel)
+  df
+}
+```
+
+```{r plot6-setup-FULL-model-par-run-fn, warning=FALSE, message=FALSE, echo=FALSE}
+runFullCorpus <- function(topic, alpha, theta, resultType, recursionLevel, nUtterances, nSims) {
+  # Parallelization setup
+  no_cores <- detectCores() - 1
+  cl <- makeCluster(no_cores, type='FORK')
+  registerDoParallel(cl)
+  
+  # Run sims
+  ptm <- proc.time()
+  sims <- foreach(i=seq(1, nSims), .packages=c('dplyr', 'rwebppl'), .combine=rbind) %dopar% 
+    runFullFn(i,
+              targetDistr=topic,
+              nUtterances=nUtterances,
+              resultType=resultType,
+              alpha=alpha,
+              theta=theta,
+              recursionLevel=recursionLevel)
+  stopCluster(cl)
+  etm <- proc.time() - ptm
+  
+  # Preprocess for entropy calculations.
+  binSize <- 1
+  df_binned <- addUtteranceBins(sims, nUtterances=nUtterances, binSize=binSize)
+  df_filled <- fillUtteranceProportions(df_binned, binSize)
+  list(sims, df_filled)
+}
+# topic, alpha, theta, resultType, recursionLevel, nUtterances, nSims
+# runFullCorpus('T1', 10, 0.2, 'contextAware', 2, 40, 10)
+```
+
+
+```{r plot6-run-full-model, warning=FALSE, message=FALSE, echo=FALSE}
+TOPIC <- 'T1'
+ALPHA <- 8
+THETA <- 0.2
+RESULT_TYPE <- 'contextAware'
+recursionLevel <- 3
+nUtterances <- 100
+nSims <- 100
+
+# topic, alpha, theta, resultType, recursionLevel, nUtterances, nSims
+full_model_sims <- runFullCorpus(TOPIC, ALPHA, THETA, RESULT_TYPE, recursionLevel, nUtterances, nSims)
+full_sims <- full_model_sims[[1]]
+df_filled_full <- full_model_sims[[2]]
+```
+
+```{r plot6a-use-of-ambiguous-items, warning=FALSE, message=FALSE, echo=FALSE}
+full_sims %>%
+  mutate(isAmbiguous=(utterance=='x' | utterance=='y'),
+         isX=utterance=='x',
+         isA=utterance=='a',
+         isB=utterance=='b') %>%
+  group_by(utteranceNum) %>%
+  summarise(n=n(),
+            numAmb=sum(isAmbiguous),
+            probAmb=numAmb/n,
+            stdAmb=sqrt(probAmb*(1-probAmb)/n),
+            numX=sum(isX),
+            probX=numX/n,
+            stdX=sqrt(probX*(1-probX)/n),
+            numA=sum(isA),
+            probA=numA/n,
+            stdA=sqrt(probA*(1-probA)/n),
+            numB=sum(isB),
+            probB=numB/n,
+            stdB=sqrt(probB*(1-probB)/n),
+            avgT1=mean(T1),
+            avgT2=mean(T2),
+            avgT3=mean(T3),
+            avgT4=mean(T4)) %>%
+  # Check relations to other utterances here:
+  # gather(type, val, c(probX, probA, probB)) %>%
+  # ggplot(aes(x=utteranceNum, y=val, col=type)) +
+  ggplot(aes(x=utteranceNum, y=probAmb)) +
+    # geom_smooth(aes(y=avgT1), col='red', alpha=0.2) +
+    # geom_smooth(aes(y=avgT2), col='green', alpha=0.2) +
+    geom_point(size=2, alpha=0.75) +
+    geom_smooth(method='loess', alpha=0.5, col='blue') +
+    # geom_smooth(method = "lm", formula = y ~ poly(x, 2)) +
+    geom_errorbar(aes(ymin=probAmb-2*stdAmb, ymax=probAmb+2*stdAmb), alpha=0.5, width=0) +
+    ylab("Empirical probability \nof ambiguous utterance ['x', 'y']") +
+    xlab("Utterance position") +
+    ggtitle(paste0("Empirical probability Speaker uses ambiguous utterance\nn=", nSims," simulations")) +
+    theme_few() +
+    theme(plot.title=element_text(hjust = 0.5))
+
+```
+
+```{r plot6b-unconditional-entropy, warning=FALSE, message=FALSE, echo=FALSE}
+df_filled_full %>%
+  group_by(binVal, utterance) %>%
+  summarise(cnt=sum(n),
+            prop=cnt/nSims) %>%
+  group_by(binVal) %>%
+  summarise(`H(P(X))`=entropy::entropy.plugin(cnt, unit=c('log2'))) %>%
+  ggplot(aes(x=binVal, y=`H(P(X))`)) +
+    geom_line(size=2, alpha=0.75, col='blue') +
+    geom_smooth(method='loess', col='red', alpha=0.5, lty=2) +
+    xlab("Utterance position i") +
+    ylab("Unconditional entropy H(X_i)") +
+    ggtitle(paste0("Unconditional sentence entropy estimates by position\nn=", nSims," simulations")) +
+    theme_few() +
+    theme(plot.title=element_text(hjust = 0.5))
+
+ggsave("paper-plots/full-CER.png", plot=last_plot(), device='png', width=8, height=4)
+```
+
+````{r plot6c-negative-correlation, warning=FALSE, message=FALSE, echo=FALSE}
+full_sims_lm <- full_sims %>%
+  mutate(currUtterance=utterance,
+         expNum=runNum) %>%
+  process_sims(.) %>%
+  run_corpus_analysis(., ci=0.90) %>%
+  mutate(simType='full')
+```
+
+```{r}
+full_sims_lm %>% 
+  ggplot(aes(x=avgPostProb, y=avgLikelihood, col=as.factor(second))) +
+    geom_point(size=2.5) +
+    geom_errorbar(aes(ymax=ymax, ymin=ymin, alpha=0.2), width=0) +
+    geom_errorbarh(aes(xmax=xmax, xmin=xmin, alpha=0.2), height=0) +
+    xlab("Language model surprisal (log( P( u1 | u2 )))") +
+    ylab("Likelihood of full form") +
+    ylim(0, 1) +
+    ggtitle(paste0(nSims, " corpus simulations (", nUtterances, " utterances)", "\n90% boostrapped CIs.")) +
+    theme_few() +
+    theme(plot.title=element_text(hjust = 0.5), legend.position='none')
+
+ggsave("paper-plots/full-UID.png", plot=last_plot(), device='png', width=8, height=4)
+```
+
+## Results
+
+```{r , warning=FALSE, message=FALSE, echo=FALSE}
+behaviors <- c("Basic scalar implicature",
+               "Speaker mark high-suprisal content",
+               "Listener um-implicature",
+               "Corpus UID effect",
+               "Increase use of ambiguous utterances when context disambiguates",
+               "Increase unconditional entropy over discourse")
+ref <- c("Frank & Goodman (2012)",
+         "Levy & Jaeger (2007), Jaeger (2010)",
+         "Levy & Jaeger (2007), Jaeger (2010)",
+         "Levy & Jaeger (2007), Jaeger (2010)",
+         "Piantadosi (2012)",
+         "Genzel & Charniak (2002)")
+baseModel <- c("X", "", "", "", "", "")
+rsaNoise <- c("X", "X", "X", "X", "", "")
+rsaAmbiguity <- c("X", "", "", "", "X", "X")
+fullModel <- c("X", "X", "X", "X", "X", "X")
+
+df_table <- data.frame(behavior=behaviors,
+                       reference=ref,
+                       base_model=baseModel,
+                       rsa_noise=rsaNoise,
+                       rsa_ambiguity=rsaAmbiguity,
+                       rsa_noise_ambiguity=fullModel) %>%
+  rename('base model'=base_model,
+         'rsa + noise'=rsa_noise,
+         'rsa + ambiguity'=rsa_ambiguity,
+         'rsa + noise + ambiguity'=rsa_noise_ambiguity)
+  # filter(behavior != 'Basic scalar implicature')
+```
+
+```{r}
+kable(df_table)
+```
